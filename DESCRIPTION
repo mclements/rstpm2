@@ -1,0 +1,12 @@
+Package: rstpm2
+Type: Package
+Title: Flexible Parametric Survival Models
+Version: 1.1.1
+Date: 2011-11-08
+Depends: methods, bbmle (>= 1.0.3), survival
+Imports: splines, stats, graphics
+Author: Mark Clements (with guidance from Paul Lambert). 
+Maintainer: <mark.clements@ki.se>
+Description: R implementation of Stata's stpm2 function (flexible parametric survival model)
+License: GPL-2
+LazyLoad: yes

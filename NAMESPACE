@@ -1,0 +1,25 @@
+##exportPattern("^[[:alpha:]]+")
+export(stpm2,incrVar,
+       nsx,makepredictcall.nsx,predict.nsx,
+       nsxDeriv,makepredictcall.nsxDeriv,predict.nsxDeriv,
+       ## nsDeriv,makepredictcall.nsDeriv,predict.nsDeriv,
+       ## bsDeriv,makepredictcall.bsDeriv,predict.bsDeriv,
+       ## nslog,makepredictcall.nslog,predict.nslog,
+       ## nslogDeriv,makepredictcall.nslogDeriv,predict.nslogDeriv,
+       predictnl,predictnl.default
+       )
+exportMethods(
+              "plot",
+              "predict",
+              "predictnl"
+)
+exportClasses(
+    "listOrNULL",
+     "mle2",
+     "stpm2" 
+)
+importFrom(graphics,plot)
+import(splines)
+importFrom(stats,quantile,lm)
+importFrom(survival,survfit,coxph,Surv)
+import(bbmle)
