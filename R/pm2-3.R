@@ -631,8 +631,8 @@ setClass("stpm2", representation(xlevels="list",
 ## debug(nsx)
 ## nsx(1:10,df=4,cure=T)
 ## define a new class for penalised stpm2
-setClass("pstpm2", representation(pmat="matrix"),
-         contains="stpm2")
+## setClass("pstpm2", representation(pmat="matrix"),
+##          contains="stpm2")
 
 stpm2 <- function(formula, data,
                   df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
@@ -867,207 +867,207 @@ stpm2 <- function(formula, data,
 ## pstpm2(Surv(time,event) ~ x1+x2+x3, logH.formula = ~ s(log(time),bs="ps",k=10), data=test,log=TRUE)
 
 ## penalised stpm2: largely a copy of stpm2() !!
-pstpm2 <- function(formula, data, logH.formula,
-                  df = 3, 
-                  control = list(parscale = 0.1, maxit = 300), init = FALSE,
-                  coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
-                  bhazard = NULL, contrasts = NULL, subset = NULL, ...)
-  {
-    ## ensure that data is a data frame
-    data <- get_all_vars(formula, data)
-    ## restrict to non-missing data (assumes na.action=na.omit)
-    .include <- Reduce(`&`,
-                       lapply(model.frame(formula, data, na.action=na.pass),
-                              Negate(is.na)),
-                       TRUE)
-    data <- data[.include, , drop=FALSE]
-    Call <- match.call()
-    mf <- match.call(expand.dots = FALSE)
-    m <- match(c("formula", "data", "subset", "contrasts", "weights"),
-               names(mf), 0L)
-    mf <- mf[c(1L, m)]
-    ## mf$drop.unused.levels <- TRUE # include?
-    mf[[1L]] <- as.name("model.frame") # gam
-    eventExpression <- lhs(formula)[[length(lhs(formula))]]
-    delayed <- length(lhs(formula))==4
-    timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
-    timeVar <- all.vars(timeExpr)
-    stopifnot(length(timeVar)==1)
-    full.formula <- formula
-    rhs(full.formula) <- rhs(formula) %call+% rhs(logH.formula)
-    ## differentiation would be easier if we did not have functions for log(time)
-    logHD.formula <- replaceFormula(logH.formula,quote(psx),quote(psxDeriv))
-    ## set up primary terms objects (mt and mtd)
-    mf$formula = full.formula
-    datae <- data[eval(eventExpression,data)==1, , drop=FALSE]
-    mf$data <- quote(datae) # restricted to event times
-    mfX <- mfd <- mf # copy
-    mf <- eval(mf)
-    mt <- attr(mf, "terms") # primary!
-    xlev <- .getXlevels(mt, mf)
-    mfd[[2]] <- logHD.formula
-    mfd <- eval(mfd)
-    mtd <- attr(mfd, "terms") # primary!
-    ## design matrices
-    mfX$formula <- quote(mt)
-    mfX$data <- quote(data)
-    mfX2 <- mfXD <- mfX # copies
-    mfX <- eval(mfX)
-    if (!is.null(cl <- attr(mt, "dataClasses"))) 
-      .checkMFClasses(cl, mfX)
-    X <- model.matrix(mt, mfX, contrasts)
-    wt <- model.weights(mfX)
-    if (is.null(wt)) wt <- rep(1,nrow(X))
-    ## mfXD <- model.frame(mtd, data, xlev=xlev, weights = weights)
-    mfXD$formula <- quote(mtd)
-    mfXD <- eval(mfXD)
-    if (!is.null(cl <- attr(mtd, "dataClasses"))) 
-      .checkMFClasses(cl, mfXD)
-    XD <- model.matrix(mtd, mfXD, contrasts)[,-1,drop=FALSE]
-    ##
-    y <- model.extract(mfX,"response")
-    if (!inherits(y, "Surv")) 
-      stop("Response must be a survival object")
-    type <- attr(y, "type")
-    if (type != "right" && type != "counting") 
-        stop(paste("stpm2 model doesn't support \"", type, "\" survival data", 
-            sep = ""))
-    event <- y[,ncol(y)]==1
-    time <- y[,ncol(y)-1]
-    ## initial values
-    coxph.strata <- substitute(coxph.strata)
-    coxph.formula <- formula
-    if (!is.null(coxph.strata)) 
-      rhs(coxph.formula) <- rhs(formula) %call+% call("strata",coxph.strata)
-    coxph.obj <- quote(coxph(coxph.formula,data=data,model=TRUE))
-    coxph.obj$weights <- substitute(weights)
-    coxph.obj <- eval(coxph.obj)
-    ## coxph.obj <- eval.parent(substitute(coxph(formula,data),
-    ##                                     list(formula=formula,data=data)))
-    coxph.data <- get_all_vars(mfX)
-    coxph.data$logHhat <- pmax(-18,log(-log(Shat(coxph.obj))))
-    coxph.data[[timeVar]] <- data[[timeVar]]
-    ## coxph.data[,1] <- time
-    ## names(coxph.data)[1] <- as.character(timeExpr)
-    ##
-    lm.formula <- full.formula
-    lhs(lm.formula) <- quote(logHhat) # new response
-    if (!init) {
-      lm.obj <- lm(lm.formula,coxph.data[event,],contrasts=contrasts)
-      ## lm.obj <- lm(lm.formula,data[event,],contrasts=contrasts)
-      lm.obj$weights <- substitute(weights)
-      lm.obj <- eval(lm.obj)
-      init <- coef(lm.obj)
-    }
-    ## indexXD <- grep(timeVar,names(init)) ## FRAUGHT: pattern-matching on names
-    data2 <- data
-    data2[[timeVar]] <- data[[timeVar]]+1e-3
-    temp <- predict(full.formula,data,data)
-    temp2 <- predict(full.formula,data,data2)
-    indexXD <- apply(apply(temp2-temp,2,range),2,diff)>1e-8
-    rm(data2,temp,temp2)
-    bhazard <- if (is.null(bhazard)) 0 else bhazard[event] # crude
-    if (delayed && any(y[,1]>0)) {
-      data2 <- data[y[,1]>0,,drop=FALSE] # data for delayed entry times
-      mt2 <- delete.response(mt)
-      ## copy over times - so we can use the same term object
-      timeExpr0 <- lhs(full.formula)[[2]] # expression
-      timeVar0 <- all.vars(timeExpr0)
-      stopifnot(length(timeVar0)==1)
-      data2[[timeVar]] <- data2[[timeVar0]] 
-      ##y.names <- sapply(lhs(full.formula),deparse)
-      ##data2[[y.names[3]]] <- data2[[y.names[2]]] 
-      ## data2[[y.names[2]]] <- 0
-      mfX2$formula <- quote(mt2)
-      mfX2$data <- quote(data2)
-      mfX2 <- eval(mfX2)
-      ##mfX2 <- model.frame(mt2, data2, xlev=xlev, weights = weights)
-      if (!is.null(cl <- attr(mt2, "dataClasses"))) 
-        .checkMFClasses(cl, mfX2)
-      X2 <- model.matrix(mt2, mfX2, contrasts)
-      wt2 <- model.weights(mfX2)
-      if (is.null(wt2)) wt2 <- rep(1,nrow(X2))
-      ## delayed.formula <- full.formula
-      ## lhs(delayed.formula) <- NULL
-      ## X2 = predict(delayed.formula, data, data2) ## delayed entry
-      negll <- function(beta) {
-        eta <- X %*% beta
-        eta2 <- X2 %*% beta
-        h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
-        ## h <- (XD[event,] %*% beta[indexXD])*exp(eta[event])/time[event] + bhazard
-        h[h<0] <- 1e-100
-        ll <- sum(wt[event]*log(h)) +  sum(wt2*exp(eta2)) -
-          sum(wt*exp(eta))
-        return(-ll)
-      }
-      logli <- function(beta) {
-        eta <- X %*% beta
-        eta2 <- X2 %*% beta
-        h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
-        h[h<0] <- 1e-100
-        out <- exp(eta2) - exp(eta)
-        out[event] <- out[event]+log(h)
-        out <- out*wt
-        return(out)
-      }
-    }
-    else { # right censoring only
-      negll <- function(beta) {
-        eta <- X %*% beta
-        h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
-        ## h <- (XD[event,] %*% beta[indexXD])*exp(eta[event])/time[event] + bhazard
-        h[h<0] <- 1e-100
-        ll <- sum(wt[event]*log(h)) - sum(wt*exp(eta)) - lambda/2*
-          t(beta[indexXD]) %*% pmat %*% beta[indexXD])
-        return(-ll)
-      }
-      logli <- function(beta) {
-        eta <- X %*% beta
-        h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
-        h[h<0] <- 1e-100
-        out <- -exp(eta)
-        out[event] <- out[event]+log(h)
-        out <- out*wt
-        return(out)
-      }
-    }
-    ## MLE
-    if (!is.null(control) && "parscale" %in% names(control)) {
-      if (length(control$parscale)==1)
-        control$parscale <- rep(control$parscale,length(init))
-      if (is.null(names(control$parscale)))
-        names(control$parscale) <- names(init)
-    }
-    parnames(negll) <- names(init)
-    mle2 <- mle2(negll,init,vecpar=TRUE, control=control, ...)
-    out <- new("stpm2",
-               call = mle2@call,
-               call.orig = mle2@call,
-               coef = mle2@coef,
-               fullcoef = mle2@fullcoef,
-               vcov = mle2@vcov,
-               min = mle2@min,
-               details = mle2@details,
-               minuslogl = mle2@minuslogl,
-               method = mle2@method,
-               data = data,
-               formula = mle2@formula,
-               optimizer = "optim",
-               xlevels = .getXlevels(mt, mf),
-               contrasts = attr(X, "contrasts"),
-               logli = logli,
-               ##weights = weights,
-               Call = Call,
-               terms = mt,
-               model.frame = mf,
-               x = X,
-               xd = XD,
-               termsd = mtd,
-               y = y)
-    if (robust) # kludge
-      out@vcov <- sandwich.stpm2(out)
-    return(out)
-  }
+## pstpm2 <- function(formula, data, logH.formula,
+##                   df = 3, 
+##                   control = list(parscale = 0.1, maxit = 300), init = FALSE,
+##                   coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
+##                   bhazard = NULL, contrasts = NULL, subset = NULL, ...)
+##   {
+##     ## ensure that data is a data frame
+##     data <- get_all_vars(formula, data)
+##     ## restrict to non-missing data (assumes na.action=na.omit)
+##     .include <- Reduce(`&`,
+##                        lapply(model.frame(formula, data, na.action=na.pass),
+##                               Negate(is.na)),
+##                        TRUE)
+##     data <- data[.include, , drop=FALSE]
+##     Call <- match.call()
+##     mf <- match.call(expand.dots = FALSE)
+##     m <- match(c("formula", "data", "subset", "contrasts", "weights"),
+##                names(mf), 0L)
+##     mf <- mf[c(1L, m)]
+##     ## mf$drop.unused.levels <- TRUE # include?
+##     mf[[1L]] <- as.name("model.frame") # gam
+##     eventExpression <- lhs(formula)[[length(lhs(formula))]]
+##     delayed <- length(lhs(formula))==4
+##     timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
+##     timeVar <- all.vars(timeExpr)
+##     stopifnot(length(timeVar)==1)
+##     full.formula <- formula
+##     rhs(full.formula) <- rhs(formula) %call+% rhs(logH.formula)
+##     ## differentiation would be easier if we did not have functions for log(time)
+##     logHD.formula <- replaceFormula(logH.formula,quote(psx),quote(psxDeriv))
+##     ## set up primary terms objects (mt and mtd)
+##     mf$formula = full.formula
+##     datae <- data[eval(eventExpression,data)==1, , drop=FALSE]
+##     mf$data <- quote(datae) # restricted to event times
+##     mfX <- mfd <- mf # copy
+##     mf <- eval(mf)
+##     mt <- attr(mf, "terms") # primary!
+##     xlev <- .getXlevels(mt, mf)
+##     mfd[[2]] <- logHD.formula
+##     mfd <- eval(mfd)
+##     mtd <- attr(mfd, "terms") # primary!
+##     ## design matrices
+##     mfX$formula <- quote(mt)
+##     mfX$data <- quote(data)
+##     mfX2 <- mfXD <- mfX # copies
+##     mfX <- eval(mfX)
+##     if (!is.null(cl <- attr(mt, "dataClasses"))) 
+##       .checkMFClasses(cl, mfX)
+##     X <- model.matrix(mt, mfX, contrasts)
+##     wt <- model.weights(mfX)
+##     if (is.null(wt)) wt <- rep(1,nrow(X))
+##     ## mfXD <- model.frame(mtd, data, xlev=xlev, weights = weights)
+##     mfXD$formula <- quote(mtd)
+##     mfXD <- eval(mfXD)
+##     if (!is.null(cl <- attr(mtd, "dataClasses"))) 
+##       .checkMFClasses(cl, mfXD)
+##     XD <- model.matrix(mtd, mfXD, contrasts)[,-1,drop=FALSE]
+##     ##
+##     y <- model.extract(mfX,"response")
+##     if (!inherits(y, "Surv")) 
+##       stop("Response must be a survival object")
+##     type <- attr(y, "type")
+##     if (type != "right" && type != "counting") 
+##         stop(paste("stpm2 model doesn't support \"", type, "\" survival data", 
+##             sep = ""))
+##     event <- y[,ncol(y)]==1
+##     time <- y[,ncol(y)-1]
+##     ## initial values
+##     coxph.strata <- substitute(coxph.strata)
+##     coxph.formula <- formula
+##     if (!is.null(coxph.strata)) 
+##       rhs(coxph.formula) <- rhs(formula) %call+% call("strata",coxph.strata)
+##     coxph.obj <- quote(coxph(coxph.formula,data=data,model=TRUE))
+##     coxph.obj$weights <- substitute(weights)
+##     coxph.obj <- eval(coxph.obj)
+##     ## coxph.obj <- eval.parent(substitute(coxph(formula,data),
+##     ##                                     list(formula=formula,data=data)))
+##     coxph.data <- get_all_vars(mfX)
+##     coxph.data$logHhat <- pmax(-18,log(-log(Shat(coxph.obj))))
+##     coxph.data[[timeVar]] <- data[[timeVar]]
+##     ## coxph.data[,1] <- time
+##     ## names(coxph.data)[1] <- as.character(timeExpr)
+##     ##
+##     lm.formula <- full.formula
+##     lhs(lm.formula) <- quote(logHhat) # new response
+##     if (!init) {
+##       lm.obj <- lm(lm.formula,coxph.data[event,],contrasts=contrasts)
+##       ## lm.obj <- lm(lm.formula,data[event,],contrasts=contrasts)
+##       lm.obj$weights <- substitute(weights)
+##       lm.obj <- eval(lm.obj)
+##       init <- coef(lm.obj)
+##     }
+##     ## indexXD <- grep(timeVar,names(init)) ## FRAUGHT: pattern-matching on names
+##     data2 <- data
+##     data2[[timeVar]] <- data[[timeVar]]+1e-3
+##     temp <- predict(full.formula,data,data)
+##     temp2 <- predict(full.formula,data,data2)
+##     indexXD <- apply(apply(temp2-temp,2,range),2,diff)>1e-8
+##     rm(data2,temp,temp2)
+##     bhazard <- if (is.null(bhazard)) 0 else bhazard[event] # crude
+##     if (delayed && any(y[,1]>0)) {
+##       data2 <- data[y[,1]>0,,drop=FALSE] # data for delayed entry times
+##       mt2 <- delete.response(mt)
+##       ## copy over times - so we can use the same term object
+##       timeExpr0 <- lhs(full.formula)[[2]] # expression
+##       timeVar0 <- all.vars(timeExpr0)
+##       stopifnot(length(timeVar0)==1)
+##       data2[[timeVar]] <- data2[[timeVar0]] 
+##       ##y.names <- sapply(lhs(full.formula),deparse)
+##       ##data2[[y.names[3]]] <- data2[[y.names[2]]] 
+##       ## data2[[y.names[2]]] <- 0
+##       mfX2$formula <- quote(mt2)
+##       mfX2$data <- quote(data2)
+##       mfX2 <- eval(mfX2)
+##       ##mfX2 <- model.frame(mt2, data2, xlev=xlev, weights = weights)
+##       if (!is.null(cl <- attr(mt2, "dataClasses"))) 
+##         .checkMFClasses(cl, mfX2)
+##       X2 <- model.matrix(mt2, mfX2, contrasts)
+##       wt2 <- model.weights(mfX2)
+##       if (is.null(wt2)) wt2 <- rep(1,nrow(X2))
+##       ## delayed.formula <- full.formula
+##       ## lhs(delayed.formula) <- NULL
+##       ## X2 = predict(delayed.formula, data, data2) ## delayed entry
+##       negll <- function(beta) {
+##         eta <- X %*% beta
+##         eta2 <- X2 %*% beta
+##         h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
+##         ## h <- (XD[event,] %*% beta[indexXD])*exp(eta[event])/time[event] + bhazard
+##         h[h<0] <- 1e-100
+##         ll <- sum(wt[event]*log(h)) +  sum(wt2*exp(eta2)) -
+##           sum(wt*exp(eta))
+##         return(-ll)
+##       }
+##       logli <- function(beta) {
+##         eta <- X %*% beta
+##         eta2 <- X2 %*% beta
+##         h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
+##         h[h<0] <- 1e-100
+##         out <- exp(eta2) - exp(eta)
+##         out[event] <- out[event]+log(h)
+##         out <- out*wt
+##         return(out)
+##       }
+##     }
+##     else { # right censoring only
+##       negll <- function(beta) {
+##         eta <- X %*% beta
+##         h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
+##         ## h <- (XD[event,] %*% beta[indexXD])*exp(eta[event])/time[event] + bhazard
+##         h[h<0] <- 1e-100
+##         ll <- sum(wt[event]*log(h)) - sum(wt*exp(eta)) - lambda/2*
+##           t(beta[indexXD]) %*% pmat %*% beta[indexXD])
+##         return(-ll)
+##       }
+##       logli <- function(beta) {
+##         eta <- X %*% beta
+##         h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
+##         h[h<0] <- 1e-100
+##         out <- -exp(eta)
+##         out[event] <- out[event]+log(h)
+##         out <- out*wt
+##         return(out)
+##       }
+##     }
+##     ## MLE
+##     if (!is.null(control) && "parscale" %in% names(control)) {
+##       if (length(control$parscale)==1)
+##         control$parscale <- rep(control$parscale,length(init))
+##       if (is.null(names(control$parscale)))
+##         names(control$parscale) <- names(init)
+##     }
+##     parnames(negll) <- names(init)
+##     mle2 <- mle2(negll,init,vecpar=TRUE, control=control, ...)
+##     out <- new("stpm2",
+##                call = mle2@call,
+##                call.orig = mle2@call,
+##                coef = mle2@coef,
+##                fullcoef = mle2@fullcoef,
+##                vcov = mle2@vcov,
+##                min = mle2@min,
+##                details = mle2@details,
+##                minuslogl = mle2@minuslogl,
+##                method = mle2@method,
+##                data = data,
+##                formula = mle2@formula,
+##                optimizer = "optim",
+##                xlevels = .getXlevels(mt, mf),
+##                contrasts = attr(X, "contrasts"),
+##                logli = logli,
+##                ##weights = weights,
+##                Call = Call,
+##                terms = mt,
+##                model.frame = mf,
+##                x = X,
+##                xd = XD,
+##                termsd = mtd,
+##                y = y)
+##     if (robust) # kludge
+##       out@vcov <- sandwich.stpm2(out)
+##     return(out)
+##   }
 
 
 ##
