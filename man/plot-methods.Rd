@@ -55,7 +55,7 @@ setMethod("plot", signature(x="stpm2", y="missing"),
                       xlab="Time",line.col=1,ci.col="grey",
                       add=FALSE,ci=TRUE,rug=TRUE,
                       var=NULL,...) {
-  y <- predict(x,newdata,type=type,var=var,grid=T,se.fit=T)
+  y <- predict(x,newdata,type=type,var=var,grid=TRUE,se.fit=TRUE)
   ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",
                  sdiff="Survival difference",hdiff="Hazard difference")
   xx <- attr(y,"newdata")

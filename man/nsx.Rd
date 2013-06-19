@@ -86,23 +86,23 @@ plot(women, xlab = "Height (in)", ylab = "Weight (lb)")
 ht <- seq(57, 73, length.out = 200)
 lines(ht, predict(fm1, data.frame(height=ht)))
 
-plotNsx <- function(obj,x,coef=c(-3,-4,2)) {
-   ## numerical derivatives returning a function
-   diff <- function(f,delta=1e-4,...) function(x) (f(x+delta,...)-f(x-delta,...))/(2*delta)
-   par(mfrow=c(2,2))
-   plot(x,predict(obj,x)%*%coef,type="l",ylab="y",main="Natural spline")
-   ## first derivative
-   plot(x,diff(function(x) predict(obj,x)%*%c(0.1,-1,1))(x),type="l",
-      ylab="y", main="First derivative")
-   ## second derivative
-   plot(x,diff(diff(function(x) predict(obj,x)%*%c(0.1,-1,1)))(x),type="l",
-        ylab="y", main="Second derivative")
-}
-x=seq(0,12,length=100)
-plotNsx(nsx(1:10,df=3,derivs=c(2,2)),x)
-plotNsx(nsx(1:10,df=3,derivs=c(2,1)),x)
-plotNsx(nsx(1:10,df=3,derivs=c(1,1)),x)
-plotNsx(nsx(1:10,df=3,derivs=c(1,0)),x) # NB: predict(obj,Boundary.knot[1])==0.0 if intercept==FALSE
-rm(plotNsx,x)
+% plotNsx <- function(obj,x,coef=c(-3,-4,2)) {
+%    ## numerical derivatives returning a function
+%    diff <- function(f,delta=1e-4,...) function(x) (f(x+delta,...)-f(x-delta,...))/(2*delta)
+%    par(mfrow=c(2,2))
+%    plot(x,predict(obj,x)%*%coef,type="l",ylab="y",main="Natural spline")
+%    ## first derivative
+%    plot(x,diff(function(x) predict(obj,x) %*% c(0.1,-1,1))(x),type="l",
+%       ylab="y", main="First derivative")
+%    ## second derivative
+%    plot(x,diff(diff(function(x) predict(obj,x) %*% c(0.1,-1,1)))(x),type="l",
+%         ylab="y", main="Second derivative")
+% }
+% x=seq(0,12,length=100)
+% plotNsx(nsx(1:10,df=3,derivs=c(2,2)),x)
+% plotNsx(nsx(1:10,df=3,derivs=c(2,1)),x)
+% plotNsx(nsx(1:10,df=3,derivs=c(1,1)),x)
+% plotNsx(nsx(1:10,df=3,derivs=c(1,0)),x) # NB: predict(obj,Boundary.knot[1])==0.0 if intercept==FALSE
+% rm(plotNsx,x)
 }
 \keyword{smooth}

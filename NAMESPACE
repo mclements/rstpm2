@@ -1,5 +1,5 @@
 ##exportPattern("^[[:alpha:]]+")
-export(stpm2,incrVar,
+export(stpm2,pstpm2,incrVar,
        nsx,makepredictcall.nsx,predict.nsx,
        nsxDeriv,makepredictcall.nsxDeriv,predict.nsxDeriv,
        ## nsDeriv,makepredictcall.nsDeriv,predict.nsDeriv,
@@ -23,3 +23,4 @@ import(splines)
 importFrom(stats,quantile,lm)
 importFrom(survival,survfit,coxph,Surv)
 import(bbmle)
+import(mgcv)

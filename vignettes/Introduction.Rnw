@@ -37,6 +37,7 @@ colon2 <- within(colon, {
   sex <- as.numeric(sex)
   exitage <- pmin(floor(age+tm),99)
   exityear <- floor(yydx+tm)
+  ##year8594 <- (year8594=="Diagnosed 85-94")
 })
 colon2 <- merge(colon2,popmort2)
 @ 
