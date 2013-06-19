@@ -520,426 +520,17 @@ setClassUnion("nameOrcall",c("name","call"))
 setOldClass("Surv")
 setOldClass("lm")
 
-## old stpm2 implementation (included for comparison purposes - deprecated)
-setClass("stpm2Old", representation(xlevels="list",
-                                 contrasts="listOrNULL",
-                                 terms="terms",
-                                 logli="function",
-                                 ## weights="numericOrNULL",
-                                 model.frame="list",
-                                 x="matrix",
-                                 xd="matrix",
-                                 termsd="terms",
-                                 Call="call",
-                                 y="Surv"
-                                 ),
-         contains="mle2")
-stpm2Old <- function(formula, data,
-                  df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
-                  tvc = NULL, tvc.formula = NULL,
-                  control = list(parscale = 0.1, maxit = 300), init = FALSE,
-                  coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
-                  bhazard = NULL, contrasts = NULL, subset = NULL, ...)
-  {
-    ## ensure that data is a data frame
-    data <- get_all_vars(formula, data)
-    ## restrict to non-missing data (assumes na.action=na.omit)
-    .include <- Reduce(`&`,
-                       lapply(model.frame(formula, data, na.action=na.pass),
-                              Negate(is.na)),
-                       TRUE)
-    data <- data[.include, , drop=FALSE]
-    Call <- match.call()
-    mf <- match.call(expand.dots = FALSE)
-    m <- match(c("formula", "data", "subset", "contrasts", "weights"),
-               names(mf), 0L)
-    mf <- mf[c(1L, m)]
-    ## mf$drop.unused.levels <- TRUE # include?
-    mf[[1L]] <- as.name("model.frame")
-    eventExpression <- lhs(formula)[[length(lhs(formula))]]
-    delayed <- length(lhs(formula))==4
-    timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
-    timeVar <- all.vars(timeExpr)
-    stopifnot(length(timeVar)==1)
-    ## set up the formulae
-    if (is.null(logH.formula) && is.null(logH.args)) {
-      logH.args$df <- df
-      if (cure) logH.args$cure <- cure
-    }
-    if (!is.null(logH.args) && is.null(logH.args$log))
-      logH.args$log <- TRUE
-    if (is.null(logH.formula))
-      logH.formula <- as.formula(call("~",as.call(c(quote(nsx),call("log",timeExpr),
-                                                    vector2call(logH.args)))))
-    if (is.null(tvc.formula) && !is.null(tvc)) {
-      tvc.formulas <-
-        lapply(names(tvc), function(name)
-               call(":",
-                    as.name(name),
-                    as.call(c(quote(nsx),
-                              call("log",timeExpr),
-                              vector2call(list(log=TRUE,cure=cure,df=tvc[[name]]))))))
-      if (length(tvc.formulas)>1)
-        tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
-      tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
-    }
-    if (!is.null(tvc.formula)) {
-      rhs(logH.formula) <- rhs(logH.formula) %call+% rhs(tvc.formula)
-    }
-    if (baseoff)
-      rhs(logH.formula) <- rhs(tvc.formula)
-    full.formula <- formula
-    rhs(full.formula) <- rhs(formula) %call+% rhs(logH.formula)
-    ## differentiation would be easier if we did not have functions for log(time)
-    logHD.formula <- replaceFormula(logH.formula,quote(nsx),quote(nsxDeriv))
-    ## set up primary terms objects (mt and mtd)
-    mf$formula = full.formula
-    datae <- data[eval(eventExpression,data)==1, , drop=FALSE]
-    mf$data <- quote(datae) # restricted to event times
-    mfX <- mfd <- mf # copy
-    mf <- eval(mf)
-    mt <- attr(mf, "terms") # primary!
-    xlev <- .getXlevels(mt, mf)
-    mfd[[2]] <- logHD.formula
-    mfd <- eval(mfd)
-    mtd <- attr(mfd, "terms") # primary!
-    ## design matrices
-    mfX$formula <- quote(mt)
-    mfX$data <- quote(data)
-    mfX2 <- mfXD <- mfX # copies
-    mfX <- eval(mfX)
-    if (!is.null(cl <- attr(mt, "dataClasses"))) 
-      .checkMFClasses(cl, mfX)
-    X <- model.matrix(mt, mfX, contrasts)
-    wt <- model.weights(mfX)
-    if (is.null(wt)) wt <- rep(1,nrow(X))
-    ## mfXD <- model.frame(mtd, data, xlev=xlev, weights = weights)
-    mfXD$formula <- quote(mtd)
-    mfXD <- eval(mfXD)
-    if (!is.null(cl <- attr(mtd, "dataClasses"))) 
-      .checkMFClasses(cl, mfXD)
-    XD <- model.matrix(mtd, mfXD, contrasts)[,-1,drop=FALSE]
-    ##
-    y <- model.extract(mfX,"response")
-    if (!inherits(y, "Surv")) 
-      stop("Response must be a survival object")
-    type <- attr(y, "type")
-    if (type != "right" && type != "counting") 
-        stop(paste("stpm2Old model doesn't support \"", type, "\" survival data", 
-            sep = ""))
-    event <- y[,ncol(y)]==1
-    time <- y[,ncol(y)-1]
-    ## initial values
-    coxph.strata <- substitute(coxph.strata)
-    coxph.formula <- formula
-    if (!is.null(coxph.strata)) 
-      rhs(coxph.formula) <- rhs(formula) %call+% call("strata",coxph.strata)
-    coxph.obj <- quote(coxph(coxph.formula,data=data,model=TRUE))
-    coxph.obj$weights <- substitute(weights)
-    coxph.obj <- eval(coxph.obj)
-    ## coxph.obj <- eval.parent(substitute(coxph(formula,data),
-    ##                                     list(formula=formula,data=data)))
-    ##coxph.data <- get_all_vars(mfX)
-    coxph.data <- data
-    coxph.data$logHhat <- pmax(-18,log(-log(Shat(coxph.obj))))
-    coxph.data[[timeVar]] <- data[[timeVar]]
-    ## coxph.data[,1] <- time
-    ## names(coxph.data)[1] <- as.character(timeExpr)
-    ##
-    lm.formula <- full.formula
-    lhs(lm.formula) <- quote(logHhat) # new response
-    if (!init) {
-      lm.obj <- lm(lm.formula,coxph.data[event,],contrasts=contrasts)
-      ## lm.obj <- lm(lm.formula,data[event,],contrasts=contrasts)
-      lm.obj$weights <- substitute(weights)
-      lm.obj <- eval(lm.obj)
-      init <- coef(lm.obj)
-    }
-    ## indexXD <- grep(timeVar,names(init)) ## FRAUGHT: pattern-matching on names
-    data2 <- data
-    data2[[timeVar]] <- data[[timeVar]]+1e-3
-    temp <- predict(full.formula,data,data)
-    temp2 <- predict(full.formula,data,data2)
-    indexXD <- apply(apply(temp2-temp,2,range),2,diff)>1e-8
-    rm(data2,temp,temp2)
-    bhazard <- if (is.null(bhazard)) 0 else bhazard[event] # crude
-    if (delayed && any(y[,1]>0)) {
-      data2 <- data[y[,1]>0,,drop=FALSE] # data for delayed entry times
-      mt2 <- delete.response(mt)
-      ## copy over times - so we can use the same term object
-      timeExpr0 <- lhs(full.formula)[[2]] # expression
-      timeVar0 <- all.vars(timeExpr0)
-      stopifnot(length(timeVar0)==1)
-      data2[[timeVar]] <- data2[[timeVar0]] 
-      ##y.names <- sapply(lhs(full.formula),deparse)
-      ##data2[[y.names[3]]] <- data2[[y.names[2]]] 
-      ## data2[[y.names[2]]] <- 0
-      mfX2$formula <- quote(mt2)
-      mfX2$data <- quote(data2)
-      mfX2 <- eval(mfX2)
-      ##mfX2 <- model.frame(mt2, data2, xlev=xlev, weights = weights)
-      if (!is.null(cl <- attr(mt2, "dataClasses"))) 
-        .checkMFClasses(cl, mfX2)
-      X2 <- model.matrix(mt2, mfX2, contrasts)
-      wt2 <- model.weights(mfX2)
-      if (is.null(wt2)) wt2 <- rep(1,nrow(X2))
-      ## delayed.formula <- full.formula
-      ## lhs(delayed.formula) <- NULL
-      ## X2 = predict(delayed.formula, data, data2) ## delayed entry
-      negll <- function(beta) {
-        eta <- X %*% beta
-        eta2 <- X2 %*% beta
-        h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
-        ## h <- (XD[event,] %*% beta[indexXD])*exp(eta[event])/time[event] + bhazard
-        h[h<0] <- 1e-100
-        ll <- sum(wt[event]*log(h)) +  sum(wt2*exp(eta2)) -
-          sum(wt*exp(eta))
-        return(-ll)
-      }
-      logli <- function(beta) {
-        eta <- X %*% beta
-        eta2 <- X2 %*% beta
-        h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
-        h[h<0] <- 1e-100
-        out <- exp(eta2) - exp(eta)
-        out[event] <- out[event]+log(h)
-        out <- out*wt
-        return(out)
-      }
-    }
-    else { # right censoring only
-      negll <- function(beta) {
-        eta <- X %*% beta
-        h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
-        ## h <- (XD[event,] %*% beta[indexXD])*exp(eta[event])/time[event] + bhazard
-        h[h<0] <- 1e-100
-        ll <- sum(wt[event]*log(h)) - sum(wt*exp(eta))
-        return(-ll)
-      }
-      logli <- function(beta) {
-        eta <- X %*% beta
-        h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
-        h[h<0] <- 1e-100
-        out <- -exp(eta)
-        out[event] <- out[event]+log(h)
-        out <- out*wt
-        return(out)
-      }
-    }
-    ## MLE
-    if (!is.null(control) && "parscale" %in% names(control)) {
-      if (length(control$parscale)==1)
-        control$parscale <- rep(control$parscale,length(init))
-      if (is.null(names(control$parscale)))
-        names(control$parscale) <- names(init)
-    }
-    parnames(negll) <- names(init)
-    mle2 <- mle2(negll,init,vecpar=TRUE, control=control, ...)
-    out <- new("stpm2Old",
-               call = mle2@call,
-               call.orig = mle2@call,
-               coef = mle2@coef,
-               fullcoef = mle2@fullcoef,
-               vcov = mle2@vcov,
-               min = mle2@min,
-               details = mle2@details,
-               minuslogl = mle2@minuslogl,
-               method = mle2@method,
-               data = data,
-               formula = mle2@formula,
-               optimizer = "optim",
-               xlevels = .getXlevels(mt, mf),
-               contrasts = attr(X, "contrasts"),
-               logli = logli,
-               ##weights = weights,
-               Call = Call,
-               terms = mt,
-               model.frame = mf,
-               x = X,
-               xd = XD,
-               termsd = mtd,
-               y = y)
-    if (robust) # kludge
-      out@vcov <- sandwich.stpm2(out)
-    return(out)
-  }
-##
-## predict survival
-setMethod("predictnl", "stpm2Old",
-          function(object,fun,newdata=NULL,link=c("I","log","cloglog"),...)
-  {
-    link <- match.arg(link)
-    invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp)
-    linkf <- eval(parse(text=link))
-    if (is.null(newdata) && !is.null(object@data))
-      newdata <- object@data
-    localf <- function(coef,...)
-      {
-        object@fullcoef = coef
-        linkf(fun(object,...))
-      }
-    dm <- numDeltaMethod(object,localf,newdata=newdata,...)
-    out <- invlinkf(data.frame(Estimate=dm$Estimate,
-                               lower=dm$Estimate-1.96*dm$SE,
-                               upper=dm$Estimate+1.96*dm$SE))
-    ## cloglog switches the bounds
-    if (link=="cloglog") 
-      out <- data.frame(Estimate=out$Estimate,lower=out$upper,upper=out$lower)
-    return(out)
-  })
-##
-setMethod("predict", "stpm2Old",
-          function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","hr","sdiff","hdiff","loghazard","link"),
-                   grid=FALSE,seqLength=300,
-                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
-  {
-    ## exposed is a function that takes newdata and returns the revised newdata
-    ## var is a string for a variable that defines a unit change in exposure
-    local <-  function (object, newdata=NULL, type="surv", exposed)
-      {
-        tt <- object@terms 
-        if (is.null(newdata)) {
-          ##mm <- X <- model.matrix(object) # fails (missing timevar)
-          X <- object@x
-          XD <- object@xd
-          ##y <- model.response(object@model.frame)
-          y <- object@y
-          time <- as.vector(y[,ncol(y)-1])
-        }
-        else {
-          Terms <- delete.response(tt)
-          m <- model.frame(Terms, newdata, xlev = object@xlevels)
-          if (!is.null(cl <- attr(Terms, "dataClasses"))) 
-            .checkMFClasses(cl, m)
-          X <- model.matrix(Terms, m, contrasts.arg = object@contrasts)
-          resp <- attr(Terms, "variables")[attr(Terms, "response")]
-          ## similarly for the derivatives
-          if (type %in% c("hazard","hr","sdiff","hdiff","loghazard")) {
-            ttd <- object@termsd
-            TermsD <- delete.response(ttd)
-            md <- model.frame(TermsD, newdata, xlev = object@xlevels)
-            if (!is.null(cld <- attr(TermsD, "dataClasses"))) 
-              .checkMFClasses(cld, md)
-            XD <- model.matrix(TermsD, md, contrasts.arg = object@contrasts)[,-1,drop=FALSE]
-            ## how to elegantly extract the time variable?
-            timevar <- if (length(tt[[2]])==3) tt[[2]][[2]] else tt[[2]][[3]]
-            time <- model.matrix(as.formula(call("~",timevar)),newdata)[,-1,drop=TRUE]
-            ##
-          }
-          if (type %in% c("hr","sdiff","hdiff")) {
-            if (missing(exposed))
-              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff')")
-            newdata2 <- exposed(newdata)
-            m2 <- model.frame(Terms, newdata2, xlev = object@xlevels)
-            if (!is.null(cl <- attr(Terms, "dataClasses"))) 
-              .checkMFClasses(cl, m2)
-            X2 <- model.matrix(Terms, m2, contrasts.arg = object@contrasts)
-            md2 <- model.frame(TermsD, newdata2, xlev = object@xlevels)
-            if (!is.null(cld <- attr(TermsD, "dataClasses"))) 
-              .checkMFClasses(cld, md2)
-            XD2 <- model.matrix(TermsD, md2, contrasts.arg = object@contrasts)[,-1,drop=FALSE]
-          }
-        }
-        beta <- coef(object)
-        cumHaz = exp(X %*% beta)
-        Sigma = vcov(object)
-        if (type=="link") { # delayed entry?
-          return(X %*% beta)
-        }
-        if (type=="cumhaz") { # delayed entry?
-          return(cumHaz)
-        }
-        if (type=="surv") { # delayed entry?
-          return(exp(-cumHaz))
-        }
-        if (type=="sdiff")
-          return(exp(-exp(X2 %*% beta)) - exp(-cumHaz))
-        if (type=="hazard") {
-          betaXD <- beta[(ncol(X)-ncol(XD)+1):ncol(X)]
-          ##return((XD %*% betaXD)/time*cumHaz)
-          return((XD %*% betaXD)*cumHaz)
-        }
-        if (type=="loghazard") {
-          betaXD <- beta[(ncol(X)-ncol(XD)+1):ncol(X)]
-          ##return((XD %*% betaXD)/time*cumHaz)
-          return(log(XD %*% betaXD)+log(cumHaz))
-        }
-        if (type=="hdiff") {
-          betaXD <- beta[(ncol(X)-ncol(XD)+1):ncol(X)]
-          ##return((XD2 %*% betaXD)/time*exp(X2 %*% beta) - (XD %*% betaXD)/time*cumHaz)
-          return((XD2 %*% betaXD)*exp(X2 %*% beta) - (XD %*% betaXD)/time*cumHaz)
-        }
-        if (type=="hr") {
-          cumHazRatio = exp((X2 - X) %*% beta)
-          betaXD <- beta[(ncol(X)-ncol(XD)+1):ncol(X)]
-          return((XD2 %*% betaXD)/(XD %*% betaXD)*cumHazRatio)
-        }
-      }
-    ##debug(local)
-    type <- match.arg(type)
-    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff"))
-      stop("Prediction using type in ('hr','sdiff','hdiff') requires newdata to be specified.")
-    if (grid) {
-      Terms <- object@terms
-      timevar <- lhs(Terms)[[length(lhs(Terms))-1]]
-      Y <- object@y
-      event <- Y[,ncol(Y)]==1
-      time <- Y[,ncol(Y)-1]
-      eventTimes <- time[event]
-      X <- seq(min(eventTimes),max(eventTimes),length=seqLength)[-1]
-      data.x <- data.frame(X)
-      names(data.x) <- deparse(timevar)
-      newdata <- merge(newdata,data.x)
-    }
-    pred <- if (!se.fit) {
-      local(object,newdata,type=type,exposed=exposed,
-            ...)
-    }
-    else {
-      if (is.null(link))
-        link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                       hdiff="I",loghazard="I",link="I")
-      predictnl(object,local,link=link,newdata=newdata,type=type,
-                exposed=exposed,...) 
-    }
-    attr(pred,"newdata") <- newdata
-    ##if (grid) cbind(newdata,as.data.frame(pred)) else pred
-    return(pred)
-  })
-setMethod("plot", signature(x="stpm2Old", y="missing"),
-          function(x,y,newdata,type="surv",
-                      xlab="Time",ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
-                      add=FALSE,ci=TRUE,rug=TRUE,
-                      var=NULL,...) {
-  y <- predict(x,newdata,type=type,var=var,grid=TRUE,se.fit=TRUE)
-  if (is.null(ylab))
-    ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",
-                   sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard")
-  xx <- attr(y,"newdata")
-  xx <- xx[,ncol(xx)]
-  if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
-  if (ci) polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
-  lines(xx,y[,1],col=line.col,lty=lty)
-  if (rug) {
-      Y <- x@y
-      eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]
-      rug(eventTimes,col=line.col)
-    }
-  return(invisible(y))
-})
-
 ## re-factored stpm2
 setClass("stpm2", representation(xlevels="list",
                                  contrasts="listOrNULL",
                                  terms="terms",
                                  logli="function",
                                  ## weights="numericOrNULL",
-                                    lm="lm",
-                                    timeVar="character",
-                                    timeExpr="nameOrcall",
+                                 lm="lm",
+                                 timeVar="character",
+                                 timeExpr="nameOrcall",
                                  model.frame="list",
-                                    call.formula="formula",
+                                 call.formula="formula",
                                  x="matrix",
                                  xd="matrix",
                                  termsd="terms",
@@ -993,8 +584,6 @@ stpm2 <- function(formula, data,
       logH.args$df <- df
       if (cure) logH.args$cure <- cure
     }
-    if (!is.null(logH.args) && is.null(logH.args$log))
-      logH.args$log <- TRUE
     if (is.null(logH.formula))
       logH.formula <- as.formula(call("~",as.call(c(quote(nsx),call("log",timeExpr),
                                                     vector2call(logH.args)))))
@@ -1005,7 +594,8 @@ stpm2 <- function(formula, data,
                     as.name(name),
                     as.call(c(quote(nsx),
                               call("log",timeExpr),
-                              vector2call(list(log=TRUE,cure=cure,df=tvc[[name]]))))))
+                              vector2call(if (cure) list(cure=cure,df=tvc[[name]]) else list(df=tvc[[name]])
+                                          )))))
       if (length(tvc.formulas)>1)
         tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
       tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
@@ -1713,6 +1303,416 @@ setMethod("plot", signature(x="pstpm2", y="missing"),
                    sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard")
   xx <- attr(y,"newdata")
   xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
+  if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
+  if (ci) polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
+  lines(xx,y[,1],col=line.col,lty=lty)
+  if (rug) {
+      Y <- x@y
+      eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]
+      rug(eventTimes,col=line.col)
+    }
+  return(invisible(y))
+})
+
+
+## old stpm2 implementation (included for comparison purposes - deprecated)
+setClass("stpm2Old", representation(xlevels="list",
+                                 contrasts="listOrNULL",
+                                 terms="terms",
+                                 logli="function",
+                                 ## weights="numericOrNULL",
+                                 model.frame="list",
+                                 x="matrix",
+                                 xd="matrix",
+                                 termsd="terms",
+                                 Call="call",
+                                 y="Surv"
+                                 ),
+         contains="mle2")
+stpm2Old <- function(formula, data,
+                  df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
+                  tvc = NULL, tvc.formula = NULL,
+                  control = list(parscale = 0.1, maxit = 300), init = FALSE,
+                  coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
+                  bhazard = NULL, contrasts = NULL, subset = NULL, ...)
+  {
+    ## ensure that data is a data frame
+    data <- get_all_vars(formula, data)
+    ## restrict to non-missing data (assumes na.action=na.omit)
+    .include <- Reduce(`&`,
+                       lapply(model.frame(formula, data, na.action=na.pass),
+                              Negate(is.na)),
+                       TRUE)
+    data <- data[.include, , drop=FALSE]
+    Call <- match.call()
+    mf <- match.call(expand.dots = FALSE)
+    m <- match(c("formula", "data", "subset", "contrasts", "weights"),
+               names(mf), 0L)
+    mf <- mf[c(1L, m)]
+    ## mf$drop.unused.levels <- TRUE # include?
+    mf[[1L]] <- as.name("model.frame")
+    eventExpression <- lhs(formula)[[length(lhs(formula))]]
+    delayed <- length(lhs(formula))==4
+    timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
+    timeVar <- all.vars(timeExpr)
+    stopifnot(length(timeVar)==1)
+    ## set up the formulae
+    if (is.null(logH.formula) && is.null(logH.args)) {
+      logH.args$df <- df
+      if (cure) logH.args$cure <- cure
+    }
+    if (!is.null(logH.args) && is.null(logH.args$log))
+      logH.args$log <- TRUE
+    if (is.null(logH.formula))
+      logH.formula <- as.formula(call("~",as.call(c(quote(nsx),call("log",timeExpr),
+                                                    vector2call(logH.args)))))
+    if (is.null(tvc.formula) && !is.null(tvc)) {
+      tvc.formulas <-
+        lapply(names(tvc), function(name)
+               call(":",
+                    as.name(name),
+                    as.call(c(quote(nsx),
+                              call("log",timeExpr),
+                              vector2call(list(log=TRUE,cure=cure,df=tvc[[name]]))))))
+      if (length(tvc.formulas)>1)
+        tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
+      tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
+    }
+    if (!is.null(tvc.formula)) {
+      rhs(logH.formula) <- rhs(logH.formula) %call+% rhs(tvc.formula)
+    }
+    if (baseoff)
+      rhs(logH.formula) <- rhs(tvc.formula)
+    full.formula <- formula
+    rhs(full.formula) <- rhs(formula) %call+% rhs(logH.formula)
+    ## differentiation would be easier if we did not have functions for log(time)
+    logHD.formula <- replaceFormula(logH.formula,quote(nsx),quote(nsxDeriv))
+    ## set up primary terms objects (mt and mtd)
+    mf$formula = full.formula
+    datae <- data[eval(eventExpression,data)==1, , drop=FALSE]
+    mf$data <- quote(datae) # restricted to event times
+    mfX <- mfd <- mf # copy
+    mf <- eval(mf)
+    mt <- attr(mf, "terms") # primary!
+    xlev <- .getXlevels(mt, mf)
+    mfd[[2]] <- logHD.formula
+    mfd <- eval(mfd)
+    mtd <- attr(mfd, "terms") # primary!
+    ## design matrices
+    mfX$formula <- quote(mt)
+    mfX$data <- quote(data)
+    mfX2 <- mfXD <- mfX # copies
+    mfX <- eval(mfX)
+    if (!is.null(cl <- attr(mt, "dataClasses"))) 
+      .checkMFClasses(cl, mfX)
+    X <- model.matrix(mt, mfX, contrasts)
+    wt <- model.weights(mfX)
+    if (is.null(wt)) wt <- rep(1,nrow(X))
+    ## mfXD <- model.frame(mtd, data, xlev=xlev, weights = weights)
+    mfXD$formula <- quote(mtd)
+    mfXD <- eval(mfXD)
+    if (!is.null(cl <- attr(mtd, "dataClasses"))) 
+      .checkMFClasses(cl, mfXD)
+    XD <- model.matrix(mtd, mfXD, contrasts)[,-1,drop=FALSE]
+    ##
+    y <- model.extract(mfX,"response")
+    if (!inherits(y, "Surv")) 
+      stop("Response must be a survival object")
+    type <- attr(y, "type")
+    if (type != "right" && type != "counting") 
+        stop(paste("stpm2Old model doesn't support \"", type, "\" survival data", 
+            sep = ""))
+    event <- y[,ncol(y)]==1
+    time <- y[,ncol(y)-1]
+    ## initial values
+    coxph.strata <- substitute(coxph.strata)
+    coxph.formula <- formula
+    if (!is.null(coxph.strata)) 
+      rhs(coxph.formula) <- rhs(formula) %call+% call("strata",coxph.strata)
+    coxph.obj <- quote(coxph(coxph.formula,data=data,model=TRUE))
+    coxph.obj$weights <- substitute(weights)
+    coxph.obj <- eval(coxph.obj)
+    ## coxph.obj <- eval.parent(substitute(coxph(formula,data),
+    ##                                     list(formula=formula,data=data)))
+    ##coxph.data <- get_all_vars(mfX)
+    coxph.data <- data
+    coxph.data$logHhat <- pmax(-18,log(-log(Shat(coxph.obj))))
+    coxph.data[[timeVar]] <- data[[timeVar]]
+    ## coxph.data[,1] <- time
+    ## names(coxph.data)[1] <- as.character(timeExpr)
+    ##
+    lm.formula <- full.formula
+    lhs(lm.formula) <- quote(logHhat) # new response
+    if (!init) {
+      lm.obj <- lm(lm.formula,coxph.data[event,],contrasts=contrasts)
+      ## lm.obj <- lm(lm.formula,data[event,],contrasts=contrasts)
+      lm.obj$weights <- substitute(weights)
+      lm.obj <- eval(lm.obj)
+      init <- coef(lm.obj)
+    }
+    ## indexXD <- grep(timeVar,names(init)) ## FRAUGHT: pattern-matching on names
+    data2 <- data
+    data2[[timeVar]] <- data[[timeVar]]+1e-3
+    temp <- predict(full.formula,data,data)
+    temp2 <- predict(full.formula,data,data2)
+    indexXD <- apply(apply(temp2-temp,2,range),2,diff)>1e-8
+    rm(data2,temp,temp2)
+    bhazard <- if (is.null(bhazard)) 0 else bhazard[event] # crude
+    if (delayed && any(y[,1]>0)) {
+      data2 <- data[y[,1]>0,,drop=FALSE] # data for delayed entry times
+      mt2 <- delete.response(mt)
+      ## copy over times - so we can use the same term object
+      timeExpr0 <- lhs(full.formula)[[2]] # expression
+      timeVar0 <- all.vars(timeExpr0)
+      stopifnot(length(timeVar0)==1)
+      data2[[timeVar]] <- data2[[timeVar0]] 
+      ##y.names <- sapply(lhs(full.formula),deparse)
+      ##data2[[y.names[3]]] <- data2[[y.names[2]]] 
+      ## data2[[y.names[2]]] <- 0
+      mfX2$formula <- quote(mt2)
+      mfX2$data <- quote(data2)
+      mfX2 <- eval(mfX2)
+      ##mfX2 <- model.frame(mt2, data2, xlev=xlev, weights = weights)
+      if (!is.null(cl <- attr(mt2, "dataClasses"))) 
+        .checkMFClasses(cl, mfX2)
+      X2 <- model.matrix(mt2, mfX2, contrasts)
+      wt2 <- model.weights(mfX2)
+      if (is.null(wt2)) wt2 <- rep(1,nrow(X2))
+      ## delayed.formula <- full.formula
+      ## lhs(delayed.formula) <- NULL
+      ## X2 = predict(delayed.formula, data, data2) ## delayed entry
+      negll <- function(beta) {
+        eta <- X %*% beta
+        eta2 <- X2 %*% beta
+        h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
+        ## h <- (XD[event,] %*% beta[indexXD])*exp(eta[event])/time[event] + bhazard
+        h[h<0] <- 1e-100
+        ll <- sum(wt[event]*log(h)) +  sum(wt2*exp(eta2)) -
+          sum(wt*exp(eta))
+        return(-ll)
+      }
+      logli <- function(beta) {
+        eta <- X %*% beta
+        eta2 <- X2 %*% beta
+        h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
+        h[h<0] <- 1e-100
+        out <- exp(eta2) - exp(eta)
+        out[event] <- out[event]+log(h)
+        out <- out*wt
+        return(out)
+      }
+    }
+    else { # right censoring only
+      negll <- function(beta) {
+        eta <- X %*% beta
+        h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
+        ## h <- (XD[event,] %*% beta[indexXD])*exp(eta[event])/time[event] + bhazard
+        h[h<0] <- 1e-100
+        ll <- sum(wt[event]*log(h)) - sum(wt*exp(eta))
+        return(-ll)
+      }
+      logli <- function(beta) {
+        eta <- X %*% beta
+        h <- (XD[event,] %*% beta[indexXD])*exp(eta[event]) + bhazard
+        h[h<0] <- 1e-100
+        out <- -exp(eta)
+        out[event] <- out[event]+log(h)
+        out <- out*wt
+        return(out)
+      }
+    }
+    ## MLE
+    if (!is.null(control) && "parscale" %in% names(control)) {
+      if (length(control$parscale)==1)
+        control$parscale <- rep(control$parscale,length(init))
+      if (is.null(names(control$parscale)))
+        names(control$parscale) <- names(init)
+    }
+    parnames(negll) <- names(init)
+    mle2 <- mle2(negll,init,vecpar=TRUE, control=control, ...)
+    out <- new("stpm2Old",
+               call = mle2@call,
+               call.orig = mle2@call,
+               coef = mle2@coef,
+               fullcoef = mle2@fullcoef,
+               vcov = mle2@vcov,
+               min = mle2@min,
+               details = mle2@details,
+               minuslogl = mle2@minuslogl,
+               method = mle2@method,
+               data = data,
+               formula = mle2@formula,
+               optimizer = "optim",
+               xlevels = .getXlevels(mt, mf),
+               contrasts = attr(X, "contrasts"),
+               logli = logli,
+               ##weights = weights,
+               Call = Call,
+               terms = mt,
+               model.frame = mf,
+               x = X,
+               xd = XD,
+               termsd = mtd,
+               y = y)
+    if (robust) # kludge
+      out@vcov <- sandwich.stpm2(out)
+    return(out)
+  }
+##
+## predict survival
+setMethod("predictnl", "stpm2Old",
+          function(object,fun,newdata=NULL,link=c("I","log","cloglog"),...)
+  {
+    link <- match.arg(link)
+    invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp)
+    linkf <- eval(parse(text=link))
+    if (is.null(newdata) && !is.null(object@data))
+      newdata <- object@data
+    localf <- function(coef,...)
+      {
+        object@fullcoef = coef
+        linkf(fun(object,...))
+      }
+    dm <- numDeltaMethod(object,localf,newdata=newdata,...)
+    out <- invlinkf(data.frame(Estimate=dm$Estimate,
+                               lower=dm$Estimate-1.96*dm$SE,
+                               upper=dm$Estimate+1.96*dm$SE))
+    ## cloglog switches the bounds
+    if (link=="cloglog") 
+      out <- data.frame(Estimate=out$Estimate,lower=out$upper,upper=out$lower)
+    return(out)
+  })
+##
+setMethod("predict", "stpm2Old",
+          function(object,newdata=NULL,
+                   type=c("surv","cumhaz","hazard","hr","sdiff","hdiff","loghazard","link"),
+                   grid=FALSE,seqLength=300,
+                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
+  {
+    ## exposed is a function that takes newdata and returns the revised newdata
+    ## var is a string for a variable that defines a unit change in exposure
+    local <-  function (object, newdata=NULL, type="surv", exposed)
+      {
+        tt <- object@terms 
+        if (is.null(newdata)) {
+          ##mm <- X <- model.matrix(object) # fails (missing timevar)
+          X <- object@x
+          XD <- object@xd
+          ##y <- model.response(object@model.frame)
+          y <- object@y
+          time <- as.vector(y[,ncol(y)-1])
+        }
+        else {
+          Terms <- delete.response(tt)
+          m <- model.frame(Terms, newdata, xlev = object@xlevels)
+          if (!is.null(cl <- attr(Terms, "dataClasses"))) 
+            .checkMFClasses(cl, m)
+          X <- model.matrix(Terms, m, contrasts.arg = object@contrasts)
+          resp <- attr(Terms, "variables")[attr(Terms, "response")]
+          ## similarly for the derivatives
+          if (type %in% c("hazard","hr","sdiff","hdiff","loghazard")) {
+            ttd <- object@termsd
+            TermsD <- delete.response(ttd)
+            md <- model.frame(TermsD, newdata, xlev = object@xlevels)
+            if (!is.null(cld <- attr(TermsD, "dataClasses"))) 
+              .checkMFClasses(cld, md)
+            XD <- model.matrix(TermsD, md, contrasts.arg = object@contrasts)[,-1,drop=FALSE]
+            ## how to elegantly extract the time variable?
+            timevar <- if (length(tt[[2]])==3) tt[[2]][[2]] else tt[[2]][[3]]
+            time <- model.matrix(as.formula(call("~",timevar)),newdata)[,-1,drop=TRUE]
+            ##
+          }
+          if (type %in% c("hr","sdiff","hdiff")) {
+            if (missing(exposed))
+              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff')")
+            newdata2 <- exposed(newdata)
+            m2 <- model.frame(Terms, newdata2, xlev = object@xlevels)
+            if (!is.null(cl <- attr(Terms, "dataClasses"))) 
+              .checkMFClasses(cl, m2)
+            X2 <- model.matrix(Terms, m2, contrasts.arg = object@contrasts)
+            md2 <- model.frame(TermsD, newdata2, xlev = object@xlevels)
+            if (!is.null(cld <- attr(TermsD, "dataClasses"))) 
+              .checkMFClasses(cld, md2)
+            XD2 <- model.matrix(TermsD, md2, contrasts.arg = object@contrasts)[,-1,drop=FALSE]
+          }
+        }
+        beta <- coef(object)
+        cumHaz = exp(X %*% beta)
+        Sigma = vcov(object)
+        if (type=="link") { # delayed entry?
+          return(X %*% beta)
+        }
+        if (type=="cumhaz") { # delayed entry?
+          return(cumHaz)
+        }
+        if (type=="surv") { # delayed entry?
+          return(exp(-cumHaz))
+        }
+        if (type=="sdiff")
+          return(exp(-exp(X2 %*% beta)) - exp(-cumHaz))
+        if (type=="hazard") {
+          betaXD <- beta[(ncol(X)-ncol(XD)+1):ncol(X)]
+          ##return((XD %*% betaXD)/time*cumHaz)
+          return((XD %*% betaXD)*cumHaz)
+        }
+        if (type=="loghazard") {
+          betaXD <- beta[(ncol(X)-ncol(XD)+1):ncol(X)]
+          ##return((XD %*% betaXD)/time*cumHaz)
+          return(log(XD %*% betaXD)+log(cumHaz))
+        }
+        if (type=="hdiff") {
+          betaXD <- beta[(ncol(X)-ncol(XD)+1):ncol(X)]
+          ##return((XD2 %*% betaXD)/time*exp(X2 %*% beta) - (XD %*% betaXD)/time*cumHaz)
+          return((XD2 %*% betaXD)*exp(X2 %*% beta) - (XD %*% betaXD)/time*cumHaz)
+        }
+        if (type=="hr") {
+          cumHazRatio = exp((X2 - X) %*% beta)
+          betaXD <- beta[(ncol(X)-ncol(XD)+1):ncol(X)]
+          return((XD2 %*% betaXD)/(XD %*% betaXD)*cumHazRatio)
+        }
+      }
+    ##debug(local)
+    type <- match.arg(type)
+    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff"))
+      stop("Prediction using type in ('hr','sdiff','hdiff') requires newdata to be specified.")
+    if (grid) {
+      Terms <- object@terms
+      timevar <- lhs(Terms)[[length(lhs(Terms))-1]]
+      Y <- object@y
+      event <- Y[,ncol(Y)]==1
+      time <- Y[,ncol(Y)-1]
+      eventTimes <- time[event]
+      X <- seq(min(eventTimes),max(eventTimes),length=seqLength)[-1]
+      data.x <- data.frame(X)
+      names(data.x) <- deparse(timevar)
+      newdata <- merge(newdata,data.x)
+    }
+    pred <- if (!se.fit) {
+      local(object,newdata,type=type,exposed=exposed,
+            ...)
+    }
+    else {
+      if (is.null(link))
+        link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
+                       hdiff="I",loghazard="I",link="I")
+      predictnl(object,local,link=link,newdata=newdata,type=type,
+                exposed=exposed,...) 
+    }
+    attr(pred,"newdata") <- newdata
+    ##if (grid) cbind(newdata,as.data.frame(pred)) else pred
+    return(pred)
+  })
+setMethod("plot", signature(x="stpm2Old", y="missing"),
+          function(x,y,newdata,type="surv",
+                      xlab="Time",ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
+                      add=FALSE,ci=TRUE,rug=TRUE,
+                      var=NULL,...) {
+  y <- predict(x,newdata,type=type,var=var,grid=TRUE,se.fit=TRUE)
+  if (is.null(ylab))
+    ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",
+                   sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard")
+  xx <- attr(y,"newdata")
+  xx <- xx[,ncol(xx)]
   if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
   if (ci) polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
   lines(xx,y[,1],col=line.col,lty=lty)

@@ -1,52 +1,45 @@
-\name{stpm2}
+\name{pstpm2}
 \Rdversion{1.1}
-\alias{stpm2}
+\alias{pstpm2}
 %- Also NEED an '\alias' for EACH other topic documented here.
 \title{
-Flexible parametric survival model.
+Flexible semi-parametric survival model.
 }
 \description{
-This implements the Royston-Parmar model.
+This implements a penalised Royston-Parmar model using generalized
+additive models.
 }
 \usage{
-stpm2 <- function(formula, data,
-                     df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
+pstpm2 <- function(formula, data,
+                     logH.args = NULL, logH.formula = NULL,
                      tvc = NULL, tvc.formula = NULL,
                      control = list(parscale = 0.1, maxit = 300), init = FALSE,
                      coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
-                     bhazard = NULL, timeVar = NULL, use.gr = TRUE,
+                     bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE,
                      contrasts = NULL, subset = NULL, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
   \item{formula}{
 a formula object, with the response on the left of a \code{~} operator, and
-the regression terms (excluding time) on the right.  The response must be a survival object as
-returned by the \code{\link{Surv}} function. The terms should include linear
-terms for any time-varying coefficients. [required]
+the parametric terms on the right.  The response must be a survival object as
+returned by the \code{\link{Surv}} function. [required]
 }
   \item{data}{
 a data.frame in which to interpret the variables named in
-the \code{formula} argument. [at present: required]
-}
-  \item{df}{
-an integer that describes the degrees of freedom for the \code{ns}
-function for modelling the baseline log-cumulative hazard (default=3). 
+the \code{formula} argument.
 }
   \item{logH.args}{
-a list describing the arguments for the \code{nsx} function for modelling
-the baseline log-cumulative hazard (default=NULL). Use this for
-changing the knot placement and specifying cure models.
+a list describing the arguments for the \code{s} function for modelling
+the baseline log-cumulative hazard (default=NULL). 
 }
   \item{logH.formula}{
-a formula for describing the baseline log-cumulative hazard function
+a \code{mgcv::gam} formula for describing the baseline log-cumulative hazard function
 (default=NULL). Only one of \code{df}, \code{logH.args} or
-\code{logH.formula} is required. The default model is equal to \code{nsx(log(time),df=3)}.
+\code{logH.formula} is required. The default model is equal to \code{s(log(time),k=-1)}.
 }
   \item{tvc}{
-a list with the names of the time-varying coefficients and the degrees
-of freedom (e.g. \code{tvc=list(x=3)} specifies \code{x} as a time-varying
-coefficient with 3 degrees of freedom).
+a list with the names of the time-varying coefficients.
 }
   \item{tvc.formula}{
 a formula for describing the time-varying coefficients. If a

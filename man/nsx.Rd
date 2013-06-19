@@ -34,7 +34,7 @@ nsx(x, df = NULL, knots = NULL, intercept = FALSE,
     first and second derivatives to zero (f'(x)=f''(x)=0); an order of 1
   constrains the zero, first and second derivatives to zero (f(x)=f'(x)=f''(x)=0)}
   \item{log}{a Boolean indicating whether the underlying values have been
-    log transformed; used to calculate derivatives}
+    log transformed; (deprecated: only used to calculate derivatives in rstpm2:::stpm2Old}
   \item{centre}{if specified, then centre the splines at this value
     (i.e. f(centre)=0) (default=FALSE)}
   \item{cure}{a Boolean indicated whether to estimate cure; changes the
