@@ -83,7 +83,7 @@ two variables define the time}
   \code{bbmle} package.
 }
 \value{
-An \code{stpm2-class} object. 
+A \code{pstpm2-class} object. 
   %%  ~Describe the value returned
 %%  If it is a LIST, use
 %%  \item{comp1 }{Description of 'comp1'}
@@ -107,7 +107,7 @@ An \code{stpm2-class} object.
 }
 \examples{
 data(brcancer)
-summary(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3))
+summary(fit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer))
 
 ## some predictions
 head(predict(fit,se.fit=TRUE,type="surv"))
@@ -118,7 +118,7 @@ plot(fit,newdata=data.frame(hormon=0),type="hazard")
 plot(fit,newdata=data.frame(hormon=0),type="surv")
 
 ## time-varying coefficient
-summary(fit.tvc <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3,
+summary(fit.tvc <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
                      tvc=list(hormon=3)))
 anova(fit,fit.tvc) # compare with and without tvc
 
