@@ -516,6 +516,7 @@ cexpexp <- function(x) exp(-exp(x))
 setOldClass("terms")
 setClassUnion("listOrNULL",c("list","NULL"))
 setClassUnion("nameOrcall",c("name","call"))
+setClassUnion("nameOrcallOrNULL",c("name","call","NULL"))
 ##setClassUnion("numericOrNULL",c("numeric","NULL"))
 setOldClass("Surv")
 setOldClass("lm")
@@ -528,7 +529,10 @@ setClass("stpm2", representation(xlevels="list",
                                  ## weights="numericOrNULL",
                                  lm="lm",
                                  timeVar="character",
+                                 time0Var="character",
                                  timeExpr="nameOrcall",
+                                 time0Expr="nameOrcallOrNULL",
+                                 delayed="logical",
                                  model.frame="list",
                                  call.formula="formula",
                                  x="matrix",
@@ -538,13 +542,13 @@ setClass("stpm2", representation(xlevels="list",
                                  y="Surv"
                                  ),
          contains="mle2")
-## TODO: weights
+## check: weights
 stpm2 <- function(formula, data,
                      df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
                      tvc = NULL, tvc.formula = NULL,
                      control = list(parscale = 0.1, maxit = 300), init = FALSE,
                      coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
-                     bhazard = NULL, timeVar = NULL, use.gr = TRUE,
+                     bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE,
                      contrasts = NULL, subset = NULL, ...)
   {
     ## set up the data
@@ -569,11 +573,14 @@ stpm2 <- function(formula, data,
     eventExpr <- lhs(formula)[[length(lhs(formula))]]
     delayed <- length(lhs(formula))==4
     timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
-    if (is.null(timeVar))
+    if (timeVar == "")
       timeVar <- all.vars(timeExpr)
     time <- eval(timeExpr, data)
+    time0Expr <- NULL # initialise
     if (delayed) {
       time0Expr <- lhs(formula)[[2]]
+      if (time0Var == "")
+        time0Var <- all.vars(time0Expr)
       time0 <- eval(time0Expr, data)
     }
     event <- eval(eventExpr,data)
@@ -654,34 +661,34 @@ stpm2 <- function(formula, data,
     bhazard <- if (is.null(bhazard)) 0 else eval(bhazard,data,parent.frame())
     if (delayed && any(time0>0)) {
       ind <- time0>0
-      data2 <- data[ind,,drop=FALSE] # data for delayed entry times
-      X2 <- lpmatrix.lm(lm.obj, data2)
-      wt2 <- wt[ind]
+      data0 <- data[ind,,drop=FALSE] # data for delayed entry times
+      X0 <- lpmatrix.lm(lm.obj, data0)
+      wt0 <- wt[ind]
       gradnegll <- function(beta) {
         eta <- as.vector(X %*% beta)
-        eta2 <- as.vector(X2 %*% beta)
+        eta0 <- as.vector(X0 %*% beta)
         etaD <- as.vector(XD %*% beta)
         h <- etaD*exp(eta) + bhazard
         h[h<0] <- 1e-100
         g <- colSums(exp(eta)*wt*(-X + ifelse(event,1/h,0)*(XD + X*etaD)))-
-          colSums(exp(eta2)*wt2*X2)
+          colSums(exp(eta0)*wt0*X0)
         return(-g)
       }
       negll <- function(beta) {
         eta <- X %*% beta
-        eta2 <- X2 %*% beta
+        eta0 <- X0 %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
         h[h<0] <- 1e-100
-        ll <- sum(wt[event]*log(h[event])) +  sum(wt2*exp(eta2)) -
+        ll <- sum(wt[event]*log(h[event])) +  sum(wt0*exp(eta0)) -
           sum(wt*exp(eta))
         return(-ll)
       }
       logli <- function(beta) {
         eta <- X %*% beta
-        eta2 <- X2 %*% beta
+        eta0 <- X0 %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
         h[h<0] <- 1e-100
-        out <- exp(eta2) - exp(eta)
+        out <- exp(eta0) - exp(eta)
         out[event] <- out[event]+log(h[event])
         out <- out*wt
         return(out)
@@ -747,7 +754,10 @@ stpm2 <- function(formula, data,
                model.frame = mf,
                lm = lm.obj,
                timeVar = timeVar,
+               time0Var = time0Var,
                timeExpr = timeExpr,
+               time0Expr = time0Expr,
+               delayed = delayed,
                call.formula = formula,
                x = X,
                xd = XD,
@@ -811,10 +821,15 @@ setMethod("predict", "stpm2",
           ## similarly for the derivatives
           if (type %in% c("hazard","hr","sdiff","hdiff","loghazard")) {
             ## how to elegantly extract the time variable?
-            timeExpr <- 
-              lhs(object@call.formula)[[length(lhs(object@call.formula))-1]]
-            time <- eval(timeExpr,newdata)
+            ## timeExpr <- 
+            ##   lhs(object@call.formula)[[length(lhs(object@call.formula))-1]]
+            time <- eval(object@timeExpr,newdata)
             ##
+          }
+          if (object@delayed) {
+            newdata0 <- newdata
+            newdata0[[timeVar]] <- newdata[[time0Var]]
+            X0 <- lpmatrix.lm(object@lm, newdata0)
           }
           if (type %in% c("hr","sdiff","hdiff")) {
             if (missing(exposed))
@@ -832,7 +847,8 @@ setMethod("predict", "stpm2",
           return(X %*% beta)
         }
         if (type=="cumhaz") { # delayed entry?
-          return(cumHaz)
+          if (object@delayed) return(cumHaz - (X0 %*% beta)) else return(cumHaz)
+          ##return(cumHaz)
         }
         if (type=="surv") { # delayed entry?
           return(exp(-cumHaz))
@@ -925,12 +941,12 @@ setClass("pstpm2", representation(xlevels="list",
                                   ),
          contains="mle2")
 pstpm2 <- function(formula, data,
-                     logH.args = NULL, logH.formula = NULL,
-                     tvc = NULL, tvc.formula = NULL,
-                     control = list(parscale = 0.1, maxit = 300), init = FALSE,
-                     coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
-                     bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE,
-                     contrasts = NULL, subset = NULL, ...)
+                   logH.args = NULL, logH.formula = NULL,
+                   tvc = NULL, tvc.formula = NULL,
+                   control = list(parscale = 0.1, maxit = 300), init = FALSE,
+                   coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
+                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE,
+                   contrasts = NULL, subset = NULL, ...)
   {
     ## set up the data
     ## ensure that data is a data frame
@@ -978,7 +994,7 @@ pstpm2 <- function(formula, data,
                     as.name(name),
                     as.call(c(quote(s),
                               call("log",timeExpr),
-                              vector2call(list(df=tvc[[name]]))))))
+                              vector2call(list(k=tvc[[name]]))))))
       if (length(tvc.formulas)>1)
         tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
       tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
@@ -1293,9 +1309,10 @@ setMethod("predict", "pstpm2",
 ## (*) Stata-compatible knots
 setMethod("plot", signature(x="pstpm2", y="missing"),
           function(x,y,newdata,type="surv",
-                      xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
-                      add=FALSE,ci=TRUE,rug=TRUE,
-                      var=NULL,...) {
+                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
+                   lwd=par("lwd"),
+                   add=FALSE,ci=TRUE,rug=TRUE,
+                   var=NULL,...) {
   y <- predict(x,newdata,type=type,var=var,grid=TRUE,se.fit=TRUE)
   if (is.null(xlab)) xlab <- deparse(x@timeExpr)
   if (is.null(ylab))
@@ -1305,7 +1322,7 @@ setMethod("plot", signature(x="pstpm2", y="missing"),
   xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
   if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
   if (ci) polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
-  lines(xx,y[,1],col=line.col,lty=lty)
+  lines(xx,y[,1],col=line.col,lty=lty,lwd=lwd)
   if (rug) {
       Y <- x@y
       eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]

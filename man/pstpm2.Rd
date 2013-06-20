@@ -67,6 +67,9 @@ using \code{tvc.formula} rather than combining \code{logH.formula} and \code{tvc
 \item{timeVar}{variable defining the time variable. By default, this is
 determined from the survival object, however this may be ambiguous if
 two variables define the time}
+\item{time0Var}{variable defining the entry time variable. By default, this is
+determined from the survival object, however this may be ambiguous if
+two variables define the entry time}
 \item{use.gr}{Boolean to determine whether to use the gradient in the optimisation}
 \item{contrasts}{an optional list. See the \code{contrasts.arg}
     of \code{\link{model.matrix.default}}.
@@ -107,15 +110,54 @@ A \code{pstpm2-class} object.
 }
 \examples{
 data(brcancer)
-summary(fit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer))
+## standard Kaplan-Meier curves by hormon
+plot(survfit(Surv(rectime/365,censrec==1)~1,data=brcancer,subset=hormon==1),
+  xlab="Recurrence free survival time (years)",
+  ylab="Survival")
+lines(survfit(Surv(rectime/365,censrec==1)~1,data=brcancer,subset=hormon==0),col=2,
+  conf.int=TRUE)
+legend("topright", legend=c("Hormonal therapy","No hormonal therapy"),lty=1,col=1:2,bty="n")
 
-## some predictions
-head(predict(fit,se.fit=TRUE,type="surv"))
-head(predict(fit,se.fit=TRUE,type="hazard"))
+## now fit a penalised stpm2 model
+fit <- pstpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer)
+## no S4 generic lines() method: instead, use plot(..., add=TRUE)
+plot(fit,newdata=data.frame(hormon=1),type="surv",add=TRUE,ci=FALSE,line.col="blue",lwd=2,
+  rug=FALSE)
+plot(fit,newdata=data.frame(hormon=0),type="surv",add=TRUE,ci=FALSE,line.col="green",lwd=2,
+  rug=FALSE)
 
-## some plots
-plot(fit,newdata=data.frame(hormon=0),type="hazard")
-plot(fit,newdata=data.frame(hormon=0),type="surv")
+## plot showing proportional hazards
+plot(fit,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
+  rug=FALSE,ylim=c(0,1e-3))
+plot(fit,newdata=data.frame(hormon=0),type="hazard",add=TRUE,ci=FALSE,line.col="green",lwd=2,
+  rug=FALSE)
+
+## tvc
+fit.tvc <- pstpm2(Surv(rectime/365,censrec==1)~hormon,
+  data=brcancer,
+  tvc.formula=~s(log(rectime/365),by=hormon,sp=1e-3),
+  coxph.strata=hormon)
+anova(fit,fit.tvc)
+## fit.tvc2 <- stpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,df=5,tvc=list(hormon=3))
+plot(fit.tvc,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
+  rug=FALSE,ylim=c(0,1e-3))
+plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard",line.col="red",lwd=2,
+  rug=FALSE,add=TRUE,ci=FALSE)
+
+
+## specify the smoothing parameter
+fit.sp <- pstpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,sp=fit@gam$sp*100)
+plot(fit,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
+  rug=FALSE,ylim=c(0,1e-3))
+plot(fit.sp,newdata=data.frame(hormon=1),type="hazard",line.col="orange",lwd=2,
+  rug=FALSE,add=TRUE,ci=FALSE,lwd=2)
+
+## compare with df=5 from stpm2
+fit.stpm2 <- stpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,df=7)
+plot(fit,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
+  rug=FALSE,ylim=c(0,1e-3))
+plot(fit.stpm2,newdata=data.frame(hormon=1),type="hazard",line.col="orange",lwd=2,
+  rug=FALSE,add=TRUE,ci=FALSE,lwd=2)
 
 ## time-varying coefficient
 summary(fit.tvc <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
