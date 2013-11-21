@@ -1205,7 +1205,7 @@ pstpm2 <- function(formula, data,
 ##require(numDeriv)
 ## now fit a penalised stpm2 model
 ##pstpm2.fit <- pstpm2(formula,data)
-## log likelihood and penalzed log likelihood
+## log likelihood and penalized log likelihood
 
 ##GCV###
 gcv<-function(pstpm2.fit){
@@ -1213,8 +1213,8 @@ gcv<-function(pstpm2.fit){
   Hl<-numDeriv::hessian(like,coef(pstpm2.fit))
   Hinv<-vcov(pstpm2.fit)
   trace<-sum(diag(Hinv %*% Hl))
-  like<-like(coef(pstpm2.fit))
-  return(like-trace)
+  l<-like(coef(pstpm2.fit))
+  return(l-trace)
 }
 
 
@@ -1792,6 +1792,19 @@ system.time(fit3 <- pstpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,use
 plot(fit3,newdata=data.frame(hormon=0),type="hazard")
 plot(fit2,newdata=data.frame(hormon=0),type="hazard",add=TRUE,ci=FALSE,rug=FALSE,
      line.col=2)
+
+## penalised likelihood
+brcancer$recyear <- brcancer$rectime/365
+system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                            logH.formula=~s(recyear,k=30), sp=1e-1))
+plot(pfit1,newdata=data.frame(hormon=1))
+rstpm2:::gcv(pfit1)
+sps <- 10^(seq(-7,0,by=0.5))
+gcvs <- sapply(sps, function(sp) {
+  rstpm2:::gcv(pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+        logH.formula=~s(recyear,k=30), sp=sp))
+})
+plot(sps,gcvs,type="l",log="x")
 ##
 system.time(fit <- rstpm2:::stpm2Old(Surv(rectime,censrec==1)~hormon,df=5,data=brcancer))
 system.time(fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,df=5,data=brcancer))
