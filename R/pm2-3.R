@@ -20,6 +20,9 @@
 
 ## extension of ns() to include different boundary derivatives,
 ## centering and cure
+test<-function()
+{print("Hello, World")}
+test
 nsx <- 
 function (x, df = NULL, knots = NULL, intercept = FALSE,
           Boundary.knots = range(x),
@@ -931,6 +934,7 @@ setClass("pstpm2", representation(xlevels="list",
                                   gam="gam",
                                   timeVar="character",
                                   timeExpr="nameOrcall",
+                                  like="function",
                                   model.frame="list",
                                   call.formula="formula",
                                   x="matrix",
@@ -1097,6 +1101,15 @@ pstpm2 <- function(formula, data,
           sum(wt*exp(eta)) - pfun(beta)
         return(-ll)
       }
+      like <- function(beta) {
+        eta <- X %*% beta
+        eta2 <- X2 %*% beta
+        h <- (XD %*% beta)*exp(eta) + bhazard
+        h[h<0] <- 1e-100
+        ll <- sum(wt[event]*log(h[event])) +  sum(wt2*exp(eta2)) -
+          sum(wt*exp(eta))
+        return(ll)
+      }
       logli <- function(beta) {
         eta <- X %*% beta
         eta2 <- X2 %*% beta
@@ -1123,6 +1136,13 @@ pstpm2 <- function(formula, data,
         h[h<0] <- 1e-100
         ll <- sum(wt[event]*log(h[event])) - sum(wt*exp(eta)) - pfun(beta)
         return(-ll)
+      }
+      like <- function(beta) {
+        eta <- X %*% beta
+        h <- (XD %*% beta)*exp(eta) + bhazard
+        h[h<0] <- 1e-100
+        ll <- sum(wt[event]*log(h[event])) - sum(wt*exp(eta))
+        return(ll)
       }
       logli <- function(beta) {
         eta <- X %*% beta
@@ -1170,6 +1190,7 @@ pstpm2 <- function(formula, data,
                gam = gam.obj,
                timeVar = timeVar,
                timeExpr = timeExpr,
+               like = like,
                call.formula = formula,
                x = X,
                xd = XD,
@@ -1179,6 +1200,27 @@ pstpm2 <- function(formula, data,
       out@vcov <- sandwich.stpm2(out)
     return(out)
   }
+
+########GCV##############
+##require(numDeriv)
+## now fit a penalised stpm2 model
+##pstpm2.fit <- pstpm2(formula,data)
+## log likelihood and penalzed log likelihood
+
+##GCV###
+gcv<-function(pstpm2.fit){
+  like<-pstpm2.fit@like
+  Hl<-numDeriv::hessian(like,coef(pstpm2.fit))
+  Hinv<-vcov(pstpm2.fit)
+  trace<-sum(diag(Hinv %*% Hl))
+  like<-like(coef(pstpm2.fit))
+  return(like-trace)
+}
+
+
+#########################
+
+
 setMethod("predictnl", "pstpm2",
           function(object,fun,newdata=NULL,link=c("I","log","cloglog"),...)
   {

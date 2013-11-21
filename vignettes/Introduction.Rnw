@@ -1,4 +1,4 @@
-% setwd("c:/usr/src/R/rstpm2/pkg/vignettes"); Sweave("Introduction.Rnw"); system("pdflatex Introduction.tex")
+% setwd("c:/usr/src/R/rstpm2/pkg/vignettes"); Sweave("Introduction.Rnw");system("pdflatex Introduction.tex")
 \documentclass[a4paper]{article}
 
 \usepackage{Sweave}
@@ -10,6 +10,7 @@
 \author{Mark~Clements}
 
 \begin{document}
+\SweaveOpts{concordance=TRUE}
 
 \maketitle
 
