@@ -35,7 +35,8 @@ function for modelling the baseline log-cumulative hazard (default=3).
 }
   \item{logH.args}{
 a list describing the arguments for the \code{nsx} function for modelling
-the baseline log-cumulative hazard (default=NULL). Use this for
+the baseline log-cumulative hazard (default=NULL). Use this or
+logH.formula for
 changing the knot placement and specifying cure models.
 }
   \item{logH.formula}{
@@ -88,6 +89,12 @@ two variables define the time}
   
   The implementation extends the \code{mle2} object from the
   \code{bbmle} package.
+
+  Note that the default baseline log-cumulative hazard function uses
+  natural splines for log of time with three degrees of freedom. The
+  design matrix is calculated for the event times rather than all
+  observations.
+  
 }
 \value{
 An \code{stpm2-class} object. 
@@ -123,6 +130,10 @@ head(predict(fit,se.fit=TRUE,type="hazard"))
 ## some plots
 plot(fit,newdata=data.frame(hormon=0),type="hazard")
 plot(fit,newdata=data.frame(hormon=0),type="surv")
+
+## the same model using logH.formula
+summary(stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,logH.formula=~ns(log(rectime),df=3)))
+
 
 ## time-varying coefficient
 summary(fit.tvc <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3,
