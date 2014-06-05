@@ -165,8 +165,9 @@ Shat <- function(obj)
     rr = try(predict(obj,type="risk"),silent=TRUE)
     ## case: only an intercept in the main formula with strata (it would be better to recognise this using attributes for newobj)
     if (inherits(rr,"try-error")) {
-      if (try %in% c("Error in colSums(x[j, ] * weights[j]) : \n  'x' must be an array of at least two dimensions\n",
-                  "Error in rowsum.default(x * weights, indx) : incorrect length for 'group'\n")) rr <- 1 else stop(rr)
+      if (rr %in% c("Error in colSums(x[j, ] * weights[j]) : \n  'x' must be an array of at least two dimensions\n",
+                  "Error in rowsum.default(x * weights, indx) : incorrect length for 'group'\n",
+                     "Error in rowsum.default(x * weights, oldstrat) : \n  incorrect length for 'group'\n")) rr <- 1 else stop(rr)
     }
     surv2 = surv[match(obj$y[,ncol(obj$y)-1],newobj$time)]
     return(surv2^rr)
@@ -288,7 +289,8 @@ numDeltaMethod <- function(object,fun,...) {
   est <- fun(coef,...)
   Sigma <- vcov(object)
   gd <- grad(fun,coef,...)
-  se.est <- as.vector(sqrt(diag(t(gd) %*% Sigma %*% gd)))
+  ## se.est <- as.vector(sqrt(diag(t(gd) %*% Sigma %*% gd)))
+  se.est <- as.vector(sqrt(diag(colSums(gd* (Sigma %*% gd)))))
   data.frame(Estimate = est, SE = se.est)
 }
 predictnl <- function (object, ...) 
@@ -432,45 +434,17 @@ stpm2 <- function(formula, data,
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE,
                      contrasts = NULL, subset = NULL, ...)
   {
-    ## set up the data
-    ## ensure that data is a data frame
-    data <- get_all_vars(formula, data)
-    ## restrict to non-missing data (assumes na.action=na.omit)
-    .include <- Reduce(`&`,
-                       lapply(model.frame(formula, data, na.action=na.pass),
-                              Negate(is.na)),
-                       TRUE)
-    data <- data[.include, , drop=FALSE]
-    ##
-    ## parse the function call
-    Call <- match.call()
-    mf <- match.call(expand.dots = FALSE)
-    m <- match(c("formula", "data", "subset", "contrasts", "weights"),
-               names(mf), 0L)
-    mf <- mf[c(1L, m)]
-    ##
     ## parse the event expression
     stopifnot(length(lhs(formula))>=2)
     eventExpr <- lhs(formula)[[length(lhs(formula))]]
     delayed <- length(lhs(formula))==4
     timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
     if (timeVar == "")
-      timeVar <- all.vars(timeExpr)
-    time <- eval(timeExpr, data)
-    time0Expr <- NULL # initialise
-    if (delayed) {
-      time0Expr <- lhs(formula)[[2]]
-      if (time0Var == "")
-        time0Var <- all.vars(time0Expr)
-      time0 <- eval(time0Expr, data)
-    }
-    event <- eval(eventExpr,data)
-    event <- event > min(event)
-    ##
+        timeVar <- all.vars(timeExpr)
     ## set up the formulae
     if (is.null(logH.formula) && is.null(logH.args)) {
-      logH.args$df <- df
-      if (cure) logH.args$cure <- cure
+        logH.args$df <- df
+        if (cure) logH.args$cure <- cure
     }
     if (is.null(logH.formula))
       logH.formula <- as.formula(call("~",as.call(c(quote(nsx),call("log",timeExpr),
@@ -495,6 +469,35 @@ stpm2 <- function(formula, data,
       rhs(logH.formula) <- rhs(tvc.formula)
     full.formula <- formula
     rhs(full.formula) <- rhs(formula) %call+% rhs(logH.formula)
+    ##
+    ## set up the data
+    ## ensure that data is a data frame
+    data <- get_all_vars(full.formula, data)
+    ## restrict to non-missing data (assumes na.action=na.omit)
+    .include <- Reduce(`&`,
+                       lapply(model.frame(formula, data, na.action=na.pass),
+                              Negate(is.na)),
+                       TRUE)
+    data <- data[.include, , drop=FALSE]
+    ##
+    ## parse the function call
+    Call <- match.call()
+    mf <- match.call(expand.dots = FALSE)
+    m <- match(c("formula", "data", "subset", "contrasts", "weights"),
+               names(mf), 0L)
+    mf <- mf[c(1L, m)]
+    ##
+    ## get variables
+    time <- eval(timeExpr, data)
+    time0Expr <- NULL # initialise
+    if (delayed) {
+      time0Expr <- lhs(formula)[[2]]
+      if (time0Var == "")
+        time0Var <- all.vars(time0Expr)
+      time0 <- eval(time0Expr, data)
+    }
+    event <- eval(eventExpr,data)
+    event <- event > min(event)
     ##
     ## Cox regression
     coxph.call <- mf
@@ -550,7 +553,7 @@ stpm2 <- function(formula, data,
         eta0 <- as.vector(X0 %*% beta)
         etaD <- as.vector(XD %*% beta)
         h <- etaD*exp(eta) + bhazard
-        h[h<0] <- 1e-100
+        ## h[h<0] <- 1e-100
         g <- colSums(exp(eta)*wt*(-X + ifelse(event,1/h,0)*(XD + X*etaD)))-
           colSums(exp(eta0)*wt0*X0)
         return(-g)
@@ -559,7 +562,7 @@ stpm2 <- function(formula, data,
         eta <- X %*% beta
         eta0 <- X0 %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
-        h[h<0] <- 1e-100
+        ## h[h<0] <- 1e-100
         ll <- sum(wt[event]*log(h[event])) +  sum(wt0*exp(eta0)) -
           sum(wt*exp(eta))
         return(-ll)
@@ -568,37 +571,62 @@ stpm2 <- function(formula, data,
         eta <- X %*% beta
         eta0 <- X0 %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
-        h[h<0] <- 1e-100
+        ##  h[h<0] <- 1e-100
         out <- exp(eta0) - exp(eta)
         out[event] <- out[event]+log(h[event])
         out <- out*wt
         return(out)
       }
     }
-    else { # right censoring only
+    else { # right censoring only (beta;X,XD,bhazard,wt,event)
       gradnegll <- function(beta) {
         eta <- as.vector(X %*% beta)
         etaD <- as.vector(XD %*% beta)
         h <- etaD*exp(eta) + bhazard
-        h[h<0] <- 1e-100
+        ## h[h<0] <- 1e-100
         g <- colSums(exp(eta)*wt*(-X + ifelse(event,1/h,0)*(XD + X*etaD)))
         return(-g)
       }
-      negll <- function(beta) {
+      negll <- function(beta) { # (beta;X,XD,bhazard,wt,event)
         eta <- X %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
-        h[h<0] <- 1e-100
+        ## h[h<0] <- 1e-100
         ll <- sum(wt[event]*log(h[event])) - sum(wt*exp(eta))
         return(-ll)
       }
       logli <- function(beta) {
         eta <- X %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
-        h[h<0] <- 1e-100
+        ## h[h<0] <- 1e-100
         out <- -exp(eta)
         out[event] <- out[event]+log(h[event])
         out <- out*wt
         return(out)
+      }
+      rcpp_optim <- function() {
+          stopifnot(!delayed)
+          .Call("optim_stpm2",init,X,XD,rep(bhazard,nrow(X)),wt,ifelse(event,1,0),package="rstpm2")
+      }
+      hessian <- function(beta) {
+          mult <- function(X1,X2,w) {
+              out <- matrix(0,ncol(X1),ncol(X1))
+              for (k in (1:nrow(X1))[w != 0])
+                  out <- out + (X1[k,] %*% t(X2[k,])) * w[k]
+              out
+          }
+          eta <- X %*% beta
+          etaD <- XD %*% beta
+          expEta <- exp(eta)
+          h <- etaD*expEta + bhazard
+          ## case: bhazard=0
+          ## hess <- - mult(X,X,expEta*wt) - mult(XD,XD,event*wt/(etaD^2))
+          w1 <- event/h*wt*expEta
+          w2 <- event/h^2*wt*expEta^2
+          hess <- - mult(X,X,expEta*wt) +
+              mult(X,X,w1*etaD) + mult(X,XD,w1) + mult(XD,X,w1) -
+                  (mult(X,X,w2*etaD^2) + mult(XD,X,w2*etaD) + mult(X,XD,w2*etaD) + mult(XD,XD,w2))
+          print(solve(-hess))
+          hess
       }
     }
     ## MLE
@@ -612,6 +640,7 @@ stpm2 <- function(formula, data,
     mle2 <- if (use.gr)
       mle2(negll,init,vecpar=TRUE, control=control, gr=gradnegll, ...)
     else mle2(negll,init,vecpar=TRUE, control=control, ...)
+    browser()
     out <- new("stpm2",
                call = mle2@call,
                call.orig = mle2@call,
@@ -709,7 +738,7 @@ setMethod("predict", "stpm2",
           }
           if (object@delayed) {
             newdata0 <- newdata
-            newdata0[[timeVar]] <- newdata[[time0Var]]
+            newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
             X0 <- lpmatrix.lm(object@lm, newdata0)
           }
           if (type %in% c("hr","sdiff","hdiff")) {
@@ -743,7 +772,7 @@ setMethod("predict", "stpm2",
           return(log(XD %*% beta)+log(cumHaz))
         }
         if (type=="hdiff") {
-          return((XD2 %*% beta)*exp(X2 %*% beta) - (XD %*% betaXD)/time*cumHaz)
+          return((XD2 %*% beta)*exp(X2 %*% beta) - (XD %*% beta)/time*cumHaz)
         }
         if (type=="hr") {
           cumHazRatio = exp((X2 - X) %*% beta)
@@ -783,7 +812,7 @@ setMethod("predict", "stpm2",
 setMethod("plot", signature(x="stpm2", y="missing"),
           function(x,y,newdata,type="surv",
                       xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
-                      add=FALSE,ci=TRUE,rug=TRUE,
+                      add=FALSE,ci=!add,rug=!add,
                       var=NULL,...) {
   y <- predict(x,newdata,type=type,var=var,grid=TRUE,se.fit=TRUE)
   if (is.null(xlab)) xlab <- deparse(x@timeExpr)
@@ -982,7 +1011,7 @@ pstpm2 <- function(formula, data,
         eta2 <- as.vector(X2 %*% beta)
         etaD <- as.vector(XD %*% beta)
         h <- etaD*exp(eta) + bhazard
-        h[h<0] <- 1e-100
+        ## h[h<0] <- 1e-100
         g <- colSums(exp(eta)*wt*(-X + ifelse(event,1/h,0)*(XD + X*etaD)))-
           colSums(exp(eta2)*wt2*X2) - dpfun(beta,sp)
         return(-g)
@@ -991,7 +1020,7 @@ pstpm2 <- function(formula, data,
         eta <- X %*% beta
         eta2 <- X2 %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
-        h[h<0] <- 1e-100
+        ## h[h<0] <- 1e-100
         ll <- sum(wt[event]*log(h[event])) +  sum(wt2*exp(eta2)) -
           sum(wt*exp(eta)) - pfun(beta,sp)
         return(-ll)
@@ -1000,7 +1029,7 @@ pstpm2 <- function(formula, data,
         eta <- X %*% beta
         eta2 <- X2 %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
-        h[h<0] <- 1e-100
+        ## h[h<0] <- 1e-100
         ll <- sum(wt[event]*log(h[event])) +  sum(wt2*exp(eta2)) -
           sum(wt*exp(eta))
         return(ll)
@@ -1009,7 +1038,7 @@ pstpm2 <- function(formula, data,
         eta <- X %*% beta
         eta2 <- X2 %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
-        h[h<0] <- 1e-100
+        ## h[h<0] <- 1e-100
         out <- exp(eta2) - exp(eta)
         out[event] <- out[event]+log(h[event])
         out <- out*wt
@@ -1021,21 +1050,21 @@ pstpm2 <- function(formula, data,
         eta <- as.vector(X %*% beta)
         etaD <- as.vector(XD %*% beta)
         h <- etaD*exp(eta) + bhazard
-        h[h<0] <- 1e-100
+        ## h[h<0] <- 1e-100
         g <- colSums(exp(eta)*wt*(-X + ifelse(event,1/h,0)*(XD + X*etaD))) - dpfun(beta,sp)
         return(-g)
       }
       negllsp <- function(beta,sp) {
         eta <- X %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
-        h[h<0] <- 1e-100
+        ## h[h<0] <- 1e-100
         ll <- sum(wt[event]*log(h[event])) - sum(wt*exp(eta)) - pfun(beta,sp)
         return(-ll)
       }
       like <- function(beta) {
         eta <- X %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
-        h[h<0] <- 1e-100
+        ## h[h<0] <- 1e-100
         ll <- sum(wt[event]*log(h[event])) - sum(wt*exp(eta))
         return(ll)
       }
@@ -1074,9 +1103,9 @@ pstpm2 <- function(formula, data,
                    details = mle2@details,
                    minuslogl = mle2@minuslogl,
                    method = mle2@method,
-                   data = data,
+                   optimizer = "optim", # mle2@optimizer
+                   data = data, # mle2@data, which uses as.list()
                    formula = mle2@formula,
-                   optimizer = "optim",
                    xlevels = .getXlevels(mt, mf),
                    ##contrasts = attr(X, "contrasts"),
                    contrasts = NULL, # wrong!

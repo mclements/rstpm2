@@ -150,32 +150,32 @@ fit.sp <- pstpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,sp=fit@gam$sp
 plot(fit,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
   rug=FALSE,ylim=c(0,1e-3))
 plot(fit.sp,newdata=data.frame(hormon=1),type="hazard",line.col="orange",lwd=2,
-  rug=FALSE,add=TRUE,ci=FALSE,lwd=2)
+  rug=FALSE,add=TRUE,ci=FALSE)
 
 ## compare with df=5 from stpm2
 fit.stpm2 <- stpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,df=7)
 plot(fit,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
   rug=FALSE,ylim=c(0,1e-3))
 plot(fit.stpm2,newdata=data.frame(hormon=1),type="hazard",line.col="orange",lwd=2,
-  rug=FALSE,add=TRUE,ci=FALSE,lwd=2)
+  rug=FALSE,add=TRUE,ci=FALSE)
 
 ## time-varying coefficient
-summary(fit.tvc <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
-                     tvc=list(hormon=3)))
-anova(fit,fit.tvc) # compare with and without tvc
+##summary(fit.tvc <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
+##                     tvc=list(hormon=3)))
+##anova(fit,fit.tvc) # compare with and without tvc
 
 ## some more plots
-plot(fit.tvc,newdata=data.frame(hormon=0),type="hr",var="hormon")
+## plot(fit.tvc,newdata=data.frame(hormon=0),type="hr",var="hormon")
                                         # no lines method: use add=TRUE
-plot(fit.tvc,newdata=data.frame(hormon=1),type="hr",var="hormon",
-     add=TRUE,ci=FALSE,line.col=2)
+## plot(fit.tvc,newdata=data.frame(hormon=1),type="hr",var="hormon",
+##     add=TRUE,ci=FALSE,line.col=2)
 
-plot(fit.tvc,newdata=data.frame(hormon=0),type="sdiff",var="hormon")
+## plot(fit.tvc,newdata=data.frame(hormon=0),type="sdiff",var="hormon")
 
-plot(fit.tvc,newdata=data.frame(hormon=0),type="hdiff",var="hormon")
+## plot(fit.tvc,newdata=data.frame(hormon=0),type="hdiff",var="hormon")
 
-plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard")
-plot(fit.tvc,newdata=data.frame(hormon=1),type="hazard",line.col=2,ci=FALSE,add=TRUE)
+## plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard")
+## plot(fit.tvc,newdata=data.frame(hormon=1),type="hazard",line.col=2,ci=FALSE,add=TRUE)
 
 ## compare number of knots
 hormon0 <- data.frame(hormon=0)

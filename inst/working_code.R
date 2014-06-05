@@ -18,6 +18,13 @@
 ##   require(bbmle)
 ## }
 
+require(rstpm2)
+data(brcancer)
+stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,control=list(parscale=0.1,reltol=1e-10)) # browser()
+.Call("optim_stpm2",init,X,XD,rep(bhazard,nrow(X)),wt,ifelse(event,1,0),package="rstpm2")
+beta <- coef(mle2)
+vcov(mle2)
+
 ###### penalised likelihood
 ## environment(pstpm2) <- environment(rstpm2::pstpm2)
 ## require(rstpm2)
