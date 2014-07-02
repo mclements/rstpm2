@@ -18,25 +18,40 @@
 ##   require(bbmle)
 ## }
 
+refresh
 require(rstpm2)
 data(brcancer)
-stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,control=list(parscale=0.1,reltol=1e-10)) # browser()
-.Call("optim_stpm2",init,X,XD,rep(bhazard,nrow(X)),wt,ifelse(event,1,0),package="rstpm2")
-beta <- coef(mle2)
-vcov(mle2)
+fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,control=list(parscale=0.1,reltol=1e-10)) # browser()
+summary(fit)
+plot(fit,newdata=data.frame(hormon=1))
+
+brcancerN <- brcancer[rep(1:nrow(brcancer),each=100),]
+system.time(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancerN,use.rcpp=FALSE,
+                         control=list(parscale=0.1,reltol=1e-10)))
+summary(fit)
+system.time(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancerN,use.rcpp=TRUE))
+summary(fit)
 
 ###### penalised likelihood
 ## environment(pstpm2) <- environment(rstpm2::pstpm2)
 ## require(rstpm2)
-try(detach("package:rstpm2",unload=TRUE)); library(rstpm2)
+try(detach("package:rstpm2",unload=TRUE))
+
+refresh
 ## source("/home/MEB/marcle/src/R/rstpm2/R/pm2-3.R")
+require(rstpm2)
 data(brcancer)
 brcancer$recyear <- brcancer$rectime/365
-nn<-length(brcancer$recyear)
+##nn<-length(brcancer$recyear)
 ##
-##debug(pstpm2)
+##undebug(pstpm2)
 system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(log(recyear),k=20)))
+                logH.formula=~s(log(recyear),k=20),sp=0.1))
+plot(pfit1,newdata=data.frame(hormon=1))
+brcancerN <- brcancer[rep(1:nrow(brcancer),each=100),]
+system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancerN,
+                logH.formula=~s(log(recyear),k=20),sp=0.1))
+plot(pfit1,newdata=data.frame(hormon=1))
 pfit1@gam$sp
 par(mfrow=c(2,2))
 plot(pfit1,newdata=data.frame(hormon=1))
@@ -258,8 +273,154 @@ opt.fit(Surv(recyear,censrec==1)~hormon,data=brcancer,
 # )
 ##########################
 
+aplot <- 
+function (x, y, ...) 
+{
+    .local <- function (x, y, newdata, type = "surv", xlab = NULL, 
+        ylab = NULL, line.col = 1, ci.col = "grey", lty = par("lty"), 
+        add = FALSE, ci = !add, rug = !add, var = NULL, ...) 
+    {
+        browser()
+        y <- predict(x, newdata, type = type, var = var, grid = TRUE, 
+            se.fit = TRUE)
+        if (is.null(xlab)) 
+            xlab <- deparse(x@timeExpr)
+        if (is.null(ylab)) 
+            ylab <- switch(type, hr = "Hazard ratio", hazard = "Hazard", 
+                surv = "Survival", sdiff = "Survival difference", 
+                hdiff = "Hazard difference", cumhaz = "Cumulative hazard")
+        xx <- attr(y, "newdata")
+        xx <- eval(x@timeExpr, xx)
+        if (!add) 
+            matplot(xx, y, type = "n", xlab = xlab, ylab = ylab, 
+                ...)
+        if (ci) 
+            polygon(c(xx, rev(xx)), c(y[, 2], rev(y[, 3])), col = ci.col, 
+                border = ci.col)
+        lines(xx, y[, 1], col = line.col, lty = lty)
+        if (rug) {
+            Y <- x@y
+            eventTimes <- Y[Y[, ncol(Y)] == 1, ncol(Y) - 1]
+            rug(eventTimes, col = line.col)
+        }
+        return(invisible(y))
+    }
+    .local(x, y, ...)
+}
+aplot(fit,newdata=data.frame(hormon=1))
 
+apredict <- function (object, ...) 
+{
+    .local <- function (object, newdata = NULL, type = c("surv", 
+        "cumhaz", "hazard", "hr", "sdiff", "hdiff", "loghazard", 
+        "link"), grid = FALSE, seqLength = 300, se.fit = FALSE, 
+        link = NULL, exposed = incrVar(var), var, ...) 
+    {
+        local <- function(object, newdata = NULL, type = "surv", 
+            exposed) {
+            ## browser()
+            tt <- object@terms
+            if (is.null(newdata)) {
+                X <- object@x
+                XD <- object@xd
+                y <- object@y
+                time <- as.vector(y[, ncol(y) - 1])
+            }
+            else {
+                lpfunc <- function(delta, fit, data, var) {
+                  data[[var]] <- data[[var]] + delta
+                  lpmatrix.lm(fit, data)
+                }
+                X <- lpmatrix.lm(object@lm, newdata)
+                XD <- grad(lpfunc, 0, object@lm, newdata, object@timeVar)
+                XD <- matrix(XD, nrow = nrow(X))
+                if (type %in% c("hazard", "hr", "sdiff", "hdiff", 
+                  "loghazard")) {
+                  time <- eval(object@timeExpr, newdata)
+                }
+                if (object@delayed) {
+                  newdata0 <- newdata
+                  newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
+                  X0 <- lpmatrix.lm(object@lm, newdata0)
+                }
+                if (type %in% c("hr", "sdiff", "hdiff")) {
+                  if (missing(exposed)) 
+                    stop("exposed needs to be specified for type in ('hr','sdiff','hdiff')")
+                  newdata2 <- exposed(newdata)
+                  X2 <- lpmatrix.lm(object@lm, newdata2)
+                  XD2 <- grad(lpfunc, 0, object@lm, newdata2, 
+                    object@timeVar)
+                  XD2 <- matrix(XD, nrow = nrow(X))
+                }
+            }
+            beta <- coef(object)
+            cumHaz = as.vector(exp(X %*% beta))
+            Sigma = vcov(object)
+            if (type == "link") {
+                return(as.vector(X %*% beta))
+            }
+            if (type == "cumhaz") {
+                if (object@delayed) 
+                  return(cumHaz - as.vector(X0 %*% beta))
+                else return(cumHaz)
+            }
+            if (type == "surv") {
+                return(exp(-cumHaz))
+            }
+            if (type == "sdiff") 
+                return(as.vector(exp(-exp(X2 %*% beta))) - exp(-cumHaz))
+            if (type == "hazard") {
+                return(as.vector(XD %*% beta) * cumHaz)
+            }
+            if (type == "loghazard") {
+                return(as.vector(log(XD %*% beta)) + log(cumHaz))
+            }
+            if (type == "hdiff") {
+                return(as.vector((XD2 %*% beta) * exp(X2 %*% beta) - (XD %*% 
+                  beta)/time * cumHaz))
+            }
+            if (type == "hr") {
+                cumHazRatio = exp((X2 - X) %*% beta)
+                return(as.vector((XD2 %*% beta)/(XD %*% beta) * cumHazRatio))
+            }
+        }
+        type <- match.arg(type)
+        if (is.null(newdata) && type %in% c("hr", "sdiff", "hdiff")) 
+            stop("Prediction using type in ('hr','sdiff','hdiff') requires newdata to be specified.")
+        if (grid) {
+            Y <- object@y
+            event <- Y[, ncol(Y)] == 1
+            time <- object@data[[object@timeVar]]
+            eventTimes <- time[event]
+            X <- seq(min(eventTimes), max(eventTimes), length = seqLength)[-1]
+            data.x <- data.frame(X)
+            names(data.x) <- object@timeVar
+            newdata <- merge(newdata, data.x)
+        }
+        pred <- if (!se.fit) {
+            local(object, newdata, type = type, exposed = exposed, 
+                ...)
+        }
+        else {
+            if (is.null(link)) 
+                link <- switch(type, surv = "cloglog", cumhaz = "log", 
+                  hazard = "log", hr = "log", sdiff = "I", hdiff = "I", 
+                  loghazard = "I", link = "I")
+            predictnl(object, local, link = link, newdata = newdata, 
+                type = type, exposed = exposed, ...)
+        }
+        attr(pred, "newdata") <- newdata
+        return(pred)
+    }
+    .local(object, ...)
+}
+environment(apredict) <- environment(stpm2)
+dim(apredict(fit,newdata=data.frame(hormon=1),grid=T)) # n=300 or 299??
+apredict(fit,newdata=data.frame(hormon=1),grid=T)
+dim(apredict(fit,newdata=data.frame(hormon=1),grid=T,se.fit=T)) # n=300 or 299??
+apredict(fit,newdata=data.frame(hormon=1),grid=T,se.fit=T)
 
+debug(rstpm2:::numDeltaMethod)
 
 try(suppressWarnings(detach("package:rstpm2",unload=TRUE)),silent=TRUE)
 require(rstpm2)

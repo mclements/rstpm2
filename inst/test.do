@@ -1,9 +1,9 @@
 
 * stata
-cd c:\Users\marcle\Documents\Home\
+*cd c:\Users\marcle\Documents\Home\
 clear
-*webuse brcancer
-use brcancer
+webuse brcancer
+*use brcancer
 stset rectime, f(censrec==1)
 cap program drop dopredictions
 program define dopredictions
