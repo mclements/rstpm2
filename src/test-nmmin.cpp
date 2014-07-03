@@ -11,6 +11,10 @@ namespace {
   typedef double optimfn(int, double *, void *);
   typedef void optimgr(int, double *, double *, void *);
 
+  double min(double a, double b) { return a < b ? a : b; }
+  double max(double a, double b) { return a < b ? b : a; }
+  double bound(double x, double lower, double upper) { return x < lower ? lower : (x > upper ? upper : x); }
+
   void Rprint(NumericMatrix m) {
     for (int i=0; i<m.nrow(); ++i) {
       for (int j=0; j<m.ncol(); ++j) 
@@ -20,8 +24,8 @@ namespace {
   }
 
   void Rprint(mat m) {
-    for (int i=0; i<m.n_rows; ++i) {
-      for (int j=0; j<m.n_cols; ++j) 
+    for (size_t i=0; i<m.n_rows; ++i) {
+      for (size_t j=0; j<m.n_cols; ++j) 
 	Rprintf("%f ", m(i,j));
       Rprintf("\n");
     }
@@ -41,13 +45,12 @@ namespace {
       trace(trace), maxit(maxit), abstol(abstol), reltol(reltol), 
       alpha(alpha), beta(beta), gamma(gamma) { 
     }
-    void optim(optimfn fn, NumericVector init, NumericVector x, void * ex) {
+    void optim(optimfn fn, NumericVector init, void * ex) {
       n = init.size();
-      nmmin(n, &init[0], &x[0], &Fmin, fn,
+      nmmin(n, &init[0], &coef[0], &Fmin, fn,
 	    &fail, abstol, reltol, ex,
 	    alpha, beta, gamma, trace,
 	    &fncount, maxit);
-      coef = clone(init);
     }
     int n, trace, maxit, fail, fncount;
     double abstol, reltol, alpha, beta, gamma, Fmin;
@@ -227,8 +230,9 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     NumericVector sp,init;
     mat X, XD, X0;
     vec bhazard,wt,event,wt0;
-    int delayed;
+    int delayed, criterion;
     std::vector<Smooth> smooth;
+    double reltol;
   };
 
   double fminfn(int n, double * beta, void *ex) {
@@ -237,9 +241,6 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     vec eta = data->X * vbeta;
     vec h = (data->XD * vbeta) % exp(eta) + data->bhazard;
     double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % exp(eta));
-    // for (int i = 0; i < n; ++i) 
-    //   Rprintf("%f ",vbeta[i]);
-    // Rprintf("\nll=% f\n",ll);
     return -ll;  
   }
 
@@ -275,6 +276,14 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     return -ll;  
   }
 
+  double pfminfn_unpenalised(int n, double * beta, void *ex) {
+    pstpm2 * data = (pstpm2 *) ex;
+    vec vbeta(beta,n);
+    vec eta = data->X * vbeta;
+    vec h = (data->XD * vbeta) % exp(eta) + data->bhazard;
+    double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % exp(eta));
+    return -ll;  
+  }
 
   void pgrfn(int n, double * beta, double * gr, void *ex) {
     pstpm2 * data = (pstpm2 *) ex;
@@ -317,12 +326,10 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
 
 
   RcppExport SEXP optim_stpm2(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
-			      SEXP sdelayed, SEXP sX0, SEXP swt0) {
+			      SEXP sdelayed, SEXP sX0, SEXP swt0, SEXP sreltol) {
 
     NumericVector init = as<NumericVector>(sinit);
-    // NumericVector x(init.size()); 
-    NumericVector x2(clone(init));
-    int n = x2.size();
+    int n = init.size();
     NumericMatrix hessian(n,n);
 
     mat X = as<mat>(sX); 
@@ -338,54 +345,70 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
       X0 = as<mat>(sX0);
       wt0 = as<vec>(swt0);
     }
+    double reltol = as<double>(sreltol);
 
     stpm2 data = {X, XD, X0, bhazard, wt, event, wt0, delayed};
 
-    // NelderMead nm;
-    // nm.maxit = 1000;
-    // nm.reltol = 1.0e-10;
     BFGS bfgs;
-    bfgs.reltol = 1.0e-10;
+    bfgs.reltol = reltol;
   
-    // nm.optim(fminfn, init, x, (void *) &data);
-
-    // Rprintf("beta[0]=%g\nbeta[1]=%g\n",x[0],x[1]);
-    // Rprintf("fail=%i\nFmin=%g\nfncount=%i\n",nm.fail,nm.Fmin,nm.fncount);
-
     bfgs.optim(fminfn, grfn, init, (void *) &data);
-
-    // Rprintf("beta[0]=%g\nbeta[1]=%g\n",x2[0],x2[1]);
-    // Rprintf("fail=%i\nFmin=%g\nfncount=%i\ngrcount=%i\n",bfgs.fail,bfgs.Fmin,bfgs.fncount,bfgs.grcount);
 
     return List::create(_("coef")=wrap(bfgs.coef),
 			_("hessian")=wrap(bfgs.hessian));
 
   }
 
-  double pstpm2_step(double logsp, void * args) {
+  double pstpm2_step_first(double logsp, void * args) {
     pstpm2 * data = (pstpm2 *) args;
 
     data->sp[0] = exp(logsp);
 
     BFGS bfgs;
-    bfgs.reltol = 1.0e-10;
+    bfgs.reltol = data->reltol;
 
     bfgs.optim(pfminfn, pgrfn, data->init, (void *) data);
 
     NumericMatrix hessian0 = bfgs.calc_hessian(pgrfn_unpenalised, (void *) data);
 
     double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
-    double negll = bfgs.calc_objective(pfminfn,(void *) data);
+    double negll = bfgs.calc_objective(pfminfn_unpenalised,(void *) data);
     double gcv =  negll + edf;
+    double bic =  negll + edf*log(sum(data->event));
     data->init = bfgs.coef;
-    Rprintf("sp=%f\tedf=%f\tnegll=%f\tgcv=%f\n",data->sp[0],edf,negll,gcv);
+    Rprintf("sp=%f\tedf=%f\tnegll=%f\tgcv=%f\tbic=%f\n",data->sp[0],edf,negll,gcv,bic);
 
-    return gcv;
+    return data->criterion==1 ? gcv : bic;
+  }    
+
+  double pstpm2_step_multivariate(int n, double * logsp, void * args) {
+    pstpm2 * data = (pstpm2 *) args;
+
+    for (int i=0; i < data->sp.size(); ++i)
+      data->sp[i] = bound(exp(logsp[i]),0.001,100.0);
+
+    BFGS bfgs;
+    bfgs.reltol = data->reltol;
+
+    bfgs.optim(pfminfn, pgrfn, data->init, (void *) data);
+
+    NumericMatrix hessian0 = bfgs.calc_hessian(pgrfn_unpenalised, (void *) data);
+
+    double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
+    double negll = bfgs.calc_objective(pfminfn_unpenalised,(void *) data);
+    double gcv =  negll + edf;
+    double bic =  negll + edf*log(sum(data->event));
+    data->init = bfgs.coef;
+    for (int i = 0; i < data->sp.size(); ++i)
+      Rprintf("sp[%i]=%f\t",i,data->sp[i]);
+    Rprintf("edf=%f\tnegll=%f\tgcv=%f\tbic=%f\n",edf,negll,gcv,bic);
+
+    return data->criterion==1 ? gcv : bic;
   }    
 
   RcppExport SEXP optim_pstpm2(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
 			       SEXP sdelayed, SEXP sX0, SEXP swt0,
-			       SEXP ssmooth, SEXP ssp) {
+			       SEXP ssmooth, SEXP ssp, SEXP sreltol) {
 
     NumericVector init = as<NumericVector>(sinit);
     NumericVector sp = as<NumericVector>(ssp);
@@ -401,6 +424,7 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     vec event = as<vec>(sevent);
     List lsmooth = as<List>(ssmooth);
     int delayed = as<int>(sdelayed);
+    int criterion = 0; // not used
 
     mat X0(1,1,fill::zeros);
     vec wt0(1,fill::zeros);
@@ -408,6 +432,7 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
       X0 = as<mat>(sX0);
       wt0 = as<vec>(swt0);
     }
+    double reltol = as<double>(sreltol);
 
     std::vector<Smooth> smooth;
     for(int i=0; i<lsmooth.size(); ++i) {
@@ -420,36 +445,27 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
       };
       smooth.push_back(smoothi);
     }
-    pstpm2 data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, smooth};
+    pstpm2 data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, criterion, smooth, reltol};
 
     BFGS bfgs;
-    bfgs.reltol = 1.0e-10;
+    bfgs.reltol = reltol;
 
     // Rprintf("Objective(init)=%f.\n",bfgs.calc_objective(pfminfn,data.init, (void *) &data));
 
     bfgs.optim(pfminfn, pgrfn, data.init, (void *) &data);
 
-    NumericMatrix hessian0 = bfgs.calc_hessian(pgrfn_unpenalised, (void *) &data);
-
-    double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
-    double gcv = bfgs.Fmin - edf;
-
     return List::create(_("coef")=wrap(bfgs.coef),
 			_("hessian")=wrap(bfgs.hessian),
-			_("hessian0")=wrap(hessian0),
-			_("ll")=wrap(-bfgs.Fmin),
-			_("gcv") = wrap(gcv));
+			_("ll")=wrap(-bfgs.Fmin));
 
   }
 
-  RcppExport SEXP optim_pstpm2_gcv(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
-			       SEXP sdelayed, SEXP sX0, SEXP swt0,
-			       SEXP ssmooth, SEXP ssp) {
+  RcppExport SEXP optim_pstpm2_first(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
+				     SEXP sdelayed, SEXP sX0, SEXP swt0,
+				     SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP scriterion) {
 
     NumericVector init = as<NumericVector>(sinit);
     NumericVector sp = as<NumericVector>(ssp);
-    // NumericVector x(init.size()); 
-    NumericVector x2(clone(init));
     int n = init.size();
     NumericMatrix hessian(n,n);
 
@@ -460,6 +476,9 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     vec event = as<vec>(sevent);
     List lsmooth = as<List>(ssmooth);
     int delayed = as<int>(sdelayed);
+    double reltol_search = as<double>(sreltol_search);
+    double reltol_final = as<double>(sreltol_final);
+    int criterion = as<int>(scriterion);
 
     mat X0(1,1,fill::zeros);
     vec wt0(1,fill::zeros);
@@ -480,17 +499,84 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
       smooth.push_back(smoothi);
     }
 
-    pstpm2 data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, smooth};
+    pstpm2 data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, criterion, smooth, reltol_search};
 
-    double opt_sp = exp(Brent_fmin(log(0.001),log(10.0),&pstpm2_step,&data,1.0e-2));
+    double opt_sp = exp(Brent_fmin(log(0.001),log(100.0),&pstpm2_step_first,&data,1.0e-2));
+    data.sp[0] = opt_sp;
 
     BFGS bfgs;
     bfgs.coef = data.init;
+    bfgs.reltol = reltol_final;
+    bfgs.optim(pfminfn, pgrfn, data.init, (void *) &data);
 
     hessian = bfgs.calc_hessian(pgrfn, (void *) &data);
 
     return List::create(_("sp")=wrap(opt_sp),
-			_("coef")=wrap(data.init),
+			_("coef")=wrap(bfgs.coef),
+			_("hessian")=wrap(hessian));
+
+  }
+
+
+  RcppExport SEXP optim_pstpm2_multivariate(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
+			       SEXP sdelayed, SEXP sX0, SEXP swt0,
+					    SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP scriterion) {
+
+    NumericVector init = as<NumericVector>(sinit);
+    NumericVector sp = as<NumericVector>(ssp);
+    // NumericVector x(init.size()); 
+    int n = init.size();
+    NumericMatrix hessian(n,n);
+
+    mat X = as<mat>(sX); 
+    mat XD = as<mat>(sXD); 
+    vec bhazard = as<vec>(sbhazard);
+    vec wt = as<vec>(swt);
+    vec event = as<vec>(sevent);
+    List lsmooth = as<List>(ssmooth);
+    int delayed = as<int>(sdelayed);
+    int criterion = as<int>(scriterion);
+    double reltol_search = as<double>(sreltol_search);
+    double reltol_final = as<double>(sreltol_final);
+
+    mat X0(1,1,fill::zeros);
+    vec wt0(1,fill::zeros);
+    if (delayed == 1) {
+      X0 = as<mat>(sX0);
+      wt0 = as<vec>(swt0);
+    }
+
+    std::vector<Smooth> smooth;
+    for(int i=0; i<lsmooth.size(); ++i) {
+      List lsmoothi = as<List>(lsmooth[i]);
+      List lsmoothiS = as<List>(lsmoothi["S"]);
+      Smooth smoothi =  {
+	as<int>(lsmoothi["first.para"]) - 1, 
+	as<int>(lsmoothi["last.para"]) - 1, 
+	as<mat>(lsmoothiS[0])
+      };
+      smooth.push_back(smoothi);
+    }
+
+    pstpm2 data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, criterion, smooth, reltol_search};
+
+    NelderMead nm;
+    nm.reltol = 1.0e-4;
+    nm.maxit = 500;
+    nm.optim(pstpm2_step_multivariate, data.sp, (void *) &data);
+
+    for (int i=0; i < nm.coef.size(); ++i)
+      data.sp[i] = exp(nm.coef[i]);
+
+    BFGS bfgs;
+    bfgs.coef = data.init;
+    bfgs.reltol = reltol_final;
+    bfgs.optim(pfminfn, pgrfn, data.init, (void *) &data);
+
+    hessian = bfgs.calc_hessian(pgrfn, (void *) &data);
+
+    return List::create(_("sp")=wrap(data.sp),
+			_("coef")=wrap(bfgs.coef),
 			_("hessian")=wrap(hessian));
 
   }

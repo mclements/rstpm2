@@ -47,10 +47,20 @@ brcancer$recyear <- brcancer$rectime/365
 ##undebug(pstpm2)
 system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
                 logH.formula=~s(log(recyear),k=20),sp=0.1))
-plot(pfit1,newdata=data.frame(hormon=1))
+system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon+x3,data=brcancer,
+                logH.formula=~s(log(recyear),k=20)+s(x3),sp=c(0.1,0.1),gcv=TRUE))
+system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon+x3,data=brcancer,
+                logH.formula=~s(log(recyear),k=20)+s(x3)))
+system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(log(recyear),k=20)+s(x3)))
+plot(pfit1,newdata=data.frame(hormon=1,x3=20))
+plot(pfit1,newdata=data.frame(hormon=0,x3=20),type="hazard")
+plot(pfit1,newdata=data.frame(hormon=1,x3=20),type="hazard",add=TRUE,line.col="blue",lty=1)
+
+summary(pfit1)
 brcancerN <- brcancer[rep(1:nrow(brcancer),each=100),]
 system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancerN,
-                logH.formula=~s(log(recyear),k=20),sp=0.1))
+                logH.formula=~s(log(recyear),k=20)))
 plot(pfit1,newdata=data.frame(hormon=1))
 pfit1@gam$sp
 par(mfrow=c(2,2))

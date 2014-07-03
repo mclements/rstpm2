@@ -847,7 +847,8 @@ pstpm2 <- function(formula, data,
                    tvc = NULL, tvc.formula = NULL,
                    control = list(parscale = 0.1, maxit = 300), init = FALSE,
                    coxph.strata = NULL, nStrata=5, weights = NULL, robust = FALSE, baseoff = FALSE,
-                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE,
+                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, gcv = FALSE,
+                   reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
   {
     ## set up the data
@@ -1052,10 +1053,16 @@ pstpm2 <- function(formula, data,
         names(control$parscale) <- names(init)
     }
     rcpp_optim <- function() {
-        stopifnot(!delayed)
-        .Call("optim_pstpm2_gcv", init, X, XD, rep(bhazard, nrow(X)), 
-              wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
-              gam.obj$smooth, sp, package = "rstpm2")
+        ## stopifnot(!delayed)
+        if (length(sp)>1) {
+            .Call("optim_pstpm2_multivariate", init, X, XD, rep(bhazard, nrow(X)), 
+                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
+                  gam.obj$smooth, sp, reltol$search, reltol$final, if (gcv) 1 else 2, package = "rstpm2")
+        } else {
+            .Call("optim_pstpm2_first", init, X, XD, rep(bhazard, nrow(X)), 
+                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
+                  gam.obj$smooth, sp, reltol$search, reltol$final, if (gcv) 1 else 2, package = "rstpm2")
+        }
     }
     fit <- rcpp_optim()
     init <- fit$coef
@@ -1063,10 +1070,16 @@ pstpm2 <- function(formula, data,
     negll <- function(beta) negllsp(beta,sp)
     gradnegll <- function(beta) gradnegllsp(beta,sp)
     parnames(negll) <- parnames(gradnegll) <- names(init)
-    mle2 <- if (use.gr) {
-        mle2(negll,init,vecpar=TRUE, control=control, gr=gradnegll, eval.only=TRUE, ...)
-    } else mle2(negll,init,vecpar=TRUE, control=control, eval.only=TRUE, ...)
-    mle2@vcov <- solve(fit$hessian)
+    if (use.rcpp) {
+        mle2 <- if (use.gr) {
+            mle2(negll,init,vecpar=TRUE, control=control, gr=gradnegll, eval.only=TRUE, ...)
+        } else mle2(negll,init,vecpar=TRUE, control=control, eval.only=TRUE, ...)
+        mle2@vcov <- solve(fit$hessian)
+    } else {
+        mle2 <- if (use.gr) {
+            mle2(negll,init,vecpar=TRUE, control=control, gr=gradnegll, ...)
+        } else mle2(negll,init,vecpar=TRUE, control=control, ...)
+    }
     out <- new("pstpm2",
                    call = mle2@call,
                    call.orig = mle2@call,
@@ -1283,7 +1296,7 @@ setMethod("plot", signature(x="pstpm2", y="missing"),
           function(x,y,newdata,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
                    lwd=par("lwd"),
-                   add=FALSE,ci=TRUE,rug=TRUE,
+                   add=FALSE,ci=!add,rug=!add,
                    var=NULL,...) {
   y <- predict(x,newdata,type=type,var=var,grid=TRUE,se.fit=TRUE)
   if (is.null(xlab)) xlab <- deparse(x@timeExpr)
