@@ -397,7 +397,7 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
     double negll = bfgs.calc_objective(pfminfn_unpenalised,(void *) data);
     double gcv =  negll + edf;
-    double bic =  negll + edf*log(sum(data->event));
+    double bic =  2.0*negll + edf*log(sum(data->event));
     data->init = bfgs.coef;
     for (int i = 0; i < data->sp.size(); ++i)
       Rprintf("sp[%i]=%f\t",i,data->sp[i]);

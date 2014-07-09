@@ -847,7 +847,7 @@ pstpm2 <- function(formula, data,
                    tvc = NULL, tvc.formula = NULL,
                    control = list(parscale = 0.1, maxit = 300), init = FALSE,
                    coxph.strata = NULL, nStrata=5, weights = NULL, robust = FALSE, baseoff = FALSE,
-                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, gcv = FALSE,
+                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion="BIC",
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
   {
@@ -1057,11 +1057,11 @@ pstpm2 <- function(formula, data,
         if (length(sp)>1) {
             .Call("optim_pstpm2_multivariate", init, X, XD, rep(bhazard, nrow(X)), 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
-                  gam.obj$smooth, sp, reltol$search, reltol$final, if (gcv) 1 else 2, package = "rstpm2")
+                  gam.obj$smooth, sp, reltol$search, reltol$final, if (criterion=="BIC") 2 else 1, package = "rstpm2")
         } else {
             .Call("optim_pstpm2_first", init, X, XD, rep(bhazard, nrow(X)), 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
-                  gam.obj$smooth, sp, reltol$search, reltol$final, if (gcv) 1 else 2, package = "rstpm2")
+                  gam.obj$smooth, sp, reltol$search, reltol$final, if (criterion=="BIC") 2 else 1, package = "rstpm2")
         }
     }
     fit <- rcpp_optim()
