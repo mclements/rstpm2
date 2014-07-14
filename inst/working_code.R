@@ -46,9 +46,21 @@ brcancer$recyear <- brcancer$rectime/365
 ##
 ##undebug(pstpm2)
 system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(log(recyear),k=20),sp=0.1))
+                logH.formula=~s(log(recyear),k=20),sp=0.1,criterion="GCV"))
+system.time(pfit2 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(recyear,k=20),sp=0.1,criterion="BIC"))
+plot(pfit1,newdata=data.frame(hormon=1,x3=20),type="hazard")
+plot(pfit2,newdata=data.frame(hormon=1,x3=20),add=TRUE,line.col="blue",type="hazard")
+
+plot(pfit2,newdata=data.frame(hormon=1,x3=20),type="hazard")
+plot(pfit2,newdata=data.frame(hormon=0),type="hazard",ylim=c(0,0.3))
+
+require(frailtypack)
+fpack1 <- frailtyPenal(Surv(recyear,censrec==1)~hormon, data=brcancer, cross.validation=TRUE, n.knots=10, kappa1=0.1)
+plot(fpack1)
+
 system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon+x3,data=brcancer,
-                logH.formula=~s(log(recyear),k=20)+s(x3),sp=c(0.1,0.1),gcv=TRUE))
+                logH.formula=~s(log(recyear),k=20)+s(x3),sp=c(0.1,0.1)))
 system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon+x3,data=brcancer,
                 logH.formula=~s(log(recyear),k=20)+s(x3)))
 system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,

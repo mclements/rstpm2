@@ -428,6 +428,7 @@ stpm2 <- function(formula, data,
                      control = list(parscale = 0.1, maxit = 300), init = FALSE,
                      coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE, use.rcpp= TRUE,
+                  reltol=1.0e-8,
                      contrasts = NULL, subset = NULL, ...)
   {
     ## parse the event expression
@@ -584,10 +585,10 @@ stpm2 <- function(formula, data,
         out <- out*wt
         return(out)
     }
-    rcpp_optim <- function() {
+    rcpp_stpm2 <- function() {
         stopifnot(!delayed)
         .Call("optim_stpm2",init,X,XD,rep(bhazard,nrow(X)),wt,ifelse(event,1,0),
-              if (delayed) 1 else 0, X0, wt0,
+              if (delayed) 1 else 0, X0, wt0, reltol,
               package="rstpm2")
         ##.Call("optim_pstpm2",init,X,XD,rep(bhazard,nrow(X)),wt,ifelse(event,1,0),smoothers,package="rstpm2")
     }
@@ -621,7 +622,7 @@ stpm2 <- function(formula, data,
     }
     parnames(negll) <- parnames(gradnegll) <- names(init)
     if (use.rcpp) {
-        fit <- rcpp_optim()
+        fit <- rcpp_stpm2()
         coef <- fit$coef
         hessian <- fit$hessian
         names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
@@ -847,13 +848,14 @@ pstpm2 <- function(formula, data,
                    tvc = NULL, tvc.formula = NULL,
                    control = list(parscale = 0.1, maxit = 300), init = FALSE,
                    coxph.strata = NULL, nStrata=5, weights = NULL, robust = FALSE, baseoff = FALSE,
-                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion="BIC",
+                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("BIC","GCV"),
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
   {
     ## set up the data
     ## ensure that data is a data frame
     data <- get_all_vars(formula, data)
+    criterion <- match.arg(criterion)
     ## restrict to non-missing data (assumes na.action=na.omit)
     .include <- Reduce(`&`,
                        lapply(model.frame(formula, data, na.action=na.pass),
