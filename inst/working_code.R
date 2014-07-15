@@ -46,14 +46,21 @@ brcancer$recyear <- brcancer$rectime/365
 ##
 ##undebug(pstpm2)
 system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(log(recyear),k=20),sp=0.1,criterion="GCV"))
+                logH.formula=~s(log(recyear),k=30),sp=0.1,criterion="GCV"))
 system.time(pfit2 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(recyear,k=20),sp=0.1,criterion="BIC"))
+                logH.formula=~s(recyear,k=20),sp=10,criterion="BIC"))
 plot(pfit1,newdata=data.frame(hormon=1,x3=20),type="hazard")
 plot(pfit2,newdata=data.frame(hormon=1,x3=20),add=TRUE,line.col="blue",type="hazard")
 
-plot(pfit2,newdata=data.frame(hormon=1,x3=20),type="hazard")
-plot(pfit2,newdata=data.frame(hormon=0),type="hazard",ylim=c(0,0.3))
+system.time(pfit2 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(recyear,k=30),sp=1,criterion="GCV"))
+
+system.time(pfit2 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(recyear,k=30),sp=1,use.rcp=FALSE))
+
+plot(pfit2,newdata=data.frame(hormon=1),type="hazard")
+
+rstpm2:::gcv(pfit2)
 
 require(frailtypack)
 fpack1 <- frailtyPenal(Surv(recyear,censrec==1)~hormon, data=brcancer, cross.validation=TRUE, n.knots=10, kappa1=0.1)
@@ -114,6 +121,164 @@ gcvcs <- sapply(sps, function(sp) {
 })
 plot(sps,gcvcs,type="l",log="x")
 #########################
+
+
+### penalty functions
+require(mgcv)
+require(gaussquad)
+
+## Outline:
+## get w, lambda, X0, X1, X2, X3
+## calculate s0, s1, s2, s3
+## calculate h2 and pfun=integrate(h2^2,t)
+## calculate dh2sq.dbeta and dpfun=integrate(dh2sq.dbeta,t)
+##
+## calculate w, lambda, X0, X1, X2, X3
+derivativeDesign <- 
+function (functn, lower = -1, upper = 1, rule = NULL,
+    ...) 
+{
+    pred <- if (length(list(...)) && length(formals(functn)) > 
+              1) 
+        function(x) functn(x, ...)
+    else functn
+    if (is.null(rule))
+        rule <-    ## gaussquad::legendre.quadrature.rules(20)[[20]]
+        data.frame(x = c(0.993128599185095, 0.963971927277914, 0.912234428251326, 
+                       0.839116971822219, 0.746331906460151, 0.636053680726515, 0.510867001950827, 
+                       0.37370608871542, 0.227785851141646, 0.0765265211334977, -0.0765265211334974, 
+                       -0.227785851141645, -0.373706088715418, -0.510867001950827, -0.636053680726516, 
+                       -0.746331906460151, -0.839116971822219, -0.912234428251326, -0.963971927277913, 
+                       -0.993128599185094),
+                   w = c(0.0176140071391522, 0.040601429800387, 
+                       0.0626720483341092, 0.0832767415767053, 0.101930119817241, 0.11819453196152, 
+                       0.131688638449176, 0.14209610931838, 0.149172986472603, 0.152753387130726, 
+                       0.152753387130726, 0.149172986472603, 0.142096109318381, 0.131688638449175, 
+                       0.11819453196152, 0.10193011981724, 0.0832767415767068, 0.0626720483341075, 
+                       0.0406014298003876, 0.0176140071391522))
+    lambda <- (upper - lower)/(2)
+    mu <- (lower + upper)/(2)
+    x <- lambda * rule$x + mu
+    w <- rule$w
+    eps <- .Machine$double.eps^(1/8)
+    X0 <- pred(x)
+    X1 <- (-pred(x+2*eps)+8*pred(x+eps)-8*pred(x-eps)+pred(x-2*eps))/12/eps
+    X2 <- (-pred(x+2*eps)/12+4/3*pred(x+eps)-5/2*pred(x)+4/3*pred(x-eps)-pred(x-2*eps)/12)/eps/eps
+    X3 <- (-pred(x+3*eps)/8+pred(x+2*eps)-13/8*pred(x+eps)+
+           13/8*pred(x-eps)-pred(x-2*eps)+pred(x-3*eps)/8)/eps/eps/eps
+    return(list(x=x,w=w,lambda=lambda,X0=X0,X1=X1,X2=X2,X3=X3))
+}
+hpfun <- function(beta,design) {
+    lapply(design,function(obj) {
+        s0 <- as.vector(obj$X0 %*% beta)
+        s1 <- as.vector(obj$X1 %*% beta)
+        s2 <- as.vector(obj$X2 %*% beta)
+        s3 <- as.vector(obj$X3 %*% beta)
+        h2 <- (s3+3*s1*s2+s1^3)*exp(s0)
+        obj$lambda*sum(obj$w*h2^2)
+    })
+}
+hdpfun <- function(beta,design) {
+    lapply(design, function(obj) {
+        s0 <- as.vector(obj$X0 %*% beta)
+        s1 <- as.vector(obj$X1 %*% beta)
+        s2 <- as.vector(obj$X2 %*% beta)
+        s3 <- as.vector(obj$X3 %*% beta)
+        h2 <- (s3+3*s1*s2+s1^3)*exp(s0)
+        dh2sq.dbeta <- 2*h2*(exp(s0)*(obj$X3+3*(obj$X1*s2+obj$X2*s1)+3*s1^2*obj$X1)+h2*obj$X0)
+        obj$lambda*colSums(obj$w*dh2sq.dbeta)
+    })
+}
+smootherDesign <- function(gamobj,data) {
+    d <- data[1,,drop=FALSE] ## how to get mean prediction values, particularly for factors?
+    makepred <- function(var) {
+        function(value) {
+            d <- d[rep(1,length(value)),]
+            d[[var]] <- value
+            predict(gamobj,newdata=d,type="lpmatrix")
+        }
+    }
+    lapply(gamobj$smooth, function(smoother) {
+        var <- smoother$term
+        pred <- makepred(var)
+        derivativeDesign(pred,lower=min(data[[var]]),upper=max(data[[var]]))
+    })
+}
+## example data
+d <- within(data.frame(x=seq(0,1,length=301)), {
+    mu <- exp(x)
+    y <- rnorm(301,mu,0.01)
+})
+fit <- gam(y~s(x),data=d,family=gaussian(link="log"))
+beta <- coef(fit)
+design <- smootherDesign(fit,d)
+hpfun(beta,design)
+hdpfun(beta,design)
+
+    
+
+## Testing...
+require(mgcv)
+d <- within(data.frame(x=seq(0,2*pi,length=301)), {
+    mu <- sin(x)
+    dmu <- cos(x)
+    y <- rnorm(301,mu,0.001)
+})
+fit <- gam(y~s(x),data=d)
+mat <- predict(fit,type="lpmatrix")
+with(d,plot(x,y))
+with(d,lines(x,mu,lwd=2))
+with(d,lines(x,predict(fit),col="blue",lwd=2))
+par(mfrow=c(3,2))
+pred <- function(eps,obj=fit,data=d,var="x") {
+    nd <- d
+    nd[[var]] <- nd[[var]]+eps
+    predict(obj,newdata=nd,type="lpmatrix")
+}
+## First derivative
+eps <- .Machine$double.eps^(1/8)
+matD <- (pred(eps) - pred(-eps)) / 2 / eps
+with(d,plot(x,dmu,lwd=2,type="l"))
+with(d,lines(x,matD %*% coef(fit),col="blue",lwd=2))
+##
+## 1/12 	−2/3 	0 	2/3 	−1/12
+eps <- .Machine$double.eps^(1/8)
+matD <- (-pred(2*eps)+8*pred(eps)-8*pred(-eps)+pred(-2*eps))/12/eps
+with(d,plot(x,dmu,lwd=2,type="l"))
+with(d,lines(x,matD %*% coef(fit),col="blue",lwd=2))
+##
+## Second derivative
+eps <- .Machine$double.eps^(1/8)
+matD2 <- (pred(eps)-2*pred(0)+pred(-eps))/eps/eps
+with(d,plot(x,-mu,lwd=2,type="l"))
+with(d,lines(x,matD2 %*% coef(fit),col="blue",lwd=2))
+##
+## −1/12 	4/3 	−5/2 	4/3 	−1/12 	
+eps <- .Machine$double.eps^(1/8)
+matD2 <- (-pred(2*eps)/12+4/3*pred(eps)-5/2*pred(0)+4/3*pred(-eps)-pred(-2*eps)/12)/eps/eps
+with(d,plot(x,-mu,lwd=2,type="l"))
+with(d,lines(x,matD2 %*% coef(fit),col="blue",lwd=2))
+##
+## Third derivatives
+eps <- .Machine$double.eps^(1/8)
+matD3 <- (pred(2*eps)-
+          2*pred(eps)+
+          2*pred(-eps)-
+          pred(-2*eps))/2/eps/eps/eps
+with(d,plot(x,-dmu,lwd=2,type="l"))
+with(d,lines(x,matD3 %*% coef(fit),col="blue",lwd=2))
+##
+## 1/8 	−1 	13/8 	0 	−13/8 	1 	−1/8
+eps <- .Machine$double.eps^(1/8)
+matD3 <- (-pred(3*eps)/8+pred(2*eps)-13/8*pred(eps)+
+          13/8*pred(-eps)-pred(-2*eps)+pred(-3*eps)/8)/eps/eps/eps
+with(d,plot(x,-dmu,lwd=2,type="l"))
+with(d,lines(x,matD3 %*% coef(fit),col="blue",lwd=2))
+
+
+## (browse-url "http://en.wikipedia.org/wiki/Finite_difference_coefficients")
+
+
 
 require(mgcv)
 data <- data.frame(x=1:10,y=1:10)

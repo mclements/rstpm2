@@ -824,6 +824,56 @@ setMethod("plot", signature(x="stpm2", y="missing"),
   return(invisible(y))
 })
 
+derivativeDesign <- 
+function (functn, lower = -1, upper = 1, rule = NULL,
+    ...) 
+{
+    pred <- if (length(list(...)) && length(formals(functn)) > 
+              1) 
+        function(x) functn(x, ...)
+    else functn
+    if (is.null(rule))
+        rule <-    ## gaussquad::legendre.quadrature.rules(20)[[20]]
+        data.frame(x = c(0.993128599185095, 0.963971927277914, 0.912234428251326, 
+                       0.839116971822219, 0.746331906460151, 0.636053680726515, 0.510867001950827, 
+                       0.37370608871542, 0.227785851141646, 0.0765265211334977, -0.0765265211334974, 
+                       -0.227785851141645, -0.373706088715418, -0.510867001950827, -0.636053680726516, 
+                       -0.746331906460151, -0.839116971822219, -0.912234428251326, -0.963971927277913, 
+                       -0.993128599185094),
+                   w = c(0.0176140071391522, 0.040601429800387, 
+                       0.0626720483341092, 0.0832767415767053, 0.101930119817241, 0.11819453196152, 
+                       0.131688638449176, 0.14209610931838, 0.149172986472603, 0.152753387130726, 
+                       0.152753387130726, 0.149172986472603, 0.142096109318381, 0.131688638449175, 
+                       0.11819453196152, 0.10193011981724, 0.0832767415767068, 0.0626720483341075, 
+                       0.0406014298003876, 0.0176140071391522))
+    lambda <- (upper - lower)/(2)
+    mu <- (lower + upper)/(2)
+    x <- lambda * rule$x + mu
+    w <- rule$w
+    eps <- .Machine$double.eps^(1/8)
+    X0 <- pred(x)
+    X1 <- (-pred(x+2*eps)+8*pred(x+eps)-8*pred(x-eps)+pred(x-2*eps))/12/eps
+    X2 <- (-pred(x+2*eps)/12+4/3*pred(x+eps)-5/2*pred(x)+4/3*pred(x-eps)-pred(x-2*eps)/12)/eps/eps
+    X3 <- (-pred(x+3*eps)/8+pred(x+2*eps)-13/8*pred(x+eps)+
+           13/8*pred(x-eps)-pred(x-2*eps)+pred(x-3*eps)/8)/eps/eps/eps
+    return(list(x=x,w=w,lambda=lambda,X0=X0,X1=X1,X2=X2,X3=X3))
+}
+smootherDesign <- function(gamobj,data) {
+    d <- data[1,,drop=FALSE] ## how to get mean prediction values, particularly for factors?
+    makepred <- function(var) {
+        function(value) {
+            d <- d[rep(1,length(value)),]
+            d[[var]] <- value
+            predict(gamobj,newdata=d,type="lpmatrix")
+        }
+    }
+    lapply(gamobj$smooth, function(smoother) {
+        var <- smoother$term
+        pred <- makepred(var)
+        derivativeDesign(pred,lower=min(data[[var]]),upper=max(data[[var]]))
+    })
+}
+
 ## penalised stpm2
 setOldClass("gam")
 setClass("pstpm2", representation(xlevels="list",
@@ -848,7 +898,7 @@ pstpm2 <- function(formula, data,
                    tvc = NULL, tvc.formula = NULL,
                    control = list(parscale = 0.1, maxit = 300), init = FALSE,
                    coxph.strata = NULL, nStrata=5, weights = NULL, robust = FALSE, baseoff = FALSE,
-                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("BIC","GCV"),
+                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("BIC","GCV"), penalty = c("logH","h"),
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
   {
@@ -856,6 +906,8 @@ pstpm2 <- function(formula, data,
     ## ensure that data is a data frame
     data <- get_all_vars(formula, data)
     criterion <- match.arg(criterion)
+    penalty <- match.arg(penalty)
+    stopifnot(!(use.rcpp & penalty=="h")) ## h penalty not currently implemented in Rcpp
     ## restrict to non-missing data (assumes na.action=na.omit)
     .include <- Reduce(`&`,
                        lapply(model.frame(formula, data, na.action=na.pass),
@@ -975,7 +1027,7 @@ pstpm2 <- function(formula, data,
     bhazard <- substitute(bhazard)
     bhazard <- if (is.null(bhazard)) 0 else eval(bhazard,data,parent.frame())
     ## smoothing parameters
-    if (is.null(sp))
+    if (no.sp <- is.null(sp))
       sp <- if(is.null(gam.obj$full.sp)) gam.obj$sp else gam.obj$full.sp
     ## penalty function
     pfun <- function(beta,sp)
@@ -994,6 +1046,35 @@ pstpm2 <- function(formula, data,
           deriv[ind] <- sp[i] * smoother$S[[1]] %*% beta[ind]
         }
       return(deriv)
+    }
+    if (penalty == "h") {
+        ## new penalty using the second derivative of the hazard
+        design <- smootherDesign(gam.obj,data)
+        pfun <- function(beta,sp) {
+            sum(sapply(1:length(design), function(i) {
+                obj <- design[[i]]
+                s0 <- as.vector(obj$X0 %*% beta)
+                s1 <- as.vector(obj$X1 %*% beta)
+                s2 <- as.vector(obj$X2 %*% beta)
+                s3 <- as.vector(obj$X3 %*% beta)
+                h2 <- (s3+3*s1*s2+s1^3)*exp(s0)
+                sp[i]/2*obj$lambda*sum(obj$w*h2^2)
+            }))
+        }
+        dpfun <- function(beta,sp) {
+            deriv <- beta*0
+            for (i in 1:length(design)) {
+                obj <- design[[i]]
+                s0 <- as.vector(obj$X0 %*% beta)
+                s1 <- as.vector(obj$X1 %*% beta)
+                s2 <- as.vector(obj$X2 %*% beta)
+                s3 <- as.vector(obj$X3 %*% beta)
+                h2 <- (s3+3*s1*s2+s1^3)*exp(s0)
+                dh2sq.dbeta <- 2*h2*(exp(s0)*(obj$X3+3*(obj$X1*s2+obj$X2*s1)+3*s1^2*obj$X1)+h2*obj$X0)
+                deriv <- deriv + sp[i]*obj$lambda*colSums(obj$w*dh2sq.dbeta)
+            }
+            deriv
+        }
     }
     if (delayed && all(time0==0)) delayed <- FALSE
     if (delayed) {
@@ -1066,9 +1147,11 @@ pstpm2 <- function(formula, data,
                   gam.obj$smooth, sp, reltol$search, reltol$final, if (criterion=="BIC") 2 else 1, package = "rstpm2")
         }
     }
-    fit <- rcpp_optim()
-    init <- fit$coef
-    sp <- fit$sp ## essentially, this over-rides the old search mechanism
+    if (use.rcpp) {
+        fit <- rcpp_optim()
+        init <- fit$coef
+        if (!no.sp) sp <- fit$sp
+    }
     negll <- function(beta) negllsp(beta,sp)
     gradnegll <- function(beta) gradnegllsp(beta,sp)
     parnames(negll) <- parnames(gradnegll) <- names(init)
@@ -1081,6 +1164,8 @@ pstpm2 <- function(formula, data,
         mle2 <- if (use.gr) {
             mle2(negll,init,vecpar=TRUE, control=control, gr=gradnegll, ...)
         } else mle2(negll,init,vecpar=TRUE, control=control, ...)
+        if (any(is.na(mle2@vcov)))
+            mle2@vcov <- solve(optimHess(coef(mle2),negll,gradnegll))
     }
     out <- new("pstpm2",
                    call = mle2@call,
@@ -1127,6 +1212,8 @@ pstpm2 <- function(formula, data,
 gcv<-function(pstpm2.fit){
   like<-pstpm2.fit@like
   Hl<-numDeriv::hessian(like,coef(pstpm2.fit))
+  if (any(is.na(Hl)))
+      Hl <- optimHess(coef(pstpm2.fit), like)
   Hinv<- -vcov(pstpm2.fit)
   trace<-sum(diag(Hinv%*%Hl))
   l<-like(coef(pstpm2.fit))
