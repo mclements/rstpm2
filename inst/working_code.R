@@ -36,31 +36,55 @@ summary(fit)
 ## environment(pstpm2) <- environment(rstpm2::pstpm2)
 ## require(rstpm2)
 try(detach("package:rstpm2",unload=TRUE))
+## source("/home/MEB/marcle/src/R/rstpm2/R/pm2-3.R")
 
 refresh
-## source("/home/MEB/marcle/src/R/rstpm2/R/pm2-3.R")
 require(rstpm2)
 data(brcancer)
 brcancer$recyear <- brcancer$rectime/365
-##nn<-length(brcancer$recyear)
-##
-##undebug(pstpm2)
+system.time(pfit0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(recyear,k=30),sp=1,criterion="BIC",penalty="h"))
+system.time(pfit0.1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(recyear,k=30),sp=1,criterion="GCV",penalty="h"))
+plot(pfit0,newdata=data.frame(hormon=1),line.col="red",type="hazard")
+plot(pfit0.1,newdata=data.frame(hormon=1),line.col="blue",add=TRUE,type="hazard")
+
 system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(log(recyear),k=30),sp=0.1,criterion="GCV"))
+                logH.formula=~s(log(recyear),k=30),sp=10,pen="h",
+                            smoother.parameters=list("log(recyear)"=list(var="recyear",
+                                                         inverse=exp,
+                                                         transform=log))))
+
+
+system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(log(recyear),k=30),sp=10,criterion="GCV"))
 system.time(pfit2 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(recyear,k=20),sp=10,criterion="BIC"))
-plot(pfit1,newdata=data.frame(hormon=1,x3=20),type="hazard")
-plot(pfit2,newdata=data.frame(hormon=1,x3=20),add=TRUE,line.col="blue",type="hazard")
+                logH.formula=~s(log(recyear),k=20),sp=10,criterion="BIC"))
+plot(pfit1,newdata=data.frame(hormon=1),type="hazard",ylim=c(0,0.25))
+plot(pfit2,newdata=data.frame(hormon=1),add=TRUE,line.col="blue",type="hazard")
+
+system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(log(recyear),k=30),sp=1,criterion="GCV"))
 
 system.time(pfit2 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(recyear,k=30),sp=1,criterion="GCV"))
+                logH.formula=~s(recyear,k=20),sp=1,use.rcpp=F,penalty="h"))
+system.time(pfit2 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(recyear,k=20),sp=1,penalty="h"))
+plot(pfit2,newdata=data.frame(hormon=1),type="hazard")
 
 system.time(pfit2 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
                 logH.formula=~s(recyear,k=30),sp=1,use.rcp=FALSE))
 
+plot(pfit1,newdata=data.frame(hormon=1),type="hazard")
 plot(pfit2,newdata=data.frame(hormon=1),type="hazard")
 
+system.time(pfit2.0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(recyear,k=30),sp=0.055,penalty="h",cr="GCV"))
+system.time(pfit2 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(recyear,k=30),sp=0.055,use.rcp=FALSE,penalty="h"))
 rstpm2:::gcv(pfit2)
+plot(pfit2,newdata=data.frame(hormon=1),line.col="red",add=TRUE,type="hazard")
+plot(pfit2.0,newdata=data.frame(hormon=1),line.col="green",add=TRUE,type="hazard")
 
 require(frailtypack)
 fpack1 <- frailtyPenal(Surv(recyear,censrec==1)~hormon, data=brcancer, cross.validation=TRUE, n.knots=10, kappa1=0.1)

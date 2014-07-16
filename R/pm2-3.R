@@ -858,21 +858,41 @@ function (functn, lower = -1, upper = 1, rule = NULL,
            13/8*pred(x-eps)-pred(x-2*eps)+pred(x-3*eps)/8)/eps/eps/eps
     return(list(x=x,w=w,lambda=lambda,X0=X0,X1=X1,X2=X2,X3=X3))
 }
-smootherDesign <- function(gamobj,data) {
+smootherDesign <- function(gamobj,data,parameters = NULL) {
     d <- data[1,,drop=FALSE] ## how to get mean prediction values, particularly for factors?
-    makepred <- function(var) {
+    makepred <- function(var,inverse) {
         function(value) {
             d <- d[rep(1,length(value)),]
-            d[[var]] <- value
+            d[[var]] <- inverse(value)
             predict(gamobj,newdata=d,type="lpmatrix")
         }
     }
-    lapply(gamobj$smooth, function(smoother) {
-        var <- smoother$term
-        pred <- makepred(var)
-        derivativeDesign(pred,lower=min(data[[var]]),upper=max(data[[var]]))
+    smoother.names <- sapply(gamobj$smooth, function(obj) obj$term)
+    lapply(1:length(gamobj$smooth), function(i) {
+        smoother <- gamobj$smooth[[i]]
+        if (is.null(parameters)) {
+            var <- smoother$term
+            stopifnot(var %in% names(data))
+            transform <- I
+            inverse <- I
+        } else {
+            j <- match(smoother$term,names(parameters))
+            stopifnot(!is.na(j))
+            var <- parameters[[j]]$var
+            transform <- parameters[[j]]$transform
+            inverse <- parameters[[j]]$inverse
+        }
+        pred <- makepred(var,inverse)
+        derivativeDesign(pred,
+                         lower=transform(min(data[[var]])),
+                         upper=transform(max(data[[var]])))
     })
 }
+
+## TODO: If we transform a smoother (e.g. log(time)), we can use information on
+## (i) the variable name, (ii) the transform and (iii) the inverse transform.
+
+
 
 ## penalised stpm2
 setOldClass("gam")
@@ -898,7 +918,7 @@ pstpm2 <- function(formula, data,
                    tvc = NULL, tvc.formula = NULL,
                    control = list(parscale = 0.1, maxit = 300), init = FALSE,
                    coxph.strata = NULL, nStrata=5, weights = NULL, robust = FALSE, baseoff = FALSE,
-                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("BIC","GCV"), penalty = c("logH","h"),
+                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("BIC","GCV"), penalty = c("logH","h"), smoother.parameters = NULL,
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
   {
@@ -907,7 +927,6 @@ pstpm2 <- function(formula, data,
     data <- get_all_vars(formula, data)
     criterion <- match.arg(criterion)
     penalty <- match.arg(penalty)
-    stopifnot(!(use.rcpp & penalty=="h")) ## h penalty not currently implemented in Rcpp
     ## restrict to non-missing data (assumes na.action=na.omit)
     .include <- Reduce(`&`,
                        lapply(model.frame(formula, data, na.action=na.pass),
@@ -1048,8 +1067,11 @@ pstpm2 <- function(formula, data,
       return(deriv)
     }
     if (penalty == "h") {
+        ## a current limitation is that the hazard penalty needs to extract the variable names from the smoother objects (e.g. log(time) will not work)
+        stopifnot(sapply(gam.obj$smooth,function(obj) obj$term) %in% names(data) ||
+                  !is.null(smoother.parameters))
         ## new penalty using the second derivative of the hazard
-        design <- smootherDesign(gam.obj,data)
+        design <- smootherDesign(gam.obj,data,smoother.parameters)
         pfun <- function(beta,sp) {
             sum(sapply(1:length(design), function(i) {
                 obj <- design[[i]]
@@ -1138,13 +1160,21 @@ pstpm2 <- function(formula, data,
     rcpp_optim <- function() {
         ## stopifnot(!delayed)
         if (length(sp)>1) {
-            .Call("optim_pstpm2_multivariate", init, X, XD, rep(bhazard, nrow(X)), 
+            if (penalty == "logH")
+            .Call("optim_pstpm2LogH_multivariate", init, X, XD, rep(bhazard, nrow(X)), 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
-                  gam.obj$smooth, sp, reltol$search, reltol$final, if (criterion=="BIC") 2 else 1, package = "rstpm2")
+                  gam.obj$smooth, sp, reltol$search, reltol$final, switch(criterion,GCV=1,BIC=2), package = "rstpm2") else
+            .Call("optim_pstpm2Haz_multivariate", init, X, XD, rep(bhazard, nrow(X)), 
+                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
+                  design, sp, reltol$search, reltol$final, if (criterion=="BIC") 2 else 1, package = "rstpm2")
         } else {
-            .Call("optim_pstpm2_first", init, X, XD, rep(bhazard, nrow(X)), 
+            if (penalty == "logH")
+            .Call("optim_pstpm2LogH_first", init, X, XD, rep(bhazard, nrow(X)), 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
-                  gam.obj$smooth, sp, reltol$search, reltol$final, if (criterion=="BIC") 2 else 1, package = "rstpm2")
+                  gam.obj$smooth, sp, reltol$search, reltol$final, if (criterion=="BIC") 2 else 1, package = "rstpm2") else
+            .Call("optim_pstpm2Haz_first", init, X, XD, rep(bhazard, nrow(X)), 
+                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
+                  design, sp, reltol$search, reltol$final, if (criterion=="BIC") 2 else 1, package = "rstpm2")
         }
     }
     if (use.rcpp) {
@@ -1159,7 +1189,9 @@ pstpm2 <- function(formula, data,
         mle2 <- if (use.gr) {
             mle2(negll,init,vecpar=TRUE, control=control, gr=gradnegll, eval.only=TRUE, ...)
         } else mle2(negll,init,vecpar=TRUE, control=control, eval.only=TRUE, ...)
+        mle2@details$hessian <- fit$hessian
         mle2@vcov <- solve(fit$hessian)
+        mle2@details$convergence <- 0
     } else {
         mle2 <- if (use.gr) {
             mle2(negll,init,vecpar=TRUE, control=control, gr=gradnegll, ...)
