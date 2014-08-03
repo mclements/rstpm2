@@ -334,17 +334,6 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     grfn<Data>(n, beta, gr, ex);
     Data * data = (Data *) ex;
     vec vbeta(beta,n);
-    // vec etaD = data->XD * vbeta;
-    // vec exp_eta = exp(data->X * vbeta);
-    // // vec h = etaD % exp_eta + data->bhazard;
-    // vec w23 = data->event % data->wt / (etaD % exp_eta + data->bhazard);
-    // mat X1 = -rmult(data->X, exp_eta % data->wt);
-    // // X1.each_col() %= (exp_eta % data->wt);
-    // mat X2 = data->XD;
-    // X2.each_col() %= (exp_eta % w23);
-    // mat X3 = data->X;
-    // X3.each_col() %= (exp_eta % etaD % w23);
-    // rowvec vgr = -sum(X1+X2+X3,0);
     rowvec vgr(n, fill::zeros);
     for (size_t i=0; i < data->smooth.size(); ++i) {
       SmoothLogH smoothi = data->smooth[i];
@@ -361,17 +350,6 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     grfn<Data>(n, beta, gr, ex);
     Data * data = (Data *) ex;
     vec vbeta(beta,n);
-    // vec etaD = data->XD * vbeta;
-    // vec exp_eta = exp(data->X * vbeta);
-    // // vec h = etaD % exp_eta + data->bhazard;
-    // vec w23 = data->event % data->wt / (etaD % exp_eta + data->bhazard);
-    // mat X1 = -data->X;
-    // X1.each_col() %= (exp_eta % data->wt);
-    // mat X2 = data->XD;
-    // X2.each_col() %= (exp_eta % w23);
-    // mat X3 = data->X;
-    // X3.each_col() %= (exp_eta % etaD % w23);
-    // rowvec vgr = -sum(X1+X2+X3,0);
     rowvec vgr(n, fill::zeros);
     for (size_t i=0; i < data->smooth.size(); ++i) {
       Smooth obj = data->smooth[i];
