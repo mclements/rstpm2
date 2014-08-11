@@ -590,7 +590,6 @@ stpm2 <- function(formula, data,
         .Call("optim_stpm2",init,X,XD,rep(bhazard,nrow(X)),wt,ifelse(event,1,0),
               if (delayed) 1 else 0, X0, wt0, reltol,
               package="rstpm2")
-        ##.Call("optim_pstpm2",init,X,XD,rep(bhazard,nrow(X)),wt,ifelse(event,1,0),smoothers,package="rstpm2")
     }
     analyticalHessian <- function(beta) {
         mult <- function(X1,X2,w) {
@@ -1159,7 +1158,16 @@ pstpm2 <- function(formula, data,
     }
     rcpp_optim <- function() {
         ## stopifnot(!delayed)
-        if (length(sp)>1) {
+        if (!no.sp) { # fixed sp as specified
+          if (penalty == "logH")
+            .Call("optim_pstpm2LogH_fixedsp", init, X, XD, rep(bhazard, nrow(X)), 
+                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
+                  gam.obj$smooth, sp, reltol$final, switch(criterion,GCV=1,BIC=2), package = "rstpm2") else
+                    .Call("optim_pstpm2Haz_fixedsp", init, X, XD, rep(bhazard, nrow(X)), 
+                          wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
+                          design, sp, reltol$final, if (criterion=="BIC") 2 else 1, package = "rstpm2")
+        }
+        else if (length(sp)>1) {
             if (penalty == "logH")
             .Call("optim_pstpm2LogH_multivariate", init, X, XD, rep(bhazard, nrow(X)), 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
