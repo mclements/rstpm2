@@ -641,6 +641,73 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
 						 ssmooth, ssp, sreltol_search, sreltol_final, scriterion);
   }
 
+
+  template<class Smooth>
+  SEXP optim_pstpm2_fixedsp(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
+  		  SEXP sdelayed, SEXP sX0, SEXP swt0,
+			  SEXP ssmooth, SEXP ssp, SEXP sreltol, SEXP scriterion) { 
+
+    NumericVector init = as<NumericVector>(sinit);
+    NumericVector sp = as<NumericVector>(ssp);
+    int n = init.size();
+    NumericMatrix hessian(n,n);
+
+    mat X = as<mat>(sX); 
+    mat XD = as<mat>(sXD); 
+    vec bhazard = as<vec>(sbhazard);
+    vec wt = as<vec>(swt);
+    vec event = as<vec>(sevent);
+    List lsmooth = as<List>(ssmooth);
+    int delayed = as<int>(sdelayed);
+    int criterion = as<int>(scriterion);
+    double reltol = as<double>(sreltol);
+
+    mat X0(1,1,fill::zeros);
+    vec wt0(1,fill::zeros);
+    if (delayed == 1) {
+      X0 = as<mat>(sX0);
+      wt0 = as<vec>(swt0);
+    }
+
+    std::vector<Smooth> smooth = read_smoothers<Smooth>(lsmooth);
+
+    pstpm2<Smooth> data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, criterion, reltol, smooth};
+
+    BFGS bfgs;
+    bfgs.coef = init;
+    bfgs.reltol = reltol;
+    bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data);
+
+    hessian = bfgs.calc_hessian(pgrfn<Smooth>, (void *) &data);
+
+    return List::create(_("sp")=wrap(sp),
+			_("coef")=wrap(bfgs.coef),
+			_("hessian")=wrap(hessian));
+
+  }
+
+  RcppExport SEXP optim_pstpm2LogH_fixedsp(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, 
+					 SEXP swt, SEXP sevent,
+					 SEXP sdelayed, SEXP sX0, SEXP swt0,
+					 SEXP ssmooth, SEXP ssp, 
+					 SEXP sreltol, SEXP scriterion) {
+    return optim_pstpm2_fixedsp<SmoothLogH>(sinit, sX, sXD, sbhazard, swt, sevent,
+					  sdelayed, sX0, swt0,
+					  ssmooth, ssp, sreltol, scriterion);
+  }
+
+  RcppExport SEXP optim_pstpm2Haz_fixedsp(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, 
+					 SEXP swt, SEXP sevent,
+					 SEXP sdelayed, SEXP sX0, SEXP swt0,
+					 SEXP ssmooth, SEXP ssp, 
+					 SEXP sreltol, SEXP scriterion) {
+    return optim_pstpm2_fixedsp<SmoothHaz>(sinit, sX, sXD, sbhazard, swt, sevent,
+					  sdelayed, sX0, swt0,
+					  ssmooth, ssp, sreltol, scriterion);
+  }
+
+
+
   // R CMD INSTALL ~/src/R/microsimulation
   // R -q -e "require(microsimulation); .Call('test_nmmin',1:2,PACKAGE='microsimulation')"
 
