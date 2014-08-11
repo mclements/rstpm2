@@ -1,6 +1,7 @@
 #include <R_ext/Applic.h>
 #include <RcppArmadillo.h>
 #include <vector>
+#include <map>
 #include <float.h> /* DBL_EPSILON */
 
 namespace {
@@ -29,6 +30,17 @@ namespace {
 	Rprintf("%f ", m(i,j));
       Rprintf("\n");
     }
+  }
+
+  RcppExport SEXP tapplySum(SEXP s_y, SEXP s_group) {
+    NumericVector y(s_y);
+    NumericVector group(s_group);
+    NumericVector::iterator iy, igroup;
+    std::map<double,double> out;
+    for (iy = y.begin(), igroup = group.begin(); iy != y.end(); ++iy, ++igroup) { 
+	out[*igroup] += *iy;
+    }
+    return wrap(out);
   }
 
   // void nmmin(int n, double *Bvec, double *X, double *Fmin, optimfn fminfn,
