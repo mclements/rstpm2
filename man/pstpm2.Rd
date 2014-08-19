@@ -132,18 +132,19 @@ plot(fit,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
 plot(fit,newdata=data.frame(hormon=0),type="hazard",add=TRUE,ci=FALSE,line.col="green",lwd=2,
   rug=FALSE)
 
+
 ## tvc
-fit.tvc <- pstpm2(Surv(rectime/365,censrec==1)~hormon,
-  data=brcancer,
-  tvc.formula=~s(log(rectime/365),by=hormon,sp=1e-3),
+brcancer <- transform(brcancer, recyear = rectime / 365)
+fit.tvc <- pstpm2(Surv(recyear,censrec==1)~1,
+  data=brcancer,baseoff=TRUE,
+  tvc.formula=~s(log(recyear),by=factor(hormon)),
   coxph.strata=hormon)
-anova(fit,fit.tvc)
+anova(fit,fit.tvc) # is this valid??
 ## fit.tvc2 <- stpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,df=5,tvc=list(hormon=3))
 plot(fit.tvc,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
-  rug=FALSE,ylim=c(0,1e-3))
+  rug=FALSE)
 plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard",line.col="red",lwd=2,
   rug=FALSE,add=TRUE,ci=FALSE)
-
 
 ## specify the smoothing parameter
 fit.sp <- pstpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,sp=fit@gam$sp*100)

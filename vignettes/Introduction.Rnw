@@ -1,4 +1,4 @@
-% setwd("/home/MEB/marcle/src/R/rstpm2/vignettes"); Sweave("Introduction.Rnw");system("pdflatex Introduction.tex")
+% setwd("/home/marcle/src/R/rstpm2/vignettes"); Sweave("Introduction.Rnw");system("pdflatex Introduction.tex")
 \documentclass[a4paper]{article}
 
 \usepackage{Sweave}

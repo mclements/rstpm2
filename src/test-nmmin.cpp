@@ -334,9 +334,7 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     return out;
   }
   mat lmult(vec v, mat m) {
-    mat out(m);
-    out.each_col() %= v;
-    return out;
+    return rmult(m,v);
   }
 
   template<>
@@ -506,7 +504,7 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
   template<class Smooth>
   SEXP optim_pstpm2_first(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
 			  SEXP sdelayed, SEXP sX0, SEXP swt0,
-			  SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP scriterion) { 
+			  SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) { 
 
     NumericVector init = as<NumericVector>(sinit);
     NumericVector sp = as<NumericVector>(ssp);
@@ -522,6 +520,7 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     int delayed = as<int>(sdelayed);
     double reltol_search = as<double>(sreltol_search);
     double reltol_final = as<double>(sreltol_final);
+    double alpha = as<double>(salpha);
     int criterion = as<int>(scriterion);
 
     mat X0(1,1,fill::zeros);
@@ -535,7 +534,7 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
 
     pstpm2<Smooth> data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, criterion, reltol_search, smooth};
 
-    double opt_sp = exp(Brent_fmin(log(0.001),log(100.0),&pstpm2_step_first<Smooth>,&data,1.0e-2));
+    double opt_sp = alpha * exp(Brent_fmin(log(0.001),log(100.0),&pstpm2_step_first<Smooth>,&data,1.0e-2));
     data.sp[0] = opt_sp;
 
     BFGS bfgs;
@@ -555,26 +554,26 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
 					 SEXP swt, SEXP sevent,
 					 SEXP sdelayed, SEXP sX0, SEXP swt0,
 					 SEXP ssmooth, SEXP ssp, SEXP sreltol_search, 
-					 SEXP sreltol_final, SEXP scriterion) {
+					 SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
     return optim_pstpm2_first<SmoothLogH>(sinit, sX, sXD, sbhazard, swt, sevent,
 					  sdelayed, sX0, swt0,
-					  ssmooth, ssp, sreltol_search, sreltol_final, scriterion);
+					  ssmooth, ssp, sreltol_search, sreltol_final, salpha, scriterion);
   }
 
   RcppExport SEXP optim_pstpm2Haz_first(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, 
 					 SEXP swt, SEXP sevent,
 					 SEXP sdelayed, SEXP sX0, SEXP swt0,
 					 SEXP ssmooth, SEXP ssp, SEXP sreltol_search, 
-					 SEXP sreltol_final, SEXP scriterion) {
+					SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
     return optim_pstpm2_first<SmoothHaz>(sinit, sX, sXD, sbhazard, swt, sevent,
 					  sdelayed, sX0, swt0,
-					  ssmooth, ssp, sreltol_search, sreltol_final, scriterion);
+					 ssmooth, ssp, sreltol_search, sreltol_final, salpha, scriterion);
   }
 
   template<class Smooth>
   SEXP optim_pstpm2_multivariate(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
 				 SEXP sdelayed, SEXP sX0, SEXP swt0,
-				 SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP scriterion) {
+				 SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
 
     NumericVector init = as<NumericVector>(sinit);
     NumericVector sp = as<NumericVector>(ssp);
@@ -592,6 +591,7 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     int criterion = as<int>(scriterion);
     double reltol_search = as<double>(sreltol_search);
     double reltol_final = as<double>(sreltol_final);
+    double alpha = as<double>(salpha);
 
     mat X0(1,1,fill::zeros);
     vec wt0(1,fill::zeros);
@@ -610,7 +610,7 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     nm.optim(pstpm2_step_multivariate<Smooth>, data.sp, (void *) &data);
 
     for (int i=0; i < nm.coef.size(); ++i)
-      data.sp[i] = exp(nm.coef[i]);
+      data.sp[i] = alpha * exp(nm.coef[i]); // same alpha for all smoothers??
 
     BFGS bfgs;
     bfgs.coef = data.init;
@@ -627,25 +627,25 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
 
   RcppExport SEXP optim_pstpm2LogH_multivariate(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
 				 SEXP sdelayed, SEXP sX0, SEXP swt0,
-				 SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP scriterion) {
+						SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
     return optim_pstpm2_multivariate<SmoothLogH>(sinit, sX, sXD, sbhazard, swt, sevent,
 				 sdelayed, sX0, swt0,
-						 ssmooth, ssp, sreltol_search, sreltol_final, scriterion);
+						 ssmooth, ssp, sreltol_search, sreltol_final, salpha, scriterion);
   }
 
   RcppExport SEXP optim_pstpm2Haz_multivariate(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
 				 SEXP sdelayed, SEXP sX0, SEXP swt0,
-				 SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP scriterion) {
+					       SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
     return optim_pstpm2_multivariate<SmoothHaz>(sinit, sX, sXD, sbhazard, swt, sevent,
 				 sdelayed, sX0, swt0,
-						 ssmooth, ssp, sreltol_search, sreltol_final, scriterion);
+						ssmooth, ssp, sreltol_search, sreltol_final, salpha, scriterion);
   }
 
 
   template<class Smooth>
   SEXP optim_pstpm2_fixedsp(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
   		  SEXP sdelayed, SEXP sX0, SEXP swt0,
-			  SEXP ssmooth, SEXP ssp, SEXP sreltol, SEXP scriterion) { 
+			  SEXP ssmooth, SEXP ssp, SEXP sreltol) { 
 
     NumericVector init = as<NumericVector>(sinit);
     NumericVector sp = as<NumericVector>(ssp);
@@ -659,7 +659,6 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     vec event = as<vec>(sevent);
     List lsmooth = as<List>(ssmooth);
     int delayed = as<int>(sdelayed);
-    int criterion = as<int>(scriterion);
     double reltol = as<double>(sreltol);
 
     mat X0(1,1,fill::zeros);
@@ -671,7 +670,7 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
 
     std::vector<Smooth> smooth = read_smoothers<Smooth>(lsmooth);
 
-    pstpm2<Smooth> data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, criterion, reltol, smooth};
+    pstpm2<Smooth> data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, 1, reltol, smooth};
 
     BFGS bfgs;
     bfgs.coef = init;
@@ -690,20 +689,83 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
 					 SEXP swt, SEXP sevent,
 					 SEXP sdelayed, SEXP sX0, SEXP swt0,
 					 SEXP ssmooth, SEXP ssp, 
-					 SEXP sreltol, SEXP scriterion) {
+					 SEXP sreltol) {
     return optim_pstpm2_fixedsp<SmoothLogH>(sinit, sX, sXD, sbhazard, swt, sevent,
 					  sdelayed, sX0, swt0,
-					  ssmooth, ssp, sreltol, scriterion);
+					  ssmooth, ssp, sreltol);
   }
 
   RcppExport SEXP optim_pstpm2Haz_fixedsp(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, 
 					 SEXP swt, SEXP sevent,
 					 SEXP sdelayed, SEXP sX0, SEXP swt0,
 					 SEXP ssmooth, SEXP ssp, 
-					 SEXP sreltol, SEXP scriterion) {
+					 SEXP sreltol) {
     return optim_pstpm2_fixedsp<SmoothHaz>(sinit, sX, sXD, sbhazard, swt, sevent,
 					  sdelayed, sX0, swt0,
-					  ssmooth, ssp, sreltol, scriterion);
+					  ssmooth, ssp, sreltol);
+  }
+
+
+
+  template<class Smooth>
+  SEXP test_pstpm2(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
+  		  SEXP sdelayed, SEXP sX0, SEXP swt0,
+			  SEXP ssmooth, SEXP ssp, SEXP sreltol) { 
+
+    NumericVector init = as<NumericVector>(sinit);
+    NumericVector sp = as<NumericVector>(ssp);
+    int n = init.size();
+    NumericMatrix hessian(n,n);
+
+    mat X = as<mat>(sX); 
+    mat XD = as<mat>(sXD); 
+    vec bhazard = as<vec>(sbhazard);
+    vec wt = as<vec>(swt);
+    vec event = as<vec>(sevent);
+    List lsmooth = as<List>(ssmooth);
+    int delayed = as<int>(sdelayed);
+    double reltol = as<double>(sreltol);
+
+    mat X0(1,1,fill::zeros);
+    vec wt0(1,fill::zeros);
+    if (delayed == 1) {
+      X0 = as<mat>(sX0);
+      wt0 = as<vec>(swt0);
+    }
+
+    std::vector<Smooth> smooth = read_smoothers<Smooth>(lsmooth);
+
+    pstpm2<Smooth> data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, 1, reltol, smooth};
+
+    double pfmin = pfminfn<Smooth>(n,&init[0],(void *) &data);
+    NumericVector gr(n);
+    pgrfn<Smooth>(n,&init[0], &gr[0], (void *) &data);
+
+    return List::create(_("sp")=wrap(sp),
+			_("pfmin")=wrap(pfmin),
+			_("gr")=wrap(gr)
+			);
+
+  }
+
+  RcppExport SEXP test_pstpm2LogH(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, 
+					 SEXP swt, SEXP sevent,
+					 SEXP sdelayed, SEXP sX0, SEXP swt0,
+					 SEXP ssmooth, SEXP ssp, 
+					 SEXP sreltol) {
+    return test_pstpm2<SmoothLogH>(sinit, sX, sXD, sbhazard, swt, sevent,
+					  sdelayed, sX0, swt0,
+					  ssmooth, ssp, sreltol);
+  }
+
+  RcppExport SEXP test_pstpm2Haz(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, 
+					 SEXP swt, SEXP sevent,
+					 SEXP sdelayed, SEXP sX0, SEXP swt0,
+					 SEXP ssmooth, SEXP ssp, 
+					 SEXP sreltol) {
+    return test_pstpm2<SmoothHaz>(sinit, sX, sXD, sbhazard, swt, sevent,
+					  sdelayed, sX0, swt0,
+					  ssmooth, ssp, sreltol);
   }
 
 

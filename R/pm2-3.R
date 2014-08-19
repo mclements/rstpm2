@@ -587,7 +587,7 @@ stpm2 <- function(formula, data,
     }
     rcpp_stpm2 <- function() {
         stopifnot(!delayed)
-        .Call("optim_stpm2",init,X,XD,rep(bhazard,nrow(X)),wt,ifelse(event,1,0),
+        .Call("optim_stpm2",init,X,XD,if (length(bhazard)==1) rep(bhazard,nrow(X)) else bhazard,wt,ifelse(event,1,0),
               if (delayed) 1 else 0, X0, wt0, reltol,
               package="rstpm2")
     }
@@ -918,12 +918,17 @@ pstpm2 <- function(formula, data,
                    control = list(parscale = 0.1, maxit = 300), init = FALSE,
                    coxph.strata = NULL, nStrata=5, weights = NULL, robust = FALSE, baseoff = FALSE,
                    bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("BIC","GCV"), penalty = c("logH","h"), smoother.parameters = NULL,
+                   alpha=switch(criterion,BIC=1,GCV=1.4), sp.init=NULL,
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
   {
     ## set up the data
     ## ensure that data is a data frame
-    data <- get_all_vars(formula, data)
+      temp.formula <- formula
+      if (!is.null(logH.formula)) rhs(temp.formula) <-rhs(temp.formula) %call+% rhs(logH.formula)
+      if (!is.null(tvc.formula)) rhs(temp.formula) <-rhs(temp.formula) %call+% rhs(tvc.formula)
+      raw.data <- data
+    data <- get_all_vars(temp.formula, raw.data)
     criterion <- match.arg(criterion)
     penalty <- match.arg(penalty)
     ## restrict to non-missing data (assumes na.action=na.omit)
@@ -1013,7 +1018,9 @@ pstpm2 <- function(formula, data,
     lhs(gam.formula) <- quote(logHhat) # new response
     gam.call$formula <- gam.formula
     ## gam.call$sp <- if (is.list(sp)) sp[[floor(length(sp)/2)]] else sp
-    gam.call$sp <- if (is.list(sp)) sp[[length(sp)]] else sp
+    gam.call$sp <- sp
+    if (is.null(sp) && !is.null(sp.init))
+        gam.call$sp <- sp.init
     dataEvents <- data[event,]
     gam.call$data <- quote(dataEvents) # events only
     gam.obj <- eval(gam.call)
@@ -1045,8 +1052,10 @@ pstpm2 <- function(formula, data,
     bhazard <- substitute(bhazard)
     bhazard <- if (is.null(bhazard)) 0 else eval(bhazard,data,parent.frame())
     ## smoothing parameters
-    if (no.sp <- is.null(sp))
-      sp <- if(is.null(gam.obj$full.sp)) gam.obj$sp else gam.obj$full.sp
+    if (no.sp <- is.null(sp)) {
+        sp <- if(is.null(gam.obj$full.sp)) gam.obj$sp else gam.obj$full.sp
+        if (!is.null(sp.init)) sp <- sp.init
+    }
     ## penalty function
     pfun <- function(beta,sp)
       sum(sapply(1:length(gam.obj$smooth),
@@ -1162,33 +1171,33 @@ pstpm2 <- function(formula, data,
           if (penalty == "logH")
             .Call("optim_pstpm2LogH_fixedsp", init, X, XD, rep(bhazard, nrow(X)), 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
-                  gam.obj$smooth, sp, reltol$final, switch(criterion,GCV=1,BIC=2), package = "rstpm2") else
+                  gam.obj$smooth, sp, reltol$final, package = "rstpm2") else
                     .Call("optim_pstpm2Haz_fixedsp", init, X, XD, rep(bhazard, nrow(X)), 
                           wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
-                          design, sp, reltol$final, if (criterion=="BIC") 2 else 1, package = "rstpm2")
+                          design, sp, reltol$final, package = "rstpm2")
         }
         else if (length(sp)>1) {
             if (penalty == "logH")
             .Call("optim_pstpm2LogH_multivariate", init, X, XD, rep(bhazard, nrow(X)), 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
-                  gam.obj$smooth, sp, reltol$search, reltol$final, switch(criterion,GCV=1,BIC=2), package = "rstpm2") else
+                  gam.obj$smooth, sp, reltol$search, reltol$final, alpha, switch(criterion,GCV=1,BIC=2), package = "rstpm2") else
             .Call("optim_pstpm2Haz_multivariate", init, X, XD, rep(bhazard, nrow(X)), 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
-                  design, sp, reltol$search, reltol$final, if (criterion=="BIC") 2 else 1, package = "rstpm2")
+                  design, sp, reltol$search, reltol$final, alpha, if (criterion=="BIC") 2 else 1, package = "rstpm2")
         } else {
             if (penalty == "logH")
             .Call("optim_pstpm2LogH_first", init, X, XD, rep(bhazard, nrow(X)), 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
-                  gam.obj$smooth, sp, reltol$search, reltol$final, if (criterion=="BIC") 2 else 1, package = "rstpm2") else
+                  gam.obj$smooth, sp, reltol$search, reltol$final,alpha,  if (criterion=="BIC") 2 else 1, package = "rstpm2") else
             .Call("optim_pstpm2Haz_first", init, X, XD, rep(bhazard, nrow(X)), 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
-                  design, sp, reltol$search, reltol$final, if (criterion=="BIC") 2 else 1, package = "rstpm2")
+                  design, sp, reltol$search, reltol$final, alpha, if (criterion=="BIC") 2 else 1, package = "rstpm2")
         }
     }
     if (use.rcpp) {
         fit <- rcpp_optim()
         init <- fit$coef
-        if (!no.sp) sp <- fit$sp
+        if (!no.sp) sp <- fit$sp # alpha?
     }
     negll <- function(beta) negllsp(beta,sp)
     gradnegll <- function(beta) gradnegllsp(beta,sp)
