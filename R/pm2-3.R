@@ -539,7 +539,7 @@ stpm2 <- function(formula, data,
     XD <- matrix(XD,nrow=nrow(X))
     ##
     bhazard <- substitute(bhazard)
-    bhazard <- if (is.null(bhazard)) 0 else eval(bhazard,data,parent.frame())
+    bhazard <- if (is.null(bhazard)) rep(0,nrow(X)) else eval(bhazard,data,parent.frame())
     if (delayed && all(time0==0)) delayed <- FALSE
     if (delayed) {
         ind <- time0>0
@@ -587,7 +587,7 @@ stpm2 <- function(formula, data,
     }
     rcpp_stpm2 <- function() {
         stopifnot(!delayed)
-        .Call("optim_stpm2",init,X,XD,if (length(bhazard)==1) rep(bhazard,nrow(X)) else bhazard,wt,ifelse(event,1,0),
+        .Call("optim_stpm2",init,X,XD,bhazard,wt,ifelse(event,1,0),
               if (delayed) 1 else 0, X0, wt0, reltol,
               package="rstpm2")
     }
@@ -1050,7 +1050,7 @@ pstpm2 <- function(formula, data,
     XD <- grad1(lpfunc,data[[timeVar]])    
     ##
     bhazard <- substitute(bhazard)
-    bhazard <- if (is.null(bhazard)) 0 else eval(bhazard,data,parent.frame())
+    bhazard <- if (is.null(bhazard)) rep(0,nrow(X)) else eval(bhazard,data,parent.frame())
     ## smoothing parameters
     if (no.sp <- is.null(sp)) {
         sp <- if(is.null(gam.obj$full.sp)) gam.obj$sp else gam.obj$full.sp
@@ -1169,27 +1169,27 @@ pstpm2 <- function(formula, data,
         ## stopifnot(!delayed)
         if (!no.sp) { # fixed sp as specified
           if (penalty == "logH")
-              .Call("optim_pstpm2LogH_fixedsp", init, X, XD, rep(bhazard, nrow(X)), 
+              .Call("optim_pstpm2LogH_fixedsp", init, X, XD, bhazard, 
                     wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
                     gam.obj$smooth, sp, reltol$final, package = "rstpm2") else
-          .Call("optim_pstpm2Haz_fixedsp", init, X, XD, rep(bhazard, nrow(X)), 
+          .Call("optim_pstpm2Haz_fixedsp", init, X, XD, bhazard, 
                 wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
                 design, sp, reltol$final, package = "rstpm2")
         }
         else if (length(sp)>1) {
             if (penalty == "logH")
-            .Call("optim_pstpm2LogH_multivariate", init, X, XD, rep(bhazard, nrow(X)), 
+            .Call("optim_pstpm2LogH_multivariate", init, X, XD, bhazard, 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
                   gam.obj$smooth, sp, reltol$search, reltol$final, alpha, switch(criterion,GCV=1,BIC=2), package = "rstpm2") else
-            .Call("optim_pstpm2Haz_multivariate", init, X, XD, rep(bhazard, nrow(X)), 
+            .Call("optim_pstpm2Haz_multivariate", init, X, XD, bhazard, 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
                   design, sp, reltol$search, reltol$final, alpha, if (criterion=="BIC") 2 else 1, package = "rstpm2")
         } else {
             if (penalty == "logH")
-            .Call("optim_pstpm2LogH_first", init, X, XD, rep(bhazard, nrow(X)), 
+            .Call("optim_pstpm2LogH_first", init, X, XD, bhazard, 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
                   gam.obj$smooth, sp, reltol$search, reltol$final,alpha,  if (criterion=="BIC") 2 else 1, package = "rstpm2") else
-            .Call("optim_pstpm2Haz_first", init, X, XD, rep(bhazard, nrow(X)), 
+            .Call("optim_pstpm2Haz_first", init, X, XD, bhazard, 
                   wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
                   design, sp, reltol$search, reltol$final, alpha, if (criterion=="BIC") 2 else 1, package = "rstpm2")
         }
@@ -1756,7 +1756,7 @@ stpm2Old <- function(formula, data,
     temp2 <- predict(full.formula,data,data2)
     indexXD <- apply(apply(temp2-temp,2,range),2,diff)>1e-8
     rm(data2,temp,temp2)
-    bhazard <- if (is.null(bhazard)) 0 else bhazard[event] # crude
+    bhazard <- if (is.null(bhazard)) rep(0,nrow(X)) else bhazard[event] # crude
     if (delayed && any(y[,1]>0)) {
       data2 <- data[y[,1]>0,,drop=FALSE] # data for delayed entry times
       mt2 <- delete.response(mt)
