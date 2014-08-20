@@ -3,9 +3,9 @@ Type: Package
 Title: Flexible Parametric Survival Models
 Version: 1.1.2
 Date: 2013-06-17
-Depends: methods, bbmle (>= 1.0.3), survival, mgcv, Rcpp (>= 0.10.2), RcppArmadillo, gaussquad
-Imports: splines, stats, graphics, numDeriv
-Suggests: RUnit
+Depends: methods, bbmle (>= 1.0.3), survival, mgcv
+Imports: splines, stats, graphics, Rcpp (>= 0.10.2), RcppArmadillo, numDeriv
+Suggests: RUnit, gaussquad
 LinkingTo: Rcpp,RcppArmadillo
 Author: Mark Clements (with guidance from Paul Lambert). 
 Maintainer: Mark Clements <mark.clements@ki.se>
