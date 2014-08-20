@@ -135,23 +135,24 @@ plot(fit,newdata=data.frame(hormon=0),type="hazard",add=TRUE,ci=FALSE,line.col="
 
 ## tvc
 brcancer <- transform(brcancer, recyear = rectime / 365)
-fit.tvc <- pstpm2(Surv(recyear,censrec==1)~1,
-  data=brcancer,baseoff=TRUE,
-  tvc.formula=~s(log(recyear),by=factor(hormon)),
+fit.tvc <- pstpm2(Surv(recyear,censrec==1)~hormon,
+  data=brcancer,
+  tvc.formula=~s(log(recyear),by=hormon-1),
+  sp.init=c(1,1),
   coxph.strata=hormon)
+## fit.tvc <- pstpm2(Surv(recyear,censrec==1)~hormon,
+##   data=brcancer,baseoff=TRUE,
+##   tvc.formula=~s(log(recyear),by=factor(hormon)),
+##   sp.init=c(1,1),
+##   coxph.strata=hormon)
 anova(fit,fit.tvc) # is this valid??
-## fit.tvc2 <- stpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,df=5,tvc=list(hormon=3))
+## fit.tvc2 <- stpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,df=5,tvc=list(hormon=3))
 plot(fit.tvc,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
   rug=FALSE)
 plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard",line.col="red",lwd=2,
   rug=FALSE,add=TRUE,ci=FALSE)
 
-## specify the smoothing parameter
-fit.sp <- pstpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,sp=fit@gam$sp*100)
-plot(fit,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
-  rug=FALSE,ylim=c(0,1e-3))
-plot(fit.sp,newdata=data.frame(hormon=1),type="hazard",line.col="orange",lwd=2,
-  rug=FALSE,add=TRUE,ci=FALSE)
+
 
 ## compare with df=5 from stpm2
 fit.stpm2 <- stpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,df=7)

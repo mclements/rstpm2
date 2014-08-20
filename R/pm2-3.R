@@ -349,7 +349,7 @@ bread.stpm2 <- function (x, ...) {
   return(rval)
 }
 estfun.stpm2 <- function(obj, weighted=FALSE, ...) {
-  rr <- t(rstpm2:::grad(obj@logli,coef(obj)))
+  rr <- t(grad(obj@logli,coef(obj)))
   colnames(rr) <- names(coef(obj))
   if (weighted)
     rr <- rr * obj@weights
@@ -918,7 +918,7 @@ pstpm2 <- function(formula, data,
                    control = list(parscale = 0.1, maxit = 300), init = FALSE,
                    coxph.strata = NULL, nStrata=5, weights = NULL, robust = FALSE, baseoff = FALSE,
                    bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("BIC","GCV"), penalty = c("logH","h"), smoother.parameters = NULL,
-                   alpha=switch(criterion,BIC=1,GCV=1.4), sp.init=NULL,
+                   alpha=switch(criterion,BIC=1,GCV=1.4), sp.init=NULL, trace = 0,
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
   {
@@ -1169,28 +1169,28 @@ pstpm2 <- function(formula, data,
         ## stopifnot(!delayed)
         if (!no.sp) { # fixed sp as specified
           if (penalty == "logH")
-            .Call("optim_pstpm2LogH_fixedsp", init, X, XD, rep(bhazard, nrow(X)), 
-                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
-                  gam.obj$smooth, sp, reltol$final, package = "rstpm2") else
-                    .Call("optim_pstpm2Haz_fixedsp", init, X, XD, rep(bhazard, nrow(X)), 
-                          wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
-                          design, sp, reltol$final, package = "rstpm2")
+              .Call("optim_pstpm2LogH_fixedsp", init, X, XD, rep(bhazard, nrow(X)), 
+                    wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
+                    gam.obj$smooth, sp, reltol$final, package = "rstpm2") else
+          .Call("optim_pstpm2Haz_fixedsp", init, X, XD, rep(bhazard, nrow(X)), 
+                wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
+                design, sp, reltol$final, package = "rstpm2")
         }
         else if (length(sp)>1) {
             if (penalty == "logH")
             .Call("optim_pstpm2LogH_multivariate", init, X, XD, rep(bhazard, nrow(X)), 
-                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
+                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
                   gam.obj$smooth, sp, reltol$search, reltol$final, alpha, switch(criterion,GCV=1,BIC=2), package = "rstpm2") else
             .Call("optim_pstpm2Haz_multivariate", init, X, XD, rep(bhazard, nrow(X)), 
-                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
+                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
                   design, sp, reltol$search, reltol$final, alpha, if (criterion=="BIC") 2 else 1, package = "rstpm2")
         } else {
             if (penalty == "logH")
             .Call("optim_pstpm2LogH_first", init, X, XD, rep(bhazard, nrow(X)), 
-                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
+                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
                   gam.obj$smooth, sp, reltol$search, reltol$final,alpha,  if (criterion=="BIC") 2 else 1, package = "rstpm2") else
             .Call("optim_pstpm2Haz_first", init, X, XD, rep(bhazard, nrow(X)), 
-                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
+                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
                   design, sp, reltol$search, reltol$final, alpha, if (criterion=="BIC") 2 else 1, package = "rstpm2")
         }
     }
