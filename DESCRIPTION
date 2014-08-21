@@ -4,11 +4,11 @@ Title: Flexible Parametric Survival Models
 Version: 1.1.2
 Date: 2013-06-17
 Depends: methods, bbmle (>= 1.0.3), survival, mgcv
-Imports: splines, stats, graphics, Rcpp (>= 0.10.2), RcppArmadillo, numDeriv
+Imports: splines, stats, graphics, Rcpp (>= 0.10.2), numDeriv
 Suggests: RUnit, gaussquad
 LinkingTo: Rcpp,RcppArmadillo
-Author: Mark Clements (with guidance from Paul Lambert). 
+Author: Mark Clements, Xingrong Liu (with guidance from Paul Lambert). 
 Maintainer: Mark Clements <mark.clements@ki.se>
-Description: R implementation of Stata's stpm2 function (flexible parametric survival model)
+Description: R implementation of Stata's stpm2 function (flexible parametric survival model), with an extension to semi-parametric survival models.
 License: GPL-2 | GPL-3
 LazyLoad: yes

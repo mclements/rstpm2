@@ -1,20 +1,12 @@
-#include <R_ext/Applic.h>
 #include <RcppArmadillo.h>
 #include <vector>
 #include <map>
-#include <float.h> /* DBL_EPSILON */
+#include "c_optim.h"
 
-namespace {
+namespace rstpm2 {
 
   using namespace Rcpp;
   using namespace arma;
-
-  typedef double optimfn(int, double *, void *);
-  typedef void optimgr(int, double *, double *, void *);
-
-  double min(double a, double b) { return a < b ? a : b; }
-  double max(double a, double b) { return a < b ? b : a; }
-  double bound(double x, double lower, double upper) { return x < lower ? lower : (x > upper ? upper : x); }
 
   void Rprint(NumericMatrix m) {
     for (int i=0; i<m.nrow(); ++i) {
@@ -42,190 +34,6 @@ namespace {
     }
     return wrap(out);
   }
-
-  // void nmmin(int n, double *Bvec, double *X, double *Fmin, optimfn fminfn,
-  // 	   int *fail, double abstol, double intol, void *ex,
-  // 	   double alpha, double bet, double gamm, int trace,
-  // 	   int *fncount, int maxit)
-
-  class NelderMead {
-  public:
-    NelderMead(int trace = 0, int maxit = 500, 
-	       double abstol = - INFINITY,
-	       double reltol = 1.0e-8, 
-	       double alpha = 1.0, double beta = 0.5, double gamma = 2.0) : 
-      trace(trace), maxit(maxit), abstol(abstol), reltol(reltol), 
-      alpha(alpha), beta(beta), gamma(gamma) { 
-    }
-    void optim(optimfn fn, NumericVector init, void * ex) {
-      n = init.size();
-      nmmin(n, &init[0], &coef[0], &Fmin, fn,
-	    &fail, abstol, reltol, ex,
-	    alpha, beta, gamma, trace,
-	    &fncount, maxit);
-    }
-    int n, trace, maxit, fail, fncount;
-    double abstol, reltol, alpha, beta, gamma, Fmin;
-    NumericVector coef;
-  };
-
-  // void
-  // vmmin(int n0, double *b, double *Fmin, optimfn fminfn, optimgr fmingr,
-  //       int maxit, int trace, int *mask,
-  //       double abstol, double reltol, int nREPORT, void *ex,
-  //       int *fncount, int *grcount, int *fail)
-
-  class BFGS {
-  public:
-    BFGS(int trace = 0, int maxit = 100, 
-	 double abstol = - INFINITY,
-	 double reltol = 1.0e-8, int report = 10) : 
-      trace(trace), maxit(maxit), report(report), abstol(abstol), reltol(reltol) { }
-    void optim(optimfn fn, optimgr gr, NumericVector init, void * ex,
-	       double eps = 1.0e-8) {
-      n = init.size();
-      int mask[n]; for (int i=0; i<n; ++i) mask[i] = 1;
-      vmmin(n, &init[0], &Fmin, fn, gr, maxit, trace, mask, abstol, reltol, report,
-	    ex, &fncount, &grcount, &fail);
-      coef = clone(init);
-      hessian = calc_hessian(gr, ex, eps);
-    }
-    double calc_objective(optimfn fn, NumericVector coef, void * ex) {
-      return fn(coef.size(), &coef[0], ex);
-    }
-    double calc_objective(optimfn fn, void * ex) {
-      return fn(coef.size(), &coef[0], ex);
-    }
-    NumericMatrix calc_hessian(optimgr gr, void * ex, double eps = 1.0e-8) {
-      int n = coef.size();
-      NumericVector df1(clone(coef));
-      NumericVector df2(clone(coef));
-      mat hess(n,n,fill::zeros);
-      double tmp;
-      for(int i=0; i<n; ++i) {
-	tmp = coef[i];
-	coef[i] += eps;
-	gr(n, &coef[0], &df1[0], ex);
-	coef[i] = tmp - eps;
-	gr(n, &coef[0], &df2[0], ex);
-	hess.col(i) = (as<vec>(df1) - as<vec>(df2)) / (2*eps);
-	coef[i] = tmp;
-      }
-      // now symmetrize
-      hess = (hess + hess.t()) / 2.0;
-      return as<NumericMatrix>(wrap(hess));
-    }
-    int n, trace, maxit, report, fncount, grcount, fail;
-    double abstol, reltol, Fmin;
-    NumericVector coef;
-    NumericMatrix hessian;
-  };
-
-  typedef double (*Brent_fminfn)(double, void *);
-
-  // static
-double Brent_fmin(double ax, double bx, double (*f)(double, void *),
-		  void *info, double tol)
-{
-    /*  c is the squared inverse of the golden ratio */
-    const double c = (3. - sqrt(5.)) * .5;
-
-    /* Local variables */
-    double a, b, d, e, p, q, r, u, v, w, x;
-    double t2, fu, fv, fw, fx, xm, eps, tol1, tol3;
-
-/*  eps is approximately the square root of the relative machine precision. */
-    eps = DBL_EPSILON;
-    tol1 = eps + 1.;/* the smallest 1.000... > 1 */
-    eps = sqrt(eps);
-
-    a = ax;
-    b = bx;
-    v = a + c * (b - a);
-    w = v;
-    x = v;
-
-    d = 0.;/* -Wall */
-    e = 0.;
-    fx = (*f)(x, info);
-    fv = fx;
-    fw = fx;
-    tol3 = tol / 3.;
-
-/*  main loop starts here ----------------------------------- */
-
-    for(;;) {
-	xm = (a + b) * .5;
-	tol1 = eps * fabs(x) + tol3;
-	t2 = tol1 * 2.;
-
-	/* check stopping criterion */
-
-	if (fabs(x - xm) <= t2 - (b - a) * .5) break;
-	p = 0.;
-	q = 0.;
-	r = 0.;
-	if (fabs(e) > tol1) { /* fit parabola */
-
-	    r = (x - w) * (fx - fv);
-	    q = (x - v) * (fx - fw);
-	    p = (x - v) * q - (x - w) * r;
-	    q = (q - r) * 2.;
-	    if (q > 0.) p = -p; else q = -q;
-	    r = e;
-	    e = d;
-	}
-
-	if (fabs(p) >= fabs(q * .5 * r) ||
-	    p <= q * (a - x) || p >= q * (b - x)) { /* a golden-section step */
-
-	    if (x < xm) e = b - x; else e = a - x;
-	    d = c * e;
-	}
-	else { /* a parabolic-interpolation step */
-
-	    d = p / q;
-	    u = x + d;
-
-	    /* f must not be evaluated too close to ax or bx */
-
-	    if (u - a < t2 || b - u < t2) {
-		d = tol1;
-		if (x >= xm) d = -d;
-	    }
-	}
-
-	/* f must not be evaluated too close to x */
-
-	if (fabs(d) >= tol1)
-	    u = x + d;
-	else if (d > 0.)
-	    u = x + tol1;
-	else
-	    u = x - tol1;
-
-	fu = (*f)(u, info);
-
-	/*  update  a, b, v, w, and x */
-
-	if (fu <= fx) {
-	    if (u < x) b = x; else a = x;
-	    v = w;    w = x;   x = u;
-	    fv = fw; fw = fx; fx = fu;
-	} else {
-	    if (u < x) a = u; else b = u;
-	    if (fu <= fw || w == x) {
-		v = w; fv = fw;
-		w = u; fw = fu;
-	    } else if (fu <= fv || v == x || v == w) {
-		v = u; fv = fu;
-	    }
-	}
-    }
-    /* end of main loop */
-
-    return x;
-}
 
   struct stpm2 {
     mat X, XD, X0;
@@ -382,15 +190,11 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
 			      SEXP sdelayed, SEXP sX0, SEXP swt0, SEXP sreltol) {
 
     NumericVector init = as<NumericVector>(sinit);
-    int n = init.size();
-    NumericMatrix hessian(n,n);
-
     mat X = as<mat>(sX); 
     mat XD = as<mat>(sXD); 
     vec bhazard = as<vec>(sbhazard);
     vec wt = as<vec>(swt);
     vec event = as<vec>(sevent);
-
     int delayed = as<int>(sdelayed);
     mat X0(1,1,fill::zeros);
     vec wt0(1,fill::zeros);
@@ -575,8 +379,8 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
 
   template<class Smooth>
   SEXP optim_pstpm2_multivariate(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
-				 SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-				 SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
+  				 SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
+  				 SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
 
     NumericVector init = as<NumericVector>(sinit);
     NumericVector sp = as<NumericVector>(ssp);
@@ -624,25 +428,25 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
     hessian = bfgs.calc_hessian(pgrfn<Smooth>, (void *) &data);
 
     return List::create(_("sp")=wrap(data.sp),
-			_("coef")=wrap(bfgs.coef),
-			_("hessian")=wrap(hessian));
+  			_("coef")=wrap(bfgs.coef),
+  			_("hessian")=wrap(hessian));
 
   }
 
   RcppExport SEXP optim_pstpm2LogH_multivariate(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
-						SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-						SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
+  						SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
+  						SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
     return optim_pstpm2_multivariate<SmoothLogH>(sinit, sX, sXD, sbhazard, swt, sevent,
-						 sdelayed, strace, sX0, swt0,
-						 ssmooth, ssp, sreltol_search, sreltol_final, salpha, scriterion);
+  						 sdelayed, strace, sX0, swt0,
+  						 ssmooth, ssp, sreltol_search, sreltol_final, salpha, scriterion);
   }
 
   RcppExport SEXP optim_pstpm2Haz_multivariate(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
-				 SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-					       SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
+  				 SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
+  					       SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
     return optim_pstpm2_multivariate<SmoothHaz>(sinit, sX, sXD, sbhazard, swt, sevent,
-						sdelayed, strace, sX0, swt0,
-						ssmooth, ssp, sreltol_search, sreltol_final, salpha, scriterion);
+  						sdelayed, strace, sX0, swt0,
+  						ssmooth, ssp, sreltol_search, sreltol_final, salpha, scriterion);
   }
 
 
