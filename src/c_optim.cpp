@@ -77,7 +77,8 @@ namespace rstpm2 {
       // now symmetrize
       for(int i=0; i<n; ++i) 
 	for(int j=i; j<n; ++j) 
-	  hess(i,j) = hess(j,i) = (hess(i,j) + hess(j,i)) / 2.0;
+	  if (i != j)
+	    hess(i,j) = hess(j,i) = (hess(i,j) + hess(j,i)) / 2.0;
       return wrap(hess);
     }
 

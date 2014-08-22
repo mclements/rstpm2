@@ -43,9 +43,16 @@ require(rstpm2)
 data(brcancer)
 brcancer$recyear <- brcancer$rectime/365
 system.time(pfit0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(recyear,k=30),sp=1,criterion="BIC",penalty="h"))
+                logH.formula=~s(recyear,k=30),sp.init=1,criterion="BIC",penalty="h"))
 system.time(pfit0.1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(recyear,k=30),sp=1,criterion="GCV",penalty="h"))
+                logH.formula=~s(recyear,k=30),sp.init=1,criterion="GCV",penalty="h"))
+plot(pfit0,newdata=data.frame(hormon=1),line.col="red",type="hazard")
+plot(pfit0.1,newdata=data.frame(hormon=1),line.col="blue",add=TRUE,type="hazard")
+
+system.time(pfit0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(log(recyear),k=30),sp.init=1))
+system.time(pfit0.1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(log(recyear),k=30),sp.init=1,criterion="BIC"))
 plot(pfit0,newdata=data.frame(hormon=1),line.col="red",type="hazard")
 plot(pfit0.1,newdata=data.frame(hormon=1),line.col="blue",add=TRUE,type="hazard")
 

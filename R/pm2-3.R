@@ -1170,7 +1170,7 @@ pstpm2 <- function(formula, data,
         if (!no.sp) { # fixed sp as specified
           if (penalty == "logH")
               .Call("optim_pstpm2LogH_fixedsp", init, X, XD, bhazard, 
-                    wt, ifelse(event, 1, 0), if (delayed) 1 else 0, X0, wt0, 
+                    wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
                     gam.obj$smooth, sp, reltol$final, package = "rstpm2") else
           .Call("optim_pstpm2Haz_fixedsp", init, X, XD, bhazard, 
                 wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
