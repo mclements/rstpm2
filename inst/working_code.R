@@ -21,9 +21,15 @@
 refresh
 require(rstpm2)
 data(brcancer)
-fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,control=list(parscale=0.1,reltol=1e-10)) # browser()
+system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
 summary(fit)
-plot(fit,newdata=data.frame(hormon=1))
+
+system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,control=list(parscale=100,reltol=1e-10),use.rcpp=FALSE)))
+
+summary(fit)
+system.time(print(fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,control=list(parscale=10000.0),reltol=1e-10,init=0.0001*coef(fit))))
+summary(fit2)
+plot(fit2,newdata=data.frame(hormon=1))
 
 brcancerN <- brcancer[rep(1:nrow(brcancer),each=100),]
 system.time(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancerN,use.rcpp=FALSE,
@@ -42,12 +48,15 @@ refresh
 require(rstpm2)
 data(brcancer)
 brcancer$recyear <- brcancer$rectime/365
-system.time(pfit0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(recyear,k=30),sp.init=1,criterion="BIC",penalty="h"))
+system.time(pfit0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,))
+system.time(pfit0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,control=list(parscale=1)))
 system.time(pfit0.1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(recyear,k=30),sp.init=1,criterion="GCV",penalty="h"))
+                logH.formula=~s(log(recyear),k=30),sp.init=10))
 plot(pfit0,newdata=data.frame(hormon=1),line.col="red",type="hazard")
 plot(pfit0.1,newdata=data.frame(hormon=1),line.col="blue",add=TRUE,type="hazard")
+
+system.time(pfit0.check <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer, use.rcpp=FALSE))
+summary(pfit0.check)
 
 system.time(pfit0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
                 logH.formula=~s(log(recyear),k=30),sp.init=1))
@@ -61,6 +70,7 @@ system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
                             smoother.parameters=list("log(recyear)"=list(var="recyear",
                                                          inverse=exp,
                                                          transform=log))))
+plot(pfit1,newdata=data.frame(hormon=1),line.col="green",add=TRUE,type="hazard")
 
 
 system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,

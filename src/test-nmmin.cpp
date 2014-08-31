@@ -8,6 +8,28 @@ namespace rstpm2 {
   using namespace Rcpp;
   using namespace arma;
 
+  // Hadamard element-wise multiplication for the _columns_ of a matrix with a vector
+
+  mat rmult(mat m, vec v) {
+    mat out(m);
+    out.each_col() %= v;
+    return out;
+  }
+  mat lmult(vec v, mat m) {
+    return rmult(m,v);
+  }
+
+  // element-wise multiplication and division for NumericVector and arma::vec
+
+  NumericVector ew_mult(NumericVector nv, vec v) {
+    return as<NumericVector>(wrap(as<vec>(wrap(nv)) % v));
+  }
+
+  NumericVector ew_div(NumericVector nv, vec v) {
+    return as<NumericVector>(wrap(as<vec>(wrap(nv)) / v));
+  }
+
+
   void Rprint(NumericMatrix m) {
     for (int i=0; i<m.nrow(); ++i) {
       for (int j=0; j<m.ncol(); ++j) 
@@ -35,9 +57,32 @@ namespace rstpm2 {
     return wrap(out);
   }
 
-  struct stpm2 {
-    mat X, XD, X0;
-    vec bhazard,wt,event,wt0;
+  // Q: do we need parscale, trace, reltol and criterion in these structs?
+
+  class stpm2 {
+  public:
+    stpm2(SEXP sexp) {
+      List list = as<List>(sexp);
+      init = as<NumericVector>(list["init"]);
+      X = as<mat>(list["X"]); 
+      XD = as<mat>(list["XD"]); 
+      bhazard = as<vec>(list["bhazard"]);
+      wt = as<vec>(list["wt"]);
+      event = as<vec>(list["event"]);
+      delayed = as<int>(list["delayed"]);
+      X0.set_size(1,1); X0.fill(0.0);
+      wt0.set_size(1); wt0.fill(0.0);
+      if (delayed == 1) {
+	X0 = as<mat>(list["X0"]); // optional
+	wt0 = as<vec>(list["wt0"]); // optional
+      }
+      parscale = as<vec>(list["parscale"]);
+      reltol = as<double>(list["reltol"]);
+    }
+    NumericVector init;
+    mat X, XD,X0; 
+    vec bhazard,wt,wt0,event,parscale;
+    double reltol;
     int delayed;
   };
 
@@ -51,223 +96,6 @@ namespace rstpm2 {
     vec w;
     double lambda;
   };
-
-  template<class Smoother>
-  struct pstpm2 {
-    NumericVector sp,init;
-    mat X, XD, X0;
-    vec bhazard,wt,event,wt0;
-    int delayed, criterion, trace;
-    double reltol;
-    std::vector<Smoother> smooth;
-  };
-
-  template<class Data>
-  double fminfn(int n, double * beta, void *ex) {
-    Data * data = (Data *) ex;
-    vec vbeta(beta,n);
-    vec eta = data->X * vbeta;
-    vec h = (data->XD * vbeta) % exp(eta) + data->bhazard;
-    double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % exp(eta));
-    return -ll;  
-  }
-
-  // empty default
-  template<class Smooth>
-  double pfminfn(int n, double * beta, void *ex) { return 0.0; };
-
-  // log H penalty - using penalty matrices from mgcv
-  template<>
-  double pfminfn<SmoothLogH>(int n, double * beta, void *ex) {
-    typedef SmoothLogH Smooth;
-    typedef pstpm2<Smooth> Data;
-    double ll = -fminfn<Data>(n,beta,ex);
-    Data * data = (Data *) ex;
-    vec vbeta(beta,n);
-    for (size_t i=0; i < data->smooth.size(); ++i) {
-      Smooth smoothi = data->smooth[i];
-      ll -= (data->sp)[i]/2 * 
-	dot(vbeta.subvec(smoothi.first_para,smoothi.last_para),
-	    smoothi.S * vbeta.subvec(smoothi.first_para,smoothi.last_para));
-    }
-    return -ll;  
-  }
-
-  // hazard penalty
-  template<>
-  double pfminfn<SmoothHaz>(int n, double * beta, void *ex) {
-    typedef SmoothHaz Smooth;
-    typedef pstpm2<Smooth> Data;
-    double ll = -fminfn<Data>(n,beta,ex);
-    Data * data = (Data *) ex;
-    vec vbeta(beta,n);
-    for (size_t i=0; i < data->smooth.size(); ++i) {
-      Smooth obj = data->smooth[i];
-      vec s0 = obj.X0 * vbeta;
-      vec s1 = obj.X1 * vbeta;
-      vec s2 = obj.X2 * vbeta;
-      vec s3 = obj.X3 * vbeta;
-      vec h2 = exp(s0) % (s3 + 3*s1%s2 + s1%s1%s1);
-      ll -= (data->sp)[i]/2 * obj.lambda * sum(obj.w % h2 % h2);
-    }
-    return -ll;  
-  }
-
-  template<class Data>
-  void grfn(int n, double * beta, double * gr, void *ex) {
-    Data * data = (Data *) ex;
-    vec vbeta(beta,n);
-    vec etaD = data->XD * vbeta;
-    vec exp_eta = exp(data->X * vbeta);
-    // vec h = etaD % exp_eta + data->bhazard;
-    vec w23 = data->event % data->wt / (etaD % exp_eta + data->bhazard);
-    mat X1 = -data->X;
-    X1.each_col() %= (exp_eta % data->wt);
-    mat X2 = data->XD;
-    X2.each_col() %= (exp_eta % w23);
-    mat X3 = data->X;
-    X3.each_col() %= (exp_eta % etaD % w23);
-    rowvec vgr = -sum(X1+X2+X3,0);
-    for (int i = 0; i<n; ++i) gr[i] = vgr[i];
-  }
-
-  template<class Smooth>
-  void pgrfn(int n, double * beta, double * gr, void *ex) { };
-
-  // Hadamard element-wise multiplication for the _columns_ of a matrix with a vector
-
-  mat rmult(mat m, vec v) {
-    mat out(m);
-    out.each_col() %= v;
-    return out;
-  }
-  mat lmult(vec v, mat m) {
-    return rmult(m,v);
-  }
-
-  template<>
-  void pgrfn<SmoothLogH>(int n, double * beta, double * gr, void *ex) {
-    typedef SmoothLogH Smooth;
-    typedef pstpm2<Smooth> Data;
-    grfn<Data>(n, beta, gr, ex);
-    Data * data = (Data *) ex;
-    vec vbeta(beta,n);
-    rowvec vgr(n, fill::zeros);
-    for (size_t i=0; i < data->smooth.size(); ++i) {
-      SmoothLogH smoothi = data->smooth[i];
-      vgr.subvec(smoothi.first_para,smoothi.last_para) += 
-	(data->sp)[i] * (smoothi.S * vbeta.subvec(smoothi.first_para,smoothi.last_para)).t();
-    }
-    for (int i = 0; i<n; ++i) gr[i] += vgr[i];
-  }
-
-  template<>
-  void pgrfn<SmoothHaz>(int n, double * beta, double * gr, void *ex) {
-    typedef SmoothHaz Smooth;
-    typedef pstpm2<Smooth> Data;
-    grfn<Data>(n, beta, gr, ex);
-    Data * data = (Data *) ex;
-    vec vbeta(beta,n);
-    rowvec vgr(n, fill::zeros);
-    for (size_t i=0; i < data->smooth.size(); ++i) {
-      Smooth obj = data->smooth[i];
-      vec s0 = obj.X0 * vbeta;
-      vec s1 = obj.X1 * vbeta;
-      vec s2 = obj.X2 * vbeta;
-      vec s3 = obj.X3 * vbeta;
-      vec h2 = exp(s0) % (s3 + 3*s1%s2 + s1%s1%s1);
-      mat dh2sq_dbeta = 
-	2*lmult(h2 % exp(s0),
-		obj.X3+3*(rmult(obj.X1,s2)+rmult(obj.X2,s1))+3*lmult(s1%s1,obj.X1))+
-	2*lmult(h2 % h2,obj.X0);
-      vgr += (data->sp)[i]*obj.lambda*sum(lmult(obj.w, dh2sq_dbeta),0);
-    }
-    for (int i = 0; i<n; ++i) gr[i] += vgr[i];
-  }
-
-
-  RcppExport SEXP optim_stpm2(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
-			      SEXP sdelayed, SEXP sX0, SEXP swt0, SEXP sreltol) {
-
-    NumericVector init = as<NumericVector>(sinit);
-    mat X = as<mat>(sX); 
-    mat XD = as<mat>(sXD); 
-    vec bhazard = as<vec>(sbhazard);
-    vec wt = as<vec>(swt);
-    vec event = as<vec>(sevent);
-    int delayed = as<int>(sdelayed);
-    mat X0(1,1,fill::zeros);
-    vec wt0(1,fill::zeros);
-    if (delayed == 1) {
-      X0 = as<mat>(sX0);
-      wt0 = as<vec>(swt0);
-    }
-    double reltol = as<double>(sreltol);
-
-    stpm2 data = {X, XD, X0, bhazard, wt, event, wt0, delayed};
-
-    BFGS bfgs;
-    bfgs.reltol = reltol;
-  
-    bfgs.optim(fminfn<stpm2>, grfn<stpm2>, init, (void *) &data);
-
-    return List::create(_("coef")=wrap(bfgs.coef),
-			_("hessian")=wrap(bfgs.hessian));
-
-  }
-
-  template<class Smooth>
-  double pstpm2_step_first(double logsp, void * args) {
-    typedef pstpm2<Smooth> Data;
-    Data * data = (Data *) args;
-
-    data->sp[0] = exp(logsp);
-
-    BFGS bfgs;
-    bfgs.reltol = data->reltol;
-
-    bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data->init, (void *) data);
-
-    NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, (void *) data);
-
-    double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
-    double negll = bfgs.calc_objective(fminfn<Data>,(void *) data);
-    double gcv =  negll + edf;
-    double bic =  negll + edf*log(sum(data->event));
-    data->init = bfgs.coef;
-    if (data->trace > 0)
-      Rprintf("sp=%f\tedf=%f\tnegll=%f\tgcv=%f\tbic=%f\n",data->sp[0],edf,negll,gcv,bic);
-
-    return data->criterion==1 ? gcv : bic;
-  }    
-
-  template<class Smooth>
-  double pstpm2_step_multivariate(int n, double * logsp, void * args) {
-    typedef pstpm2<Smooth> Data;
-    Data * data = (Data *) args;
-
-    for (int i=0; i < data->sp.size(); ++i)
-      data->sp[i] = bound(exp(logsp[i]),0.001,100.0);
-
-    BFGS bfgs;
-    bfgs.reltol = data->reltol;
-
-    bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data->init, (void *) data);
-
-    NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, (void *) data);
-
-    double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
-    double negll = bfgs.calc_objective(fminfn<Data>,(void *) data);
-    double gcv =  negll + edf;
-    double bic =  2.0*negll + edf*log(sum(data->event));
-    data->init = bfgs.coef;
-    if (data->trace > 0) {
-      for (int i = 0; i < data->sp.size(); ++i)
-	Rprintf("sp[%i]=%f\t",i,data->sp[i]);
-      Rprintf("edf=%f\tnegll=%f\tgcv=%f\tbic=%f\n",edf,negll,gcv,bic);
-    }
-    return data->criterion==1 ? gcv : bic;
-  }    
 
   template<class Smooth>
   std::vector<Smooth> read_smoothers(List lsmooth) {}
@@ -306,47 +134,347 @@ namespace rstpm2 {
     return smooth;
   }
 
+  template<class Smooth>
+  class pstpm2 : public stpm2 {
+  public:
+    pstpm2(SEXP sexp) : stpm2(sexp) {
+      // stpm2::stpm2(sexp);
+      //int n = init.size();
+      //hessian.set_size(n,n);
+      List list = as<List>(sexp);
+      List lsmooth = as<List>(list["smooth"]);
+      sp = as<NumericVector>(list["sp"]);
+      reltol_search = as<double>(list["reltol_search"]);
+      reltol = as<double>(list["reltol"]);
+      alpha = as<double>(list["alpha"]);
+      criterion = as<int>(list["criterion"]);
+      trace = as<int>(list["trace"]);
+      smooth = read_smoothers<Smooth>(lsmooth);
+    }
+    NumericVector sp;
+    NumericMatrix hessian; // move to the optimisation class?
+    double alpha, reltol_search; 
+    int criterion, trace;
+    std::vector<Smooth> smooth;
+  };
+
+  // template<class Smoother>
+  // struct pstpm2 {
+  //   NumericVector sp,init;
+  //   mat X, XD, X0;
+  //   vec bhazard,wt,event,wt0,parscale;
+  //   int delayed, criterion, trace;
+  //   double reltol;
+  //   std::vector<Smoother> smooth;
+  // };
+
+  template<class Data>
+  class BFGS2 : public BFGS {
+  public:
+    void optim(optimfn fn, optimgr gr, NumericVector init, void * ex,
+		     double eps = 1.0e-8) {
+      Data * data = (Data *) ex;
+      n = init.size();
+      for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
+      BFGS::optim(fn,gr,init,ex,eps);
+      for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
+      hessian = calc_hessian(gr, ex, eps);
+    }
+    NumericMatrix calc_hessian(optimgr gr, void * ex, double eps = 1.0e-8) {
+      Data * data = (Data *) ex;
+      vec parscale(n);
+      for (int i=0; i<n; ++i) {
+	parscale[i] = data->parscale[i];
+	data->parscale[i] = 1.0;
+      }
+      NumericMatrix hessian = BFGS::calc_hessian(gr,ex,eps);
+      for (int i=0; i<n; ++i) data->parscale[i] = parscale[i];
+      return hessian;
+    }
+  };
+
+  // template<class Data>
+  // class BFGS3 : public BFGS {
+  // public:
+  //   BFGS3(SEXP sexp) {
+  //     BFGS(); // defaults as per the base class
+  //     data = read_data<Data>(sexp);
+  //   }
+  //   void optim(optimfn fn, optimgr gr, NumericVector init, 
+  // 		     double eps = 1.0e-8) {
+  //     void * ex = (void *) data;
+  //     for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
+  //     BFGS::optim(fn,gr,init,ex,eps);
+  //     for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
+  //     hessian = calc_hessian(gr, ex, eps);
+  //   }
+  //   NumericMatrix calc_hessian(optimgr gr, void * ex, double eps = 1.0e-8) {
+  //     Data * data = (Data *) ex;
+  //     vec parscale(n);
+  //     for (int i=0; i<n; ++i) {
+  // 	parscale[i] = data->parscale[i];
+  // 	data->parscale[i] = 1.0;
+  //     }
+  //     NumericMatrix hessian = BFGS::calc_hessian(gr,ex,eps);
+  //     for (int i=0; i<n; ++i) data->parscale[i] = parscale[i];
+  //     return hessian;
+  //   }
+  //   Data data;
+  // };
+
+  template<class Data>
+  double fminfn(int n, double * beta, void *ex) {
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n);
+    vbeta = vbeta % data->parscale;
+    vec eta = data->X * vbeta;
+    vec h = (data->XD * vbeta) % exp(eta) + data->bhazard;
+    double constraint = 100.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
+    vec eps = h*0.0 + 1.0e-100; 
+    h(h<eps) = eps(h<eps);
+    double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % exp(eta)) - constraint;
+    return -ll;  
+  }
+
+  template<class Data>
+  void fminfn_nlm(int n, double * beta, double * f, void *ex) {
+    *f = fminfn<Data>(n, beta, ex);
+    // for (int i = 0; i < n; ++i)
+    //   Rprintf("beta[%i]=%f\n",i,beta[i]);
+    // Rprintf("fmingn_nlm=%f\n",*f);
+  };
+
+
+  // empty default
+  template<class Smooth>
+  double pfminfn(int n, double * beta, void *ex) { return 0.0; };
+
+  // log H penalty - using penalty matrices from mgcv
+  template<>
+  double pfminfn<SmoothLogH>(int n, double * beta, void *ex) {
+    typedef SmoothLogH Smooth;
+    typedef pstpm2<Smooth> Data;
+    double ll = -fminfn<Data>(n,beta,ex);
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n);
+    vbeta = vbeta % data->parscale;
+    for (size_t i=0; i < data->smooth.size(); ++i) {
+      Smooth smoothi = data->smooth[i];
+      ll -= (data->sp)[i]/2 * 
+	dot(vbeta.subvec(smoothi.first_para,smoothi.last_para),
+	    smoothi.S * vbeta.subvec(smoothi.first_para,smoothi.last_para));
+    }
+    return -ll;  
+  }
+
+  // hazard penalty
+  template<>
+  double pfminfn<SmoothHaz>(int n, double * beta, void *ex) {
+    typedef SmoothHaz Smooth;
+    typedef pstpm2<Smooth> Data;
+    double ll = -fminfn<Data>(n,beta,ex);
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n);
+    vbeta = vbeta % data->parscale;
+    for (size_t i=0; i < data->smooth.size(); ++i) {
+      Smooth obj = data->smooth[i];
+      vec s0 = obj.X0 * vbeta;
+      vec s1 = obj.X1 * vbeta;
+      vec s2 = obj.X2 * vbeta;
+      vec s3 = obj.X3 * vbeta;
+      vec h2 = exp(s0) % (s3 + 3*s1%s2 + s1%s1%s1);
+      ll -= (data->sp)[i]/2 * obj.lambda * sum(obj.w % h2 % h2);
+    }
+    return -ll;  
+  };
+
+  // template<class Smooth>
+  // void pfminfnNlm<Smooth>(int n, double * beta, double * f, void *ex) { };
+
+  // template<>
+  // void pfminfnNlm<SmoothLogH>(int n, double * beta, double * f, void *ex) {
+  //   *f = pfminfn<SmoothLogH>(int n, double * beta, void *ex);
+  // };
+
+  // template<>
+  // void pfminfnNlm<SmoothHaz>(int n, double * beta, double * f, void *ex) {
+  //   *f = pfminfn<SmoothHaz>(int n, double * beta, void *ex);
+  // };
+
+  template<class Data>
+  void grfn(int n, double * beta, double * gr, void *ex) {
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n);
+    vbeta = vbeta % data->parscale;
+    vec etaD = data->XD * vbeta;
+    vec exp_eta = exp(data->X * vbeta);
+    vec h = etaD % exp_eta + data->bhazard;
+    mat X_exp_eta = rmult(data->X,exp_eta);
+    mat X_exp_eta_etaD = rmult(X_exp_eta,etaD);
+    mat XD_exp_eta = rmult(data->XD,exp_eta);
+    mat Xnew = - X_exp_eta + rmult(XD_exp_eta + X_exp_eta_etaD, data->event / h);
+    mat Xconstrained = -X_exp_eta - 2.0*100.0*rmult(XD_exp_eta+X_exp_eta_etaD,h);
+    vec eps = h*0.0 + 1.0e-100; // hack
+    Xnew.rows(h<=eps) = Xconstrained.rows(h<=eps);
+    Xnew = rmult(Xnew,data->wt);
+    // h(h<eps) = eps(h<eps);
+    rowvec vgr = -sum(Xnew,0);
+    for (int i = 0; i<n; ++i) {
+      gr[i] = vgr[i]*data->parscale[i];
+      // Rprintf("gr[%i]=%f\n",i,gr[i]);
+    }
+  }
 
   template<class Smooth>
-  SEXP optim_pstpm2_first(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
-			  SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-			  SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) { 
+  void pgrfn(int n, double * beta, double * gr, void *ex) { };
 
-    NumericVector init = as<NumericVector>(sinit);
-    NumericVector sp = as<NumericVector>(ssp);
-    int n = init.size();
-    NumericMatrix hessian(n,n);
-
-    mat X = as<mat>(sX); 
-    mat XD = as<mat>(sXD); 
-    vec bhazard = as<vec>(sbhazard);
-    vec wt = as<vec>(swt);
-    vec event = as<vec>(sevent);
-    List lsmooth = as<List>(ssmooth);
-    int delayed = as<int>(sdelayed);
-    double reltol_search = as<double>(sreltol_search);
-    double reltol_final = as<double>(sreltol_final);
-    double alpha = as<double>(salpha);
-    int criterion = as<int>(scriterion);
-    int trace = as<int>(strace);
-
-    mat X0(1,1,fill::zeros);
-    vec wt0(1,fill::zeros);
-    if (delayed == 1) {
-      X0 = as<mat>(sX0);
-      wt0 = as<vec>(swt0);
+  template<>
+  void pgrfn<SmoothLogH>(int n, double * beta, double * gr, void *ex) {
+    typedef SmoothLogH Smooth;
+    typedef pstpm2<Smooth> Data;
+    grfn<Data>(n, beta, gr, ex);
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n);
+    vbeta = vbeta % data->parscale;
+    rowvec vgr(n, fill::zeros);
+    for (size_t i=0; i < data->smooth.size(); ++i) {
+      SmoothLogH smoothi = data->smooth[i];
+      vgr.subvec(smoothi.first_para,smoothi.last_para) += 
+	(data->sp)[i] * (smoothi.S * vbeta.subvec(smoothi.first_para,smoothi.last_para)).t();
     }
+    for (int i = 0; i<n; ++i) gr[i] += vgr[i]*data->parscale[i];
+  }
 
-    std::vector<Smooth> smooth = read_smoothers<Smooth>(lsmooth);
+  template<>
+  void pgrfn<SmoothHaz>(int n, double * beta, double * gr, void *ex) {
+    typedef SmoothHaz Smooth;
+    typedef pstpm2<Smooth> Data;
+    grfn<Data>(n, beta, gr, ex);
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n);
+    vbeta = vbeta % data->parscale;
+    rowvec vgr(n, fill::zeros);
+    for (size_t i=0; i < data->smooth.size(); ++i) {
+      Smooth obj = data->smooth[i];
+      vec s0 = obj.X0 * vbeta;
+      vec s1 = obj.X1 * vbeta;
+      vec s2 = obj.X2 * vbeta;
+      vec s3 = obj.X3 * vbeta;
+      vec h2 = exp(s0) % (s3 + 3*s1%s2 + s1%s1%s1);
+      mat dh2sq_dbeta = 
+	2*lmult(h2 % exp(s0),
+		obj.X3+3*(rmult(obj.X1,s2)+rmult(obj.X2,s1))+3*lmult(s1%s1,obj.X1))+
+	2*lmult(h2 % h2,obj.X0);
+      vgr += (data->sp)[i]*obj.lambda*sum(lmult(obj.w, dh2sq_dbeta),0);
+    }
+    for (int i = 0; i<n; ++i) gr[i] += vgr[i] * data->parscale[i];
+  }
 
-    pstpm2<Smooth> data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, criterion, trace, reltol_search, smooth};
 
-    double opt_sp = alpha * exp(Brent_fmin(log(0.001),log(100.0),&pstpm2_step_first<Smooth>,&data,1.0e-2));
-    data.sp[0] = opt_sp;
+  RcppExport SEXP optim_stpm2(SEXP args) {
+
+    stpm2 data(args);
+
+    BFGS2<stpm2> bfgs;
+    bfgs.reltol = data.reltol;
+    bfgs.optim(fminfn<stpm2>, grfn<stpm2>, data.init, (void *) &data);
+
+    return List::create(_("fail")=bfgs.fail,
+			_("coef")=wrap(bfgs.coef),
+			_("hessian")=wrap(bfgs.hessian));
+  }
+
+
+  RcppExport SEXP optim_stpm2_nlm(SEXP args) {
+
+    stpm2 data(args);
+
+    data.init = ew_div(data.init,data.parscale);
+
+    Nlm nlm;
+    nlm.gradtl = nlm.steptl = data.reltol;
+    nlm.method=2; nlm.stepmx=0.0;
+    nlm.optim(& fminfn_nlm<stpm2>, & grfn<stpm2>, data.init, (void *) &data);
+
+    nlm.coef = ew_mult(nlm.coef, data.parscale);
+
+    return List::create(_("itrmcd")=wrap(nlm.itrmcd),
+			_("niter")=wrap(nlm.itncnt),
+			_("coef")=wrap(nlm.coef),
+			_("hessian")=wrap(nlm.hessian));
+  }
+
+
+  template<class Smooth>
+  double pstpm2_step_first(double logsp, void * args) {
+    typedef pstpm2<Smooth> Data;
+    Data * data = (Data *) args;
+
+    data->sp[0] = exp(logsp);
 
     BFGS bfgs;
+    bfgs.reltol = data->reltol;
+
+    bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data->init, (void *) data);
+
+    NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, (void *) data);
+
+    double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
+    double negll = bfgs.calc_objective(fminfn<Data>,(void *) data);
+    double gcv =  negll + edf;
+    double bic =  negll + edf*log(sum(data->event));
+    data->init = bfgs.coef;
+    if (data->trace > 0)
+      Rprintf("sp=%f\tedf=%f\tnegll=%f\tgcv=%f\tbic=%f\n",data->sp[0],edf,negll,gcv,bic);
+
+    return data->criterion==1 ? gcv : bic;
+  }    
+
+  template<class Smooth>
+  double pstpm2_step_multivariate(int n, double * logsp, void * args) {
+    typedef pstpm2<Smooth> Data;
+    Data * data = (Data *) args;
+
+    for (int i=0; i < data->sp.size(); ++i)
+      data->sp[i] = bound(exp(logsp[i]),0.001,100.0);
+
+    BFGS bfgs; 
+    bfgs.reltol = data->reltol_search;
+
+    bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data->init, (void *) data);
+
+    NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, (void *) data);
+
+    double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
+    double negll = bfgs.calc_objective(fminfn<Data>,(void *) data);
+    double gcv =  negll + edf;
+    double bic =  2.0*negll + edf*log(sum(data->event));
+    data->init = bfgs.coef;
+    if (data->trace > 0) {
+      for (int i = 0; i < data->sp.size(); ++i)
+	Rprintf("sp[%i]=%f\t",i,data->sp[i]);
+      Rprintf("edf=%f\tnegll=%f\tgcv=%f\tbic=%f\n",edf,negll,gcv,bic);
+    }
+    return data->criterion==1 ? gcv : bic;
+  }    
+
+
+  template<class Smooth>
+  SEXP optim_pstpm2_first(SEXP args) { 
+
+    typedef pstpm2<Smooth> Data;
+    Data data(args);
+    int n = data.init.size();
+    NumericMatrix hessian(n,n);
+
+    for (int i=0; i<n; ++i) data.init[i] /= data.parscale[i];
+    double opt_sp = data.alpha * exp(Brent_fmin(log(0.001),log(1000.0),&pstpm2_step_first<Smooth>,&data,1.0e-2));
+    data.sp[0] = opt_sp;
+    for (int i=0; i<n; ++i) data.init[i] *= data.parscale[i];
+
+    BFGS2<Data> bfgs;
     bfgs.coef = data.init;
-    bfgs.reltol = reltol_final;
+    bfgs.reltol = data.reltol;
     bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data);
 
     hessian = bfgs.calc_hessian(pgrfn<Smooth>, (void *) &data);
@@ -357,60 +485,21 @@ namespace rstpm2 {
 
   }
 
-  RcppExport SEXP optim_pstpm2LogH_first(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, 
-					 SEXP swt, SEXP sevent,
-					 SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-					 SEXP ssmooth, SEXP ssp, SEXP sreltol_search, 
-					 SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
-    return optim_pstpm2_first<SmoothLogH>(sinit, sX, sXD, sbhazard, swt, sevent,
-					  sdelayed, strace, sX0, swt0,
-					  ssmooth, ssp, sreltol_search, sreltol_final, salpha, scriterion);
+  RcppExport SEXP optim_pstpm2LogH_first(SEXP args) {
+    return optim_pstpm2_first<SmoothLogH>(args);
   }
 
-  RcppExport SEXP optim_pstpm2Haz_first(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, 
-					SEXP swt, SEXP sevent,
-					SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-					SEXP ssmooth, SEXP ssp, SEXP sreltol_search, 
-					SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
-    return optim_pstpm2_first<SmoothHaz>(sinit, sX, sXD, sbhazard, swt, sevent,
-					 sdelayed, strace, sX0, swt0,
-					 ssmooth, ssp, sreltol_search, sreltol_final, salpha, scriterion);
+  RcppExport SEXP optim_pstpm2Haz_first(SEXP args) {
+    return optim_pstpm2_first<SmoothHaz>(args);
   }
 
   template<class Smooth>
-  SEXP optim_pstpm2_multivariate(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
-  				 SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-  				 SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
+  SEXP optim_pstpm2_multivariate(SEXP args) {
 
-    NumericVector init = as<NumericVector>(sinit);
-    NumericVector sp = as<NumericVector>(ssp);
-    // NumericVector x(init.size()); 
-    int n = init.size();
+    typedef pstpm2<Smooth> Data;
+    Data data(args);
+    int n = data.init.size();
     NumericMatrix hessian(n,n);
-
-    mat X = as<mat>(sX); 
-    mat XD = as<mat>(sXD); 
-    vec bhazard = as<vec>(sbhazard);
-    vec wt = as<vec>(swt);
-    vec event = as<vec>(sevent);
-    List lsmooth = as<List>(ssmooth);
-    int delayed = as<int>(sdelayed);
-    int criterion = as<int>(scriterion);
-    int trace = as<int>(strace);
-    double reltol_search = as<double>(sreltol_search);
-    double reltol_final = as<double>(sreltol_final);
-    double alpha = as<double>(salpha);
-
-    mat X0(1,1,fill::zeros);
-    vec wt0(1,fill::zeros);
-    if (delayed == 1) {
-      X0 = as<mat>(sX0);
-      wt0 = as<vec>(swt0);
-    }
-
-    std::vector<Smooth> smooth = read_smoothers<Smooth>(lsmooth);
-
-    pstpm2<Smooth> data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, criterion, trace, reltol_search, smooth};
 
     NelderMead nm;
     nm.reltol = 1.0e-4;
@@ -418,11 +507,11 @@ namespace rstpm2 {
     nm.optim(pstpm2_step_multivariate<Smooth>, data.sp, (void *) &data);
 
     for (int i=0; i < nm.coef.size(); ++i)
-      data.sp[i] = alpha * exp(nm.coef[i]); // same alpha for all smoothers??
+      data.sp[i] = data.alpha * exp(nm.coef[i]); // same alpha for all smoothers??
 
-    BFGS bfgs;
+    BFGS2<Data> bfgs;
     bfgs.coef = data.init;
-    bfgs.reltol = reltol_final;
+    bfgs.reltol = data.reltol;
     bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data);
 
     hessian = bfgs.calc_hessian(pgrfn<Smooth>, (void *) &data);
@@ -433,152 +522,76 @@ namespace rstpm2 {
 
   }
 
-  RcppExport SEXP optim_pstpm2LogH_multivariate(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
-  						SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-  						SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
-    return optim_pstpm2_multivariate<SmoothLogH>(sinit, sX, sXD, sbhazard, swt, sevent,
-  						 sdelayed, strace, sX0, swt0,
-  						 ssmooth, ssp, sreltol_search, sreltol_final, salpha, scriterion);
+  RcppExport SEXP optim_pstpm2LogH_multivariate(SEXP args) {
+    return optim_pstpm2_multivariate<SmoothLogH>(args);
   }
 
-  RcppExport SEXP optim_pstpm2Haz_multivariate(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
-  				 SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-  					       SEXP ssmooth, SEXP ssp, SEXP sreltol_search, SEXP sreltol_final, SEXP salpha, SEXP scriterion) {
-    return optim_pstpm2_multivariate<SmoothHaz>(sinit, sX, sXD, sbhazard, swt, sevent,
-  						sdelayed, strace, sX0, swt0,
-  						ssmooth, ssp, sreltol_search, sreltol_final, salpha, scriterion);
+  RcppExport SEXP optim_pstpm2Haz_multivariate(SEXP args) {
+    return optim_pstpm2_multivariate<SmoothHaz>(args);
   }
 
 
   template<class Smooth>
-  SEXP optim_pstpm2_fixedsp(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
-			    SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-			    SEXP ssmooth, SEXP ssp, SEXP sreltol) { 
+  SEXP optim_pstpm2_fixedsp(SEXP args) { 
 
-    NumericVector init = as<NumericVector>(sinit);
-    NumericVector sp = as<NumericVector>(ssp);
-    int n = init.size();
+    typedef pstpm2<Smooth> Data;
+    Data data(args);
+    int n = data.init.size();
     NumericMatrix hessian(n,n);
-
-    mat X = as<mat>(sX); 
-    mat XD = as<mat>(sXD); 
-    vec bhazard = as<vec>(sbhazard);
-    vec wt = as<vec>(swt);
-    vec event = as<vec>(sevent);
-    List lsmooth = as<List>(ssmooth);
-    int delayed = as<int>(sdelayed);
-    int trace = as<int>(strace);
-    double reltol = as<double>(sreltol);
-
-    mat X0(1,1,fill::zeros);
-    vec wt0(1,fill::zeros);
-    if (delayed == 1) {
-      X0 = as<mat>(sX0);
-      wt0 = as<vec>(swt0);
-    }
-
-    std::vector<Smooth> smooth = read_smoothers<Smooth>(lsmooth);
-
-    pstpm2<Smooth> data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, 1, trace, reltol, smooth};
-
+    for (int i=0; i<n; ++i) data.init[i] /= data.parscale[i];
     BFGS bfgs;
-    bfgs.coef = init;
-    bfgs.reltol = reltol;
+    bfgs.coef = data.init;
+    bfgs.reltol = data.reltol;
     bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data);
 
-    hessian = bfgs.calc_hessian(pgrfn<Smooth>, (void *) &data);
+    for (int i=0; i<n; ++i) bfgs.coef[i] *= data.parscale[i];
+    //hessian = bfgs.calc_hessian(pgrfn<Smooth>, (void *) &data);
 
-    return List::create(_("sp")=wrap(sp),
+    return List::create(_("sp")=wrap(data.sp),
 			_("coef")=wrap(bfgs.coef),
-			_("hessian")=wrap(hessian));
+			_("hessian")=wrap(bfgs.hessian));
 
   }
 
-  RcppExport SEXP optim_pstpm2LogH_fixedsp(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, 
-					 SEXP swt, SEXP sevent,
-					 SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-					 SEXP ssmooth, SEXP ssp, 
-					 SEXP sreltol) {
-    return optim_pstpm2_fixedsp<SmoothLogH>(sinit, sX, sXD, sbhazard, swt, sevent,
-					    sdelayed, strace, sX0, swt0,
-					    ssmooth, ssp, sreltol);
+  RcppExport SEXP optim_pstpm2LogH_fixedsp(SEXP args) {
+    return optim_pstpm2_fixedsp<SmoothLogH>(args);
   }
 
-  RcppExport SEXP optim_pstpm2Haz_fixedsp(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, 
-					 SEXP swt, SEXP sevent,
-					 SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-					 SEXP ssmooth, SEXP ssp, 
-					 SEXP sreltol) {
-    return optim_pstpm2_fixedsp<SmoothHaz>(sinit, sX, sXD, sbhazard, swt, sevent,
-					   sdelayed, strace, sX0, swt0,
-					   ssmooth, ssp, sreltol);
+  RcppExport SEXP optim_pstpm2Haz_fixedsp(SEXP args) {
+    return optim_pstpm2_fixedsp<SmoothHaz>(args);
   }
 
 
 
   template<class Smooth>
-  SEXP test_pstpm2(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, SEXP swt, SEXP sevent,
-		   SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-		   SEXP ssmooth, SEXP ssp, SEXP sreltol) { 
+  SEXP test_pstpm2(SEXP args) { 
 
-    NumericVector init = as<NumericVector>(sinit);
-    NumericVector sp = as<NumericVector>(ssp);
-    int n = init.size();
+    pstpm2<Smooth> data(args);
+    int n = data.init.size();
     NumericMatrix hessian(n,n);
 
-    mat X = as<mat>(sX); 
-    mat XD = as<mat>(sXD); 
-    vec bhazard = as<vec>(sbhazard);
-    vec wt = as<vec>(swt);
-    vec event = as<vec>(sevent);
-    List lsmooth = as<List>(ssmooth);
-    int delayed = as<int>(sdelayed);
-    int trace = as<int>(strace);
-    double reltol = as<double>(sreltol);
-
-    mat X0(1,1,fill::zeros);
-    vec wt0(1,fill::zeros);
-    if (delayed == 1) {
-      X0 = as<mat>(sX0);
-      wt0 = as<vec>(swt0);
-    }
-
-    std::vector<Smooth> smooth = read_smoothers<Smooth>(lsmooth);
-
-    pstpm2<Smooth> data = {sp, init, X, XD, X0, bhazard, wt, event, wt0, delayed, 1, trace, reltol, smooth};
+    NumericVector init = ew_div(data.init,data.parscale);
 
     double pfmin = pfminfn<Smooth>(n,&init[0],(void *) &data);
     NumericVector gr(n);
     pgrfn<Smooth>(n,&init[0], &gr[0], (void *) &data);
 
-    return List::create(_("sp")=wrap(sp),
+    init = ew_mult(init,data.parscale);
+
+    return List::create(_("sp")=wrap(data.sp),
 			_("pfmin")=wrap(pfmin),
 			_("gr")=wrap(gr)
 			);
 
   }
 
-  RcppExport SEXP test_pstpm2LogH(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, 
-				  SEXP swt, SEXP sevent,
-				  SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-				  SEXP ssmooth, SEXP ssp, 
-				  SEXP sreltol) {
-    return test_pstpm2<SmoothLogH>(sinit, sX, sXD, sbhazard, swt, sevent,
-				   sdelayed, strace, sX0, swt0,
-				   ssmooth, ssp, sreltol);
+  RcppExport SEXP test_pstpm2LogH(SEXP args) {
+    return test_pstpm2<SmoothLogH>(args);
   }
 
-  RcppExport SEXP test_pstpm2Haz(SEXP sinit, SEXP sX, SEXP sXD, SEXP sbhazard, 
-				 SEXP swt, SEXP sevent,
-				 SEXP sdelayed, SEXP strace, SEXP sX0, SEXP swt0,
-				 SEXP ssmooth, SEXP ssp, 
-				 SEXP sreltol) {
-    return test_pstpm2<SmoothHaz>(sinit, sX, sXD, sbhazard, swt, sevent,
-				  sdelayed, strace, sX0, swt0,
-				  ssmooth, ssp, sreltol);
+  RcppExport SEXP test_pstpm2Haz(SEXP args) {
+    return test_pstpm2<SmoothHaz>(args);
   }
-
-
 
   // R CMD INSTALL ~/src/R/microsimulation
   // R -q -e "require(microsimulation); .Call('test_nmmin',1:2,PACKAGE='microsimulation')"

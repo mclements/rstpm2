@@ -428,7 +428,7 @@ stpm2 <- function(formula, data,
                      control = list(parscale = 0.1, maxit = 300), init = FALSE,
                      coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE, use.rcpp= TRUE,
-                  reltol=1.0e-8,
+                  reltol=1.0e-8, 
                      contrasts = NULL, subset = NULL, ...)
   {
     ## parse the event expression
@@ -519,7 +519,7 @@ stpm2 <- function(formula, data,
     dataEvents <- data[event,]
     lm.call$data <- quote(dataEvents) # events only
     lm.obj <- eval(lm.call)
-    if (!init) {
+    if (is.logical(init) && !init) {
       init <- coef(lm.obj)
     }
     ##
@@ -585,10 +585,19 @@ stpm2 <- function(formula, data,
         out <- out*wt
         return(out)
     }
+    if (!is.null(control) && "parscale" %in% names(control)) {
+      if (length(control$parscale)==1)
+        control$parscale <- rep(control$parscale,length(init))
+      if (is.null(names(control$parscale)))
+        names(control$parscale) <- names(init)
+    }
+    parnames(negll) <- parnames(gradnegll) <- names(init)
     rcpp_stpm2 <- function() {
         stopifnot(!delayed)
-        .Call("optim_stpm2",init,X,XD,bhazard,wt,ifelse(event,1,0),
-              if (delayed) 1 else 0, X0, wt0, reltol,
+        parscale <- if (!is.null(control$parscale)) control$parscale else rep(1,length(init))
+        names(parscale) <- names(init)
+        .Call("optim_stpm2",list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
+              delayed=if (delayed) 1 else 0, X0=X0, wt0=wt0, parscale=parscale, reltol=reltol),
               package="rstpm2")
     }
     analyticalHessian <- function(beta) {
@@ -613,20 +622,14 @@ stpm2 <- function(formula, data,
         hess
     }
     ## MLE
-    if (!is.null(control) && "parscale" %in% names(control)) {
-      if (length(control$parscale)==1)
-        control$parscale <- rep(control$parscale,length(init))
-      if (is.null(names(control$parscale)))
-        names(control$parscale) <- names(init)
-    }
-    parnames(negll) <- parnames(gradnegll) <- names(init)
     if (use.rcpp) {
         fit <- rcpp_stpm2()
-        coef <- fit$coef
+        coef <- as.vector(fit$coef)
         hessian <- fit$hessian
         names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
         mle2 <- mle2(negll, coef, vecpar=TRUE, control=control, gr=gradnegll, ..., eval.only=TRUE)
         mle2@vcov <- solve(hessian)
+        mle2@details$convergence <- fit$fail
     } else {
         mle2 <- if (use.gr)
             mle2(negll,init,vecpar=TRUE, control=control, gr=gradnegll, ...)
@@ -1024,7 +1027,7 @@ pstpm2 <- function(formula, data,
     dataEvents <- data[event,]
     gam.call$data <- quote(dataEvents) # events only
     gam.obj <- eval(gam.call)
-    if (!init) {
+    if (is.logical(init) && !init) {
       init <- coef(gam.obj)
     }
     ##
@@ -1164,40 +1167,40 @@ pstpm2 <- function(formula, data,
         control$parscale <- rep(control$parscale,length(init))
       if (is.null(names(control$parscale)))
         names(control$parscale) <- names(init)
+    } else {
+        if(is.null(control)) 
+            control <- list()
+        control$parscale <- rep(1,length(init))
+        names(control$parscale) <- names(init)
     }
     rcpp_optim <- function() {
         ## stopifnot(!delayed)
+        args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
+                     delayed=if (delayed) 1 else 0, X0=X0, wt0=wt0, parscale=control$parscale,
+                     smooth=if(penalty == "logH") gam.obj$smooth else design,
+                     sp=sp, reltol_search=reltol$search, reltol=reltol$final, trace=trace,
+                     alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2))
         if (!no.sp) { # fixed sp as specified
           if (penalty == "logH")
-              .Call("optim_pstpm2LogH_fixedsp", init, X, XD, bhazard, 
-                    wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
-                    gam.obj$smooth, sp, reltol$final, package = "rstpm2") else
-          .Call("optim_pstpm2Haz_fixedsp", init, X, XD, bhazard, 
-                wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
-                design, sp, reltol$final, package = "rstpm2")
+              .Call("optim_pstpm2LogH_fixedsp", args, package = "rstpm2") else
+          .Call("optim_pstpm2Haz_fixedsp", args, package = "rstpm2")
         }
         else if (length(sp)>1) {
             if (penalty == "logH")
-            .Call("optim_pstpm2LogH_multivariate", init, X, XD, bhazard, 
-                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
-                  gam.obj$smooth, sp, reltol$search, reltol$final, alpha, switch(criterion,GCV=1,BIC=2), package = "rstpm2") else
-            .Call("optim_pstpm2Haz_multivariate", init, X, XD, bhazard, 
-                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
-                  design, sp, reltol$search, reltol$final, alpha, if (criterion=="BIC") 2 else 1, package = "rstpm2")
+            .Call("optim_pstpm2LogH_multivariate", args, package = "rstpm2") else
+            .Call("optim_pstpm2Haz_multivariate", args, package = "rstpm2")
         } else {
             if (penalty == "logH")
-            .Call("optim_pstpm2LogH_first", init, X, XD, bhazard, 
-                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
-                  gam.obj$smooth, sp, reltol$search, reltol$final,alpha,  if (criterion=="BIC") 2 else 1, package = "rstpm2") else
-            .Call("optim_pstpm2Haz_first", init, X, XD, bhazard, 
-                  wt, ifelse(event, 1, 0), if (delayed) 1 else 0, trace, X0, wt0, 
-                  design, sp, reltol$search, reltol$final, alpha, if (criterion=="BIC") 2 else 1, package = "rstpm2")
+            .Call("optim_pstpm2LogH_first", args, package = "rstpm2") else
+            .Call("optim_pstpm2Haz_first", args, package = "rstpm2")
         }
     }
     if (use.rcpp) {
         fit <- rcpp_optim()
+        fit$coef <- as.vector(fit$coef)
+        names(fit$coef) <- names(init)
         init <- fit$coef
-        if (!no.sp) sp <- fit$sp # alpha?
+        if (!no.sp) sp <- fit$sp # ignores alpha
     }
     negll <- function(beta) negllsp(beta,sp)
     gradnegll <- function(beta) gradnegllsp(beta,sp)

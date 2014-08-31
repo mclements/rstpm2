@@ -5,6 +5,8 @@
 #include <float.h> /* DBL_EPSILON */
 #include "c_optim.h"
 
+// #include "uncmin.cpp"
+
 namespace rstpm2 {
 
   using namespace Rcpp;
@@ -38,13 +40,11 @@ namespace rstpm2 {
   //       int maxit, int trace, int *mask,
   //       double abstol, double reltol, int nREPORT, void *ex,
   //       int *fncount, int *grcount, int *fail)
-
   BFGS::BFGS(int trace, int maxit, 
 	 double abstol,
 	 double reltol, int report) : 
       trace(trace), maxit(maxit), report(report), abstol(abstol), reltol(reltol) { }
-  void BFGS::optim(optimfn fn, optimgr gr, NumericVector init, void * ex,
-	       double eps) {
+  void BFGS::optim(optimfn fn, optimgr gr, NumericVector init, void * ex, double eps) {
       n = init.size();
       int mask[n]; for (int i=0; i<n; ++i) mask[i] = 1;
       vmmin(n, &init[0], &Fmin, fn, gr, maxit, trace, mask, abstol, reltol, report,
@@ -81,6 +81,89 @@ namespace rstpm2 {
 	    hess(i,j) = hess(j,i) = (hess(i,j) + hess(j,i)) / 2.0;
       return wrap(hess);
     }
+
+
+// void
+// optif9(int nr, int n, double *x, fcn_p fcn, fcn_p d1fcn, d2fcn_p d2fcn,
+//        void *state, double *typsiz, double fscale, int method,
+//        int iexp, int *msg, int ndigit, int itnlim, int iagflg, int iahflg,
+//        double dlt, double gradtl, double stepmx, double steptl,
+//        double *xpls, double *fpls, double *gpls, int *itrmcd, double *a,
+//        double *wrk, int *itncnt)
+  Nlm::Nlm(double fscale,
+	   int method,
+	   int iexp,
+	   int msg,
+	   int ndigit,
+	   int itnlim,
+	   int iagflg,
+	   int iahflg,
+	   double dlt,
+	   double gradtl,
+	   double stepmx,
+	   double steptl,
+	   int itrmcd,
+	   int itncnt
+	   ) : fscale(fscale), method(method), iexp(iexp), msg(msg),
+	       ndigit(ndigit), itnlim(itnlim), iagflg(iagflg), 
+	       iahflg(iahflg), dlt(dlt), gradtl(gradtl), stepmx(stepmx),
+	       steptl(steptl), itrmcd(itrmcd), itncnt(itncnt) { }
+  void Nlm::optim(fcn_p fcn, fcn_p d1fcn, NumericVector init, void * state) {
+      int n;
+      n = init.size();
+      double typsize[n], norm, fpls, gpls[n], a[n*n], wrk[n*8];
+      NumericVector xpls(n);
+      for (int i=0; i<n; ++i) typsize[i] = 1.0;
+      // stepmax calculations
+      if (stepmx == -1.0) {
+	norm = 0.0;
+	for (int i=0; i<n; ++i)
+	  norm += init[i]*init[i]/typsize[i]/typsize[i];
+	norm = sqrt(norm);
+	stepmx = norm < 1.0 ? 1000.0 : norm*1000.0;
+      }
+      // call the optimizer
+      optif9(n, n, &init[0], fcn, d1fcn, (d2fcn_p) 0, state, typsize, fscale, method, 
+	     iexp, &msg, ndigit, itnlim, iagflg, iahflg,
+	     dlt, gradtl, stepmx, steptl,
+	     &xpls[0], &fpls, gpls, &itrmcd, a,
+	     wrk, &itncnt);
+      coef = clone(xpls);
+      hessian = calc_hessian(d1fcn, state, gradtl);
+    }
+  double Nlm::calc_objective(fcn_p fn, NumericVector coef, void * ex) {
+    double f;
+    fn(coef.size(), &coef[0], &f, ex);
+    return f;
+  }
+  double Nlm::calc_objective(fcn_p fn, void * ex) {
+    double f;
+    fn(coef.size(), &coef[0], &f, ex);
+    return f;
+  }
+  NumericMatrix Nlm::calc_hessian(fcn_p gr, void * ex, double eps) {
+      int n = coef.size();
+      NumericVector df1(clone(coef));
+      NumericVector df2(clone(coef));
+      NumericMatrix hess(n,n);
+      double tmp;
+      for(int i=0; i<n; ++i) {
+	tmp = coef[i];
+	coef[i] += eps;
+	gr(n, &coef[0], &df1[0], ex);
+	coef[i] = tmp - eps;
+	gr(n, &coef[0], &df2[0], ex);
+	for (int j=i; j<n; ++j)
+	  hess(j,i) = hess(i,j) = (df1[j] - df2[j]) / (2*eps);
+	coef[i] = tmp;
+      }
+      return wrap(hess);
+  }
+  void Nlm::set_print_level(int print_level) {
+    if (print_level == 0) msg = 9;
+    if (print_level == 1) msg = 1;
+    if (print_level >= 2) msg = 17;
+  }
 
 double Brent_fmin(double ax, double bx, double (*f)(double, void *),
 		  void *info, double tol)
