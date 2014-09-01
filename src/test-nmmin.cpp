@@ -8,6 +8,10 @@ namespace rstpm2 {
   using namespace Rcpp;
   using namespace arma;
 
+  // typedefs
+
+  typedef bool constraintfn(int, double *, void *);
+
   // Hadamard element-wise multiplication for the _columns_ of a matrix with a vector
 
   mat rmult(mat m, vec v) {
@@ -78,12 +82,14 @@ namespace rstpm2 {
       }
       parscale = as<vec>(list["parscale"]);
       reltol = as<double>(list["reltol"]);
+      kappa = as<double>(list["kappa"]);
+      trace = as<int>(list["trace"]);
     }
     NumericVector init;
     mat X, XD,X0; 
     vec bhazard,wt,wt0,event,parscale;
-    double reltol;
-    int delayed;
+    double reltol, kappa;
+    int delayed, trace;
   };
 
   struct SmoothLogH {
@@ -138,9 +144,6 @@ namespace rstpm2 {
   class pstpm2 : public stpm2 {
   public:
     pstpm2(SEXP sexp) : stpm2(sexp) {
-      // stpm2::stpm2(sexp);
-      //int n = init.size();
-      //hessian.set_size(n,n);
       List list = as<List>(sexp);
       List lsmooth = as<List>(list["smooth"]);
       sp = as<NumericVector>(list["sp"]);
@@ -148,26 +151,22 @@ namespace rstpm2 {
       reltol = as<double>(list["reltol"]);
       alpha = as<double>(list["alpha"]);
       criterion = as<int>(list["criterion"]);
-      trace = as<int>(list["trace"]);
       smooth = read_smoothers<Smooth>(lsmooth);
     }
     NumericVector sp;
-    NumericMatrix hessian; // move to the optimisation class?
     double alpha, reltol_search; 
-    int criterion, trace;
+    int criterion;
     std::vector<Smooth> smooth;
   };
 
-  // template<class Smoother>
-  // struct pstpm2 {
-  //   NumericVector sp,init;
-  //   mat X, XD, X0;
-  //   vec bhazard,wt,event,wt0,parscale;
-  //   int delayed, criterion, trace;
-  //   double reltol;
-  //   std::vector<Smoother> smooth;
-  // };
 
+
+  /**
+     Extension to the BFGS class
+
+     optim() and calc_hessian() assume that data->parscale is an array/vector/NumericVector
+     optimWithConstraint() further assumes that data->kappa is a double with an initial value
+   */
   template<class Data>
   class BFGS2 : public BFGS {
   public:
@@ -177,6 +176,20 @@ namespace rstpm2 {
       n = init.size();
       for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
       BFGS::optim(fn,gr,init,ex,eps);
+      for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
+      hessian = calc_hessian(gr, ex, eps);
+    }
+    void optimWithConstraint(optimfn fn, optimgr gr, NumericVector init, void * ex, constraintfn constraint,
+		     double eps = 1.0e-8) {
+      Data * data = (Data *) ex;
+      n = init.size();
+      for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
+      bool satisfied;
+      do {
+	BFGS::optim(fn,gr,init,ex,eps);
+	satisfied = constraint(n,&coef[0],ex);
+	if (!satisfied) data->kappa *= 2.0;
+      } while ((!satisfied) && data->kappa < 1.0e5);
       for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
       hessian = calc_hessian(gr, ex, eps);
     }
@@ -193,35 +206,6 @@ namespace rstpm2 {
     }
   };
 
-  // template<class Data>
-  // class BFGS3 : public BFGS {
-  // public:
-  //   BFGS3(SEXP sexp) {
-  //     BFGS(); // defaults as per the base class
-  //     data = read_data<Data>(sexp);
-  //   }
-  //   void optim(optimfn fn, optimgr gr, NumericVector init, 
-  // 		     double eps = 1.0e-8) {
-  //     void * ex = (void *) data;
-  //     for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
-  //     BFGS::optim(fn,gr,init,ex,eps);
-  //     for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
-  //     hessian = calc_hessian(gr, ex, eps);
-  //   }
-  //   NumericMatrix calc_hessian(optimgr gr, void * ex, double eps = 1.0e-8) {
-  //     Data * data = (Data *) ex;
-  //     vec parscale(n);
-  //     for (int i=0; i<n; ++i) {
-  // 	parscale[i] = data->parscale[i];
-  // 	data->parscale[i] = 1.0;
-  //     }
-  //     NumericMatrix hessian = BFGS::calc_hessian(gr,ex,eps);
-  //     for (int i=0; i<n; ++i) data->parscale[i] = parscale[i];
-  //     return hessian;
-  //   }
-  //   Data data;
-  // };
-
   template<class Data>
   double fminfn(int n, double * beta, void *ex) {
     Data * data = (Data *) ex;
@@ -229,7 +213,7 @@ namespace rstpm2 {
     vbeta = vbeta % data->parscale;
     vec eta = data->X * vbeta;
     vec h = (data->XD * vbeta) % exp(eta) + data->bhazard;
-    double constraint = 100.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
+    double constraint = data->kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
     vec eps = h*0.0 + 1.0e-100; 
     h(h<eps) = eps(h<eps);
     double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % exp(eta)) - constraint;
@@ -237,11 +221,18 @@ namespace rstpm2 {
   }
 
   template<class Data>
+  bool fminfn_constraint(int n, double * beta, void *ex) {
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n);
+    vbeta = vbeta % data->parscale;
+    vec eta = data->X * vbeta;
+    vec h = (data->XD * vbeta) % exp(eta) + data->bhazard;
+    return all(h>0);
+  }
+
+  template<class Data>
   void fminfn_nlm(int n, double * beta, double * f, void *ex) {
     *f = fminfn<Data>(n, beta, ex);
-    // for (int i = 0; i < n; ++i)
-    //   Rprintf("beta[%i]=%f\n",i,beta[i]);
-    // Rprintf("fmingn_nlm=%f\n",*f);
   };
 
 
@@ -288,19 +279,6 @@ namespace rstpm2 {
     return -ll;  
   };
 
-  // template<class Smooth>
-  // void pfminfnNlm<Smooth>(int n, double * beta, double * f, void *ex) { };
-
-  // template<>
-  // void pfminfnNlm<SmoothLogH>(int n, double * beta, double * f, void *ex) {
-  //   *f = pfminfn<SmoothLogH>(int n, double * beta, void *ex);
-  // };
-
-  // template<>
-  // void pfminfnNlm<SmoothHaz>(int n, double * beta, double * f, void *ex) {
-  //   *f = pfminfn<SmoothHaz>(int n, double * beta, void *ex);
-  // };
-
   template<class Data>
   void grfn(int n, double * beta, double * gr, void *ex) {
     Data * data = (Data *) ex;
@@ -313,7 +291,7 @@ namespace rstpm2 {
     mat X_exp_eta_etaD = rmult(X_exp_eta,etaD);
     mat XD_exp_eta = rmult(data->XD,exp_eta);
     mat Xnew = - X_exp_eta + rmult(XD_exp_eta + X_exp_eta_etaD, data->event / h);
-    mat Xconstrained = -X_exp_eta - 2.0*100.0*rmult(XD_exp_eta+X_exp_eta_etaD,h);
+    mat Xconstrained = -X_exp_eta - data->kappa*rmult(XD_exp_eta+X_exp_eta_etaD,h);
     vec eps = h*0.0 + 1.0e-100; // hack
     Xnew.rows(h<=eps) = Xconstrained.rows(h<=eps);
     Xnew = rmult(Xnew,data->wt);
@@ -321,7 +299,6 @@ namespace rstpm2 {
     rowvec vgr = -sum(Xnew,0);
     for (int i = 0; i<n; ++i) {
       gr[i] = vgr[i]*data->parscale[i];
-      // Rprintf("gr[%i]=%f\n",i,gr[i]);
     }
   }
 
@@ -377,7 +354,7 @@ namespace rstpm2 {
 
     BFGS2<stpm2> bfgs;
     bfgs.reltol = data.reltol;
-    bfgs.optim(fminfn<stpm2>, grfn<stpm2>, data.init, (void *) &data);
+    bfgs.optimWithConstraint(fminfn<stpm2>, grfn<stpm2>, data.init, (void *) &data, fminfn_constraint<stpm2>);
 
     return List::create(_("fail")=bfgs.fail,
 			_("coef")=wrap(bfgs.coef),
@@ -390,11 +367,17 @@ namespace rstpm2 {
     stpm2 data(args);
 
     data.init = ew_div(data.init,data.parscale);
-
+    int n = data.init.size();
+    
     Nlm nlm;
     nlm.gradtl = nlm.steptl = data.reltol;
-    nlm.method=2; nlm.stepmx=0.0;
-    nlm.optim(& fminfn_nlm<stpm2>, & grfn<stpm2>, data.init, (void *) &data);
+    //nlm.method=2; nlm.stepmx=0.0;
+    bool satisfied;
+    do {
+      nlm.optim(& fminfn_nlm<stpm2>, & grfn<stpm2>, data.init, (void *) &data);
+      satisfied = fminfn_constraint<stpm2>(n,&nlm.coef[0],(void *) &data);
+      if (!satisfied) data.kappa *= 2.0;
+    } while (!satisfied && data.kappa<1.0e5);
 
     nlm.coef = ew_mult(nlm.coef, data.parscale);
 
@@ -406,49 +389,62 @@ namespace rstpm2 {
 
 
   template<class Smooth>
-  double pstpm2_step_first(double logsp, void * args) {
+  double pstpm2_step_first(double logsp, void * ex) {
     typedef pstpm2<Smooth> Data;
-    Data * data = (Data *) args;
+    Data * data = (Data *) ex;
 
     data->sp[0] = exp(logsp);
+    int n = data->init.size();
 
+    // Do not use BFGS2 - this is called by Brent and we don't want to parscale.
     BFGS bfgs;
     bfgs.reltol = data->reltol;
 
-    bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data->init, (void *) data);
+    bool satisfied;
+    do {
+      bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data->init, ex);
+      satisfied = fminfn_constraint<Data>(n, &bfgs.coef[0], ex);
+      if (!satisfied) data->kappa *= 2.0;
+    } while ((!satisfied) && data->kappa < 1.0e5);
 
-    NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, (void *) data);
+    NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, ex);
 
     double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
-    double negll = bfgs.calc_objective(fminfn<Data>,(void *) data);
-    double gcv =  negll + edf;
-    double bic =  negll + edf*log(sum(data->event));
+    double negll = bfgs.calc_objective(fminfn<Data>,ex);
+    double gcv =  negll + data->alpha*edf;
+    double bic =  negll + data->alpha*edf*log(sum(data->event));
     data->init = bfgs.coef;
     if (data->trace > 0)
-      Rprintf("sp=%f\tedf=%f\tnegll=%f\tgcv=%f\tbic=%f\n",data->sp[0],edf,negll,gcv,bic);
+      Rprintf("sp=%f\tedf=%f\tnegll=%f\tgcv=%f\tbic=%f\talpha=%f\n",data->sp[0],edf,negll,gcv,bic,data->alpha);
 
     return data->criterion==1 ? gcv : bic;
   }    
 
   template<class Smooth>
-  double pstpm2_step_multivariate(int n, double * logsp, void * args) {
+  double pstpm2_step_multivariate(int n, double * logsp, void * ex) {
     typedef pstpm2<Smooth> Data;
-    Data * data = (Data *) args;
+    Data * data = (Data *) ex;
 
     for (int i=0; i < data->sp.size(); ++i)
       data->sp[i] = bound(exp(logsp[i]),0.001,100.0);
 
+    // do not use BFGS2 - this is called by Brent and we don't want to parscale
     BFGS bfgs; 
     bfgs.reltol = data->reltol_search;
 
-    bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data->init, (void *) data);
+    bool satisfied;
+    do {
+      bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data->init, ex);
+      satisfied = fminfn_constraint<Data>(n, &bfgs.coef[0], ex);
+      if (!satisfied) data->kappa *= 2.0;
+    } while ((!satisfied) && data->kappa < 1.0e5);
 
-    NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, (void *) data);
+    NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, ex);
 
     double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
-    double negll = bfgs.calc_objective(fminfn<Data>,(void *) data);
-    double gcv =  negll + edf;
-    double bic =  2.0*negll + edf*log(sum(data->event));
+    double negll = bfgs.calc_objective(fminfn<Data>, ex);
+    double gcv =  negll + data->alpha*edf;
+    double bic =  2.0*negll + data->alpha*edf*log(sum(data->event));
     data->init = bfgs.coef;
     if (data->trace > 0) {
       for (int i = 0; i < data->sp.size(); ++i)
@@ -465,10 +461,9 @@ namespace rstpm2 {
     typedef pstpm2<Smooth> Data;
     Data data(args);
     int n = data.init.size();
-    NumericMatrix hessian(n,n);
 
     for (int i=0; i<n; ++i) data.init[i] /= data.parscale[i];
-    double opt_sp = data.alpha * exp(Brent_fmin(log(0.001),log(1000.0),&pstpm2_step_first<Smooth>,&data,1.0e-2));
+    double opt_sp = exp(Brent_fmin(log(0.001),log(1000.0),&pstpm2_step_first<Smooth>,&data,1.0e-2));
     data.sp[0] = opt_sp;
     for (int i=0; i<n; ++i) data.init[i] *= data.parscale[i];
 
@@ -477,11 +472,9 @@ namespace rstpm2 {
     bfgs.reltol = data.reltol;
     bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data);
 
-    hessian = bfgs.calc_hessian(pgrfn<Smooth>, (void *) &data);
-
     return List::create(_("sp")=wrap(opt_sp),
 			_("coef")=wrap(bfgs.coef),
-			_("hessian")=wrap(hessian));
+			_("hessian")=wrap(bfgs.hessian));
 
   }
 
@@ -499,26 +492,32 @@ namespace rstpm2 {
     typedef pstpm2<Smooth> Data;
     Data data(args);
     int n = data.init.size();
-    NumericMatrix hessian(n,n);
 
     NelderMead nm;
     nm.reltol = 1.0e-4;
     nm.maxit = 500;
-    nm.optim(pstpm2_step_multivariate<Smooth>, data.sp, (void *) &data);
+    for (int i=0; i<n; ++i) data.init[i] /= data.parscale[i];
+
+    bool satisfied;
+    do {
+      nm.optim(pstpm2_step_multivariate<Smooth>, data.sp, (void *) &data);
+      satisfied = fminfn_constraint<Data>(n,&nm.coef[0],(void *) &data);
+      if (!satisfied) data.kappa *= 2.0;
+    } while (!satisfied && data.kappa<1.0e5);
+
+    for (int i=0; i<n; ++i) data.init[i] *= data.parscale[i];
 
     for (int i=0; i < nm.coef.size(); ++i)
-      data.sp[i] = data.alpha * exp(nm.coef[i]); // same alpha for all smoothers??
+      data.sp[i] = exp(nm.coef[i]);
 
     BFGS2<Data> bfgs;
     bfgs.coef = data.init;
     bfgs.reltol = data.reltol;
-    bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data);
-
-    hessian = bfgs.calc_hessian(pgrfn<Smooth>, (void *) &data);
+    bfgs.optimWithConstraint(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data, fminfn_constraint<Data>);
 
     return List::create(_("sp")=wrap(data.sp),
   			_("coef")=wrap(bfgs.coef),
-  			_("hessian")=wrap(hessian));
+  			_("hessian")=wrap(bfgs.hessian));
 
   }
 
@@ -536,16 +535,11 @@ namespace rstpm2 {
 
     typedef pstpm2<Smooth> Data;
     Data data(args);
-    int n = data.init.size();
-    NumericMatrix hessian(n,n);
-    for (int i=0; i<n; ++i) data.init[i] /= data.parscale[i];
-    BFGS bfgs;
+    BFGS2<Data> bfgs;
     bfgs.coef = data.init;
     bfgs.reltol = data.reltol;
-    bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data);
 
-    for (int i=0; i<n; ++i) bfgs.coef[i] *= data.parscale[i];
-    //hessian = bfgs.calc_hessian(pgrfn<Smooth>, (void *) &data);
+    bfgs.optimWithConstraint(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data, fminfn_constraint<Data>);
 
     return List::create(_("sp")=wrap(data.sp),
 			_("coef")=wrap(bfgs.coef),
@@ -568,7 +562,6 @@ namespace rstpm2 {
 
     pstpm2<Smooth> data(args);
     int n = data.init.size();
-    NumericMatrix hessian(n,n);
 
     NumericVector init = ew_div(data.init,data.parscale);
 

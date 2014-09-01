@@ -23,6 +23,8 @@ require(rstpm2)
 data(brcancer)
 system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
 summary(fit)
+plot(fit,newdata=data.frame(hormon=0))
+
 
 system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,control=list(parscale=100,reltol=1e-10),use.rcpp=FALSE)))
 
@@ -48,15 +50,36 @@ refresh
 require(rstpm2)
 data(brcancer)
 brcancer$recyear <- brcancer$rectime/365
-system.time(pfit0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,))
-system.time(pfit0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,control=list(parscale=1)))
+system.time(fit0 <- stpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,df=5))
+system.time(pfit0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,sp.init=1))
 system.time(pfit0.1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
                 logH.formula=~s(log(recyear),k=30),sp.init=10))
+system.time(pfit1.1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(log(recyear),k=30),sp.init=10,criterion="BIC"))
+
+system.time(pfit2 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
+                logH.formula=~s(recyear),sp.init=10))
+
+
 plot(pfit0,newdata=data.frame(hormon=1),line.col="red",type="hazard")
 plot(pfit0.1,newdata=data.frame(hormon=1),line.col="blue",add=TRUE,type="hazard")
+plot(pfit1.1,newdata=data.frame(hormon=1),line.col="pink",add=TRUE,type="hazard")
+plot(fit0,newdata=data.frame(hormon=1),line.col="green",type="hazard",add=TRUE)
+plot(pfit2,newdata=data.frame(hormon=1),line.col="black",type="hazard",add=TRUE)
 
-system.time(pfit0.check <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer, use.rcpp=FALSE))
+plot(pfit0,newdata=data.frame(hormon=1),line.col="red")
+plot(pfit0.1,newdata=data.frame(hormon=1),line.col="blue",add=TRUE)
+plot(pfit1.1,newdata=data.frame(hormon=1),line.col="pink",add=TRUE)
+plot(fit0,newdata=data.frame(hormon=1),line.col="green",add=TRUE)
+plot(pfit2,newdata=data.frame(hormon=1),line.col="black",add=TRUE)
+
+
+
+system.time(pfit0.check <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer, sp=pfit0@sp, use.rcpp=FALSE))
+system.time(pfit0.check2 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer, sp=pfit0@sp))
+summary(pfit0)
 summary(pfit0.check)
+summary(pfit0.check2)
 
 system.time(pfit0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
                 logH.formula=~s(log(recyear),k=30),sp.init=1))

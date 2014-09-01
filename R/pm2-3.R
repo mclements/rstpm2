@@ -428,7 +428,7 @@ stpm2 <- function(formula, data,
                      control = list(parscale = 0.1, maxit = 300), init = FALSE,
                      coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE, use.rcpp= TRUE,
-                  reltol=1.0e-8, 
+                  reltol=1.0e-8, trace = 0,
                      contrasts = NULL, subset = NULL, ...)
   {
     ## parse the event expression
@@ -597,7 +597,8 @@ stpm2 <- function(formula, data,
         parscale <- if (!is.null(control$parscale)) control$parscale else rep(1,length(init))
         names(parscale) <- names(init)
         .Call("optim_stpm2",list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
-              delayed=if (delayed) 1 else 0, X0=X0, wt0=wt0, parscale=parscale, reltol=reltol),
+              delayed=if (delayed) 1 else 0, X0=X0, wt0=wt0, parscale=parscale, reltol=reltol,
+                                 kappa=1, trace = trace),
               package="rstpm2")
     }
     analyticalHessian <- function(beta) {
@@ -912,7 +913,8 @@ setClass("pstpm2", representation(xlevels="list",
                                   xd="matrix",
                                   termsd="terms",
                                   Call="call",
-                                  y="Surv"
+                                  y="Surv",
+                                  sp="numeric"
                                   ),
          contains="mle2")
 pstpm2 <- function(formula, data,
@@ -921,7 +923,7 @@ pstpm2 <- function(formula, data,
                    control = list(parscale = 0.1, maxit = 300), init = FALSE,
                    coxph.strata = NULL, nStrata=5, weights = NULL, robust = FALSE, baseoff = FALSE,
                    bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
-                   alpha=switch(criterion,BIC=1,GCV=1.4), sp.init=NULL, trace = 0,
+                   alpha=if (is.null(sp)) switch(criterion,GCV=1.4,BIC=1) else 1, sp.init=NULL, trace = 0,
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
   {
@@ -1179,6 +1181,7 @@ pstpm2 <- function(formula, data,
                      delayed=if (delayed) 1 else 0, X0=X0, wt0=wt0, parscale=control$parscale,
                      smooth=if(penalty == "logH") gam.obj$smooth else design,
                      sp=sp, reltol_search=reltol$search, reltol=reltol$final, trace=trace,
+                     kappa=1.0,
                      alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2))
         if (!no.sp) { # fixed sp as specified
           if (penalty == "logH")
@@ -1200,7 +1203,7 @@ pstpm2 <- function(formula, data,
         fit$coef <- as.vector(fit$coef)
         names(fit$coef) <- names(init)
         init <- fit$coef
-        if (!no.sp) sp <- fit$sp # ignores alpha
+        if (!no.sp) sp <- fit$sp
     }
     negll <- function(beta) negllsp(beta,sp)
     gradnegll <- function(beta) gradnegllsp(beta,sp)
@@ -1248,7 +1251,8 @@ pstpm2 <- function(formula, data,
                    x = X,
                    xd = XD,
                    termsd = mt, # wrong!
-                   y = y)
+                   y = y,
+                   sp = sp)
     if (robust) # kludge
         out@vcov <- sandwich.stpm2(out)
     return(out)
