@@ -53,17 +53,16 @@ brcancer$recyear <- brcancer$rectime/365
 system.time(fit0 <- stpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,df=5))
 system.time(pfit0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,sp.init=1))
 system.time(pfit0.1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(log(recyear),k=30),sp.init=10))
+                logH.formula=~s(log(recyear),k=15),sp.init=10,alpha=2))
 system.time(pfit1.1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(log(recyear),k=30),sp.init=10,criterion="BIC"))
-
+                logH.formula=~s(log(recyear)),sp.init=10,criterion="BIC"))
 system.time(pfit2 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
                 logH.formula=~s(recyear),sp.init=10))
 
 
 plot(pfit0,newdata=data.frame(hormon=1),line.col="red",type="hazard")
 plot(pfit0.1,newdata=data.frame(hormon=1),line.col="blue",add=TRUE,type="hazard")
-plot(pfit1.1,newdata=data.frame(hormon=1),line.col="pink",add=TRUE,type="hazard")
+plot(pfit1.1,newdata=data.frame(hormon=1),line.col="orange",add=TRUE,type="hazard")
 plot(fit0,newdata=data.frame(hormon=1),line.col="green",type="hazard",add=TRUE)
 plot(pfit2,newdata=data.frame(hormon=1),line.col="black",type="hazard",add=TRUE)
 

@@ -171,26 +171,26 @@ namespace rstpm2 {
   class BFGS2 : public BFGS {
   public:
     void optim(optimfn fn, optimgr gr, NumericVector init, void * ex,
-		     double eps = 1.0e-8) {
+	       bool apply_parscale = true, double eps = 1.0e-8) {
       Data * data = (Data *) ex;
       n = init.size();
-      for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
+      if (apply_parscale) for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
       BFGS::optim(fn,gr,init,ex,eps);
-      for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
+      if (apply_parscale) for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
       hessian = calc_hessian(gr, ex, eps);
     }
     void optimWithConstraint(optimfn fn, optimgr gr, NumericVector init, void * ex, constraintfn constraint,
-		     double eps = 1.0e-8) {
+			     bool apply_parscale = true, double eps = 1.0e-8) {
       Data * data = (Data *) ex;
       n = init.size();
-      for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
+      if (apply_parscale) for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
       bool satisfied;
       do {
 	BFGS::optim(fn,gr,init,ex,eps);
 	satisfied = constraint(n,&coef[0],ex);
 	if (!satisfied) data->kappa *= 2.0;
       } while ((!satisfied) && data->kappa < 1.0e5);
-      for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
+      if (apply_parscale) for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
       hessian = calc_hessian(gr, ex, eps);
     }
     NumericMatrix calc_hessian(optimgr gr, void * ex, double eps = 1.0e-8) {
@@ -394,18 +394,11 @@ namespace rstpm2 {
     Data * data = (Data *) ex;
 
     data->sp[0] = exp(logsp);
-    int n = data->init.size();
 
-    // Do not use BFGS2 - this is called by Brent and we don't want to parscale.
-    BFGS bfgs;
+    BFGS2<Data> bfgs;
     bfgs.reltol = data->reltol;
 
-    bool satisfied;
-    do {
-      bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data->init, ex);
-      satisfied = fminfn_constraint<Data>(n, &bfgs.coef[0], ex);
-      if (!satisfied) data->kappa *= 2.0;
-    } while ((!satisfied) && data->kappa < 1.0e5);
+    bfgs.optimWithConstraint(pfminfn<Smooth>, pgrfn<Smooth>, data->init, ex, fminfn_constraint<Data>, false); // do not apply parscale b4/after
 
     NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, ex);
 
@@ -428,16 +421,9 @@ namespace rstpm2 {
     for (int i=0; i < data->sp.size(); ++i)
       data->sp[i] = bound(exp(logsp[i]),0.001,100.0);
 
-    // do not use BFGS2 - this is called by Brent and we don't want to parscale
-    BFGS bfgs; 
+    BFGS2<Data> bfgs; 
     bfgs.reltol = data->reltol_search;
-
-    bool satisfied;
-    do {
-      bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data->init, ex);
-      satisfied = fminfn_constraint<Data>(n, &bfgs.coef[0], ex);
-      if (!satisfied) data->kappa *= 2.0;
-    } while ((!satisfied) && data->kappa < 1.0e5);
+    bfgs.optimWithConstraint(pfminfn<Smooth>, pgrfn<Smooth>, data->init, ex, fminfn_constraint<Data>, false); // do not apply parscale b4/after
 
     NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, ex);
 
@@ -470,7 +456,7 @@ namespace rstpm2 {
     BFGS2<Data> bfgs;
     bfgs.coef = data.init;
     bfgs.reltol = data.reltol;
-    bfgs.optim(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data);
+    bfgs.optimWithConstraint(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data, fminfn_constraint<Data>);
 
     return List::create(_("sp")=wrap(opt_sp),
 			_("coef")=wrap(bfgs.coef),
