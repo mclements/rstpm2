@@ -419,7 +419,13 @@ namespace rstpm2 {
     Data * data = (Data *) ex;
 
     for (int i=0; i < data->sp.size(); ++i)
-      data->sp[i] = bound(exp(logsp[i]),0.0001,1000.0);
+      //data->sp[i] = exp(logsp[i]);
+      data->sp[i] = exp(bound(logsp[i],-7.0,7.0));
+
+    if (data->trace > 0) {
+      for (int i = 0; i < data->sp.size(); ++i)
+	Rprintf("sp[%i]=%f\t",i,data->sp[i]);
+    }
 
     BFGS2<Data> bfgs; 
     bfgs.reltol = data->reltol_search;
@@ -432,12 +438,24 @@ namespace rstpm2 {
     double gcv =  negll + data->alpha*edf;
     double bic =  2.0*negll + data->alpha*edf*log(sum(data->event));
     data->init = bfgs.coef;
-    if (data->trace > 0) {
-      for (int i = 0; i < data->sp.size(); ++i)
-	Rprintf("sp[%i]=%f\t",i,data->sp[i]);
-      Rprintf("edf=%f\tnegll=%f\tgcv=%f\tbic=%f\n",edf,negll,gcv,bic);
+
+    // simple boundary constraints
+    double constraint = 0.0;
+    // double kappa = 1.0;
+    for (int i=0; i < data->sp.size(); ++i) {
+      if (logsp[i] < -7.0)
+	constraint +=  pow(logsp[i]+7.0,2.0);
+      if (logsp[i] > 7.0)
+	constraint +=  pow(logsp[i]-7.0,2.0);
     }
-    return data->criterion==1 ? gcv : bic;
+    double objective =  data->criterion==1 ? 
+      gcv + data->kappa/2.0*constraint : 
+      bic + data->kappa/2.0*constraint;
+
+    if (data->trace > 0) {
+      Rprintf("edf=%f\tnegll=%f\tgcv=%f\tbic=%f\tobjective=%f\n",edf,negll,gcv,bic,objective);
+    }
+    return objective;
   }    
 
 
@@ -478,27 +496,36 @@ namespace rstpm2 {
     typedef pstpm2<Smooth> Data;
     Data data(args);
     int n = data.init.size();
+    data.kappa = 10.0;
 
     NelderMead nm;
-    nm.reltol = 1.0e-4;
+    nm.reltol = 1.0e-5;
     nm.maxit = 500;
     for (int i=0; i<n; ++i) data.init[i] /= data.parscale[i];
 
+    NumericVector logsp(data.sp.size());
+    for (int i=0; i < data.sp.size(); ++i)
+      logsp[i] = log(data.sp[i]);
+
     bool satisfied;
     do {
-      nm.optim(pstpm2_step_multivariate<Smooth>, data.sp, (void *) &data);
-      satisfied = fminfn_constraint<Data>(n,&nm.coef[0],(void *) &data);
+      nm.optim(pstpm2_step_multivariate<Smooth>, logsp, (void *) &data);
+      satisfied = true;
+      for (int i=0; i < data.sp.size(); ++i)
+	if (logsp[i]< -7.0 || logsp[i] > 7.0) satisfied = false;
       if (!satisfied) data.kappa *= 2.0;
     } while (!satisfied && data.kappa<1.0e5);
 
     for (int i=0; i<n; ++i) data.init[i] *= data.parscale[i];
-
+    // for (int i=0; i < data.sp.size(); ++i)
+    //   data.sp[i] = exp(logsp[i]);
     for (int i=0; i < nm.coef.size(); ++i)
       data.sp[i] = exp(nm.coef[i]);
 
     BFGS2<Data> bfgs;
     bfgs.coef = data.init;
     bfgs.reltol = data.reltol;
+    data.kappa = 1.0;
     bfgs.optimWithConstraint(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data, fminfn_constraint<Data>);
 
     return List::create(_("sp")=wrap(data.sp),

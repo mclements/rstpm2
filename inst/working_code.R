@@ -23,19 +23,20 @@ require(rstpm2)
 data(brcancer)
 system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
                                tvc=list(hormon=3))))
-system.time(print(pfit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
-                                 tvc.formula=~s(log(rectime),by=hormon),sp.init=c(1,1),trace=1)))
-summary(fit)
-plot(fit,newdata=data.frame(hormon=0))
-plot(fit,newdata=data.frame(hormon=1),add=TRUE)
+system.time(print(pfit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer,
+                                 tvc.formula=~s(log(rectime),by=hormon),
+                                 sp.init=c(1,1),trace=1,criterion="GCV")))
+summary(pfit)
+plot(pfit,newdata=data.frame(hormon=0))
+plot(pfit,newdata=data.frame(hormon=1),add=TRUE)
 
-times <- seq(100,2000,by=100)
-meansurv1 <- t(sapply(times,function(time) predict(fit,transform(brcancer,rectime=time,hormon=1),type="meansurv",se.fit=TRUE)))
-meansurv0 <- t(sapply(times,function(time) predict(fit,transform(brcancer,rectime=time,hormon=0),type="meansurv",se.fit=TRUE)))
+times <- seq(500,2000,by=500)
+meansurv1 <- t(sapply(times,function(time) predict(pfit,transform(brcancer,rectime=time,hormon=1),type="meansurv",se.fit=TRUE)))
+meansurv0 <- t(sapply(times,function(time) predict(pfit,transform(brcancer,rectime=time,hormon=0),type="meansurv",se.fit=TRUE)))
 matplot(times,meansurv1,type="l",lty=c(1,2,2),col=1)
 matlines(times,meansurv0,type="l",lty=c(1,2,2),col=2)
 
-meansurvdiff1 <- t(sapply(times,function(time) predict(fit,transform(brcancer,rectime=time,hormon=0),type="meansurvdiff",var="hormon",se.fit=TRUE)))
+meansurvdiff1 <- t(sapply(times,function(time) predict(pfit,transform(brcancer,rectime=time,hormon=0),type="meansurvdiff",var="hormon",se.fit=TRUE)))
 matplot(times,meansurvdiff1,type="l",lty=c(1,2,2),col=1)
 
 

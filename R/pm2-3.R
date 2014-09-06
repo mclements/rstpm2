@@ -1215,6 +1215,7 @@ pstpm2 <- function(formula, data,
             mle2(negll,init,vecpar=TRUE, control=control, gr=gradnegll, eval.only=TRUE, ...)
         } else mle2(negll,init,vecpar=TRUE, control=control, eval.only=TRUE, ...)
         mle2@details$hessian <- fit$hessian
+        ## mle2@vcov <- solve(optimHess(coef(mle2),negll,gradnegll))
         mle2@vcov <- solve(fit$hessian)
         mle2@details$convergence <- 0
     } else {
