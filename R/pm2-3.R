@@ -697,7 +697,7 @@ setMethod("predictnl", "stpm2",
 ##
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","hr","sdiff","hdiff","loghazard","link"),
+                   type=c("surv","cumhaz","hazard","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
   {
@@ -736,9 +736,9 @@ setMethod("predict", "stpm2",
             newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
             X0 <- lpmatrix.lm(object@lm, newdata0)
           }
-          if (type %in% c("hr","sdiff","hdiff")) {
+          if (type %in% c("hr","sdiff","hdiff","meansurvdiff")) {
             if (missing(exposed))
-              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff')")
+              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff')")
             newdata2 <- exposed(newdata)
             X2 <- lpmatrix.lm(object@lm, newdata2)
             XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
@@ -772,6 +772,12 @@ setMethod("predict", "stpm2",
         if (type=="hr") {
           cumHazRatio = exp((X2 - X) %*% beta)
           return((XD2 %*% beta)/(XD %*% beta)*cumHazRatio)
+        }
+        if (type=="meansurv") {
+            return(mean(exp(-cumHaz)))
+        }
+        if (type=="meansurvdiff") {
+            return(mean(exp(-exp(X2 %*% beta)))-mean(exp(-cumHaz)))
         }
       }
     ##debug(local)
@@ -891,11 +897,8 @@ smootherDesign <- function(gamobj,data,parameters = NULL) {
                          upper=transform(max(data[[var]])))
     })
 }
-
 ## TODO: If we transform a smoother (e.g. log(time)), we can use information on
 ## (i) the variable name, (ii) the transform and (iii) the inverse transform.
-
-
 
 ## penalised stpm2
 setOldClass("gam")
@@ -1022,7 +1025,6 @@ pstpm2 <- function(formula, data,
     gam.formula <- full.formula
     lhs(gam.formula) <- quote(logHhat) # new response
     gam.call$formula <- gam.formula
-    ## gam.call$sp <- if (is.list(sp)) sp[[floor(length(sp)/2)]] else sp
     gam.call$sp <- sp
     if (is.null(sp) && !is.null(sp.init))
         gam.call$sp <- sp.init
@@ -1263,7 +1265,7 @@ pstpm2 <- function(formula, data,
 ## now fit a penalised stpm2 model
 ##pstpm2.fit <- pstpm2(formula,data)
 ## log likelihood and penalized log likelihood
-
+##
 ##GCV###
 gcv<-function(pstpm2.fit){
   like<-pstpm2.fit@like
@@ -1328,7 +1330,7 @@ setMethod("predictnl", "pstpm2",
 ##
 setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","hr","sdiff","hdiff","loghazard","link"),
+                   type=c("surv","cumhaz","hazard","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
   {
@@ -1361,16 +1363,16 @@ setMethod("predict", "pstpm2",
           XD <- grad1(lpfunc,newdata[[object@timeVar]])    
           ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
           ## similarly for the derivatives
-          if (type %in% c("hazard","hr","sdiff","hdiff","loghazard")) {
+          if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","meansurvdiff")) {
             ## how to elegantly extract the time variable?
             timeExpr <- 
               lhs(object@call.formula)[[length(lhs(object@call.formula))-1]]
             time <- eval(timeExpr,newdata)
             ##
           }
-          if (type %in% c("hr","sdiff","hdiff")) {
+          if (type %in% c("hr","sdiff","hdiff","meansurvdiff")) {
             if (missing(exposed))
-              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff')")
+              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff')")
             newdata2 <- exposed(newdata)
             X2 <- predict(object@gam, newdata2, type="lpmatrix")
             XD2 <- grad(lpfunc,0,object@gam,newdata2,object@timeVar)
@@ -1404,11 +1406,17 @@ setMethod("predict", "pstpm2",
           cumHazRatio = exp((X2 - X) %*% beta)
           return((XD2 %*% beta)/(XD %*% beta)*cumHazRatio)
         }
+        if (type=="meansurv") {
+            return(mean(exp(-cumHaz)))
+        }
+        if (type=="meansurvdiff") {
+            return(mean(exp(-exp(X2 %*% beta)))-mean(exp(-cumHaz)))
+        }
       }
     ##debug(local)
     type <- match.arg(type)
-    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff"))
-      stop("Prediction using type in ('hr','sdiff','hdiff') requires newdata to be specified.")
+    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff"))
+      stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff') requires newdata to be specified.")
     if (grid) {
       Y <- object@y
       event <- Y[,ncol(Y)]==1

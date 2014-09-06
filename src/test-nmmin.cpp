@@ -214,7 +214,7 @@ namespace rstpm2 {
     vec eta = data->X * vbeta;
     vec h = (data->XD * vbeta) % exp(eta) + data->bhazard;
     double constraint = data->kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
-    vec eps = h*0.0 + 1.0e-100; 
+    vec eps = h*0.0 + 1.0e-16; 
     h(h<eps) = eps(h<eps);
     double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % exp(eta)) - constraint;
     return -ll;  
@@ -292,7 +292,7 @@ namespace rstpm2 {
     mat XD_exp_eta = rmult(data->XD,exp_eta);
     mat Xnew = - X_exp_eta + rmult(XD_exp_eta + X_exp_eta_etaD, data->event / h);
     mat Xconstrained = -X_exp_eta - data->kappa*rmult(XD_exp_eta+X_exp_eta_etaD,h);
-    vec eps = h*0.0 + 1.0e-100; // hack
+    vec eps = h*0.0 + 1.0e-16; // hack
     Xnew.rows(h<=eps) = Xconstrained.rows(h<=eps);
     Xnew = rmult(Xnew,data->wt);
     // h(h<eps) = eps(h<eps);
@@ -419,7 +419,7 @@ namespace rstpm2 {
     Data * data = (Data *) ex;
 
     for (int i=0; i < data->sp.size(); ++i)
-      data->sp[i] = bound(exp(logsp[i]),0.001,100.0);
+      data->sp[i] = bound(exp(logsp[i]),0.0001,1000.0);
 
     BFGS2<Data> bfgs; 
     bfgs.reltol = data->reltol_search;
