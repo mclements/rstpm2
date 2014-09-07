@@ -108,7 +108,8 @@ namespace rstpm2 {
 	       ndigit(ndigit), itnlim(itnlim), iagflg(iagflg), 
 	       iahflg(iahflg), dlt(dlt), gradtl(gradtl), stepmx(stepmx),
 	       steptl(steptl), itrmcd(itrmcd), itncnt(itncnt) { }
-  void Nlm::optim(fcn_p fcn, fcn_p d1fcn, NumericVector init, void * state) {
+  void Nlm::optim(fcn_p fcn, fcn_p d1fcn, NumericVector init, void * state,
+		  bool hessianp) {
       int n;
       n = init.size();
       double typsize[n], norm, fpls, gpls[n], a[n*n], wrk[n*8];
@@ -129,7 +130,8 @@ namespace rstpm2 {
 	     &xpls[0], &fpls, gpls, &itrmcd, a,
 	     wrk, &itncnt);
       coef = clone(xpls);
-      hessian = calc_hessian(d1fcn, state, gradtl);
+      if (hessianp)
+	hessian = calc_hessian(d1fcn, state, gradtl);
     }
   double Nlm::calc_objective(fcn_p fn, NumericVector coef, void * ex) {
     double f;

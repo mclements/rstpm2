@@ -63,7 +63,8 @@ namespace rstpm2 {
 	int itrmcd = 0, 
 	int itncnt = 0
 	);
-    void optim(fcn_p fcn, fcn_p d1fcn, Rcpp::NumericVector init, void * state);
+    void optim(fcn_p fcn, fcn_p d1fcn, Rcpp::NumericVector init, void * state,
+	       bool hessianp = true); // assumes iahflg=0
     double calc_objective(fcn_p fn, Rcpp::NumericVector coef, void * ex);
     double calc_objective(fcn_p fn, void * ex);
     Rcpp::NumericMatrix calc_hessian(fcn_p gr, void * ex, double eps = 1.0e-8);

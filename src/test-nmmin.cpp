@@ -460,6 +460,12 @@ namespace rstpm2 {
 
 
   template<class Smooth>
+  void pstpm2_step_multivariate_nlm(int n, double * logsp, double * f, void *ex) {
+    *f = pstpm2_step_multivariate<Smooth>(n, logsp, ex);
+  };
+
+
+  template<class Smooth>
   SEXP optim_pstpm2_first(SEXP args) { 
 
     typedef pstpm2<Smooth> Data;
@@ -534,13 +540,57 @@ namespace rstpm2 {
 
   }
 
+  template<class Smooth>
+  SEXP optim_pstpm2_multivariate_nlm(SEXP args) {
+
+    typedef pstpm2<Smooth> Data;
+    Data data(args);
+    int n = data.init.size();
+    data.kappa = 10.0;
+
+    Nlm nlm;
+    nlm.iagflg = 0;
+    nlm.gradtl = 1.0e-4;
+    nlm.steptl = 1.0e-4;
+    for (int i=0; i<n; ++i) data.init[i] /= data.parscale[i];
+
+    NumericVector logsp(data.sp.size());
+    for (int i=0; i < data.sp.size(); ++i)
+      logsp[i] = log(data.sp[i]);
+
+    bool satisfied;
+    do {
+      nlm.optim(pstpm2_step_multivariate_nlm<Smooth>, (fcn_p) 0, logsp, (void *) &data, false);
+      satisfied = true;
+      for (int i=0; i < data.sp.size(); ++i)
+	if (logsp[i]< -7.0 || logsp[i] > 7.0) satisfied = false;
+      if (!satisfied) data.kappa *= 2.0;
+    } while (!satisfied && data.kappa<1.0e5);
+
+    for (int i=0; i<n; ++i) data.init[i] *= data.parscale[i];
+    for (int i=0; i < nlm.coef.size(); ++i)
+      data.sp[i] = exp(nlm.coef[i]);
+
+    BFGS2<Data> bfgs;
+    bfgs.coef = data.init;
+    bfgs.reltol = data.reltol;
+    data.kappa = 1.0;
+    bfgs.optimWithConstraint(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data, fminfn_constraint<Data>);
+
+    return List::create(_("sp")=wrap(data.sp),
+  			_("coef")=wrap(bfgs.coef),
+  			_("hessian")=wrap(bfgs.hessian));
+  }
+
+
   RcppExport SEXP optim_pstpm2LogH_multivariate(SEXP args) {
-    return optim_pstpm2_multivariate<SmoothLogH>(args);
+    return optim_pstpm2_multivariate_nlm<SmoothLogH>(args);
   }
 
   RcppExport SEXP optim_pstpm2Haz_multivariate(SEXP args) {
-    return optim_pstpm2_multivariate<SmoothHaz>(args);
+    return optim_pstpm2_multivariate_nlm<SmoothHaz>(args);
   }
+
 
 
   template<class Smooth>

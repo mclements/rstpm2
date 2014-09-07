@@ -24,8 +24,7 @@ data(brcancer)
 system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
                                tvc=list(hormon=3))))
 system.time(print(pfit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer,
-                                 tvc.formula=~s(log(rectime),by=hormon),
-                                 sp.init=c(1,1),trace=1,criterion="GCV")))
+                                 tvc.formula=~s(log(rectime),by=hormon))))
 summary(pfit)
 plot(pfit,newdata=data.frame(hormon=0))
 plot(pfit,newdata=data.frame(hormon=1),add=TRUE)
