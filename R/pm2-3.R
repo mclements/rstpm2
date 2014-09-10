@@ -923,7 +923,7 @@ setClass("pstpm2", representation(xlevels="list",
 pstpm2 <- function(formula, data,
                    logH.args = NULL, logH.formula = NULL,
                    tvc = NULL, tvc.formula = NULL,
-                   control = list(parscale = 0.1, maxit = 300), init = FALSE,
+                   control = list(parscale = 0.1, maxit = 300), init = NULL,
                    coxph.strata = NULL, nStrata=5, weights = NULL, robust = FALSE, baseoff = FALSE,
                    bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1.4,BIC=1) else 1, sp.init=NULL, trace = 0,
@@ -1031,9 +1031,6 @@ pstpm2 <- function(formula, data,
     dataEvents <- data[event,]
     gam.call$data <- quote(dataEvents) # events only
     gam.obj <- eval(gam.call)
-    if (is.logical(init) && !init) {
-      init <- coef(gam.obj)
-    }
     ##
     ## set up X, mf and wt
     X <- predict(gam.obj,data,type="lpmatrix")
@@ -1071,6 +1068,16 @@ pstpm2 <- function(formula, data,
                    betai <- beta[smoother$first.para:smoother$last.para]
                    sp[i]/2 * betai %*% smoother$S[[1]] %*% betai
                  }))
+    negllsp <- function(beta,sp) {
+        eta <- X %*% beta
+        h <- (XD %*% beta)*exp(eta) + bhazard
+        ll <- sum(wt[event]*log(h[event])) - sum(wt*exp(eta)) - pfun(beta,sp)
+        if (delayed) {
+            eta0 <- X0 %*% beta
+            ll <- ll + sum(wt0*exp(eta0))
+        }
+        return(-ll)
+    }
     dpfun <- function(beta,sp) {
       deriv <- beta*0
       for (i in 1:length(gam.obj$smooth))
@@ -1133,16 +1140,6 @@ pstpm2 <- function(formula, data,
         }
         return(-g)
       }
-    negllsp <- function(beta,sp) {
-        eta <- X %*% beta
-        h <- (XD %*% beta)*exp(eta) + bhazard
-        ll <- sum(wt[event]*log(h[event])) - sum(wt*exp(eta)) - pfun(beta,sp)
-        if (delayed) {
-            eta0 <- X0 %*% beta
-            ll <- ll + sum(wt0*exp(eta0))
-        }
-        return(-ll)
-      }
     logli <- function(beta) {
         eta <- X %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
@@ -1165,6 +1162,15 @@ pstpm2 <- function(formula, data,
         }
         return(ll)
       }
+      ## initial values
+    if (is.null(init)) {
+      init <- coef(gam.obj)
+      while(is.na(negllsp(coef(gam.obj),gam.obj$sp))) {
+          gam.call$sp <- gam.call$sp * 10
+          gam.obj <- eval(gam.call)
+          if (any(gam.obj$sp > 1e5)) stop("Valid initial values not found and revised sp>1e5")
+      }
+    } 
     ## MLE
     if (!is.null(control) && "parscale" %in% names(control)) {
       if (length(control$parscale)==1)

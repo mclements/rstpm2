@@ -23,11 +23,20 @@ require(rstpm2)
 data(brcancer)
 system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
                                tvc=list(hormon=3))))
-system.time(print(pfit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer,
-                                 tvc.formula=~s(log(rectime),by=hormon))))
+system.time(print(pfit <- pstpm2(Surv(rectime/365,censrec==1)~1,data=brcancer,
+                                 tvc.formula=~s(log(rectime/365),by=hormon))))
 summary(pfit)
 plot(pfit,newdata=data.frame(hormon=0))
 plot(pfit,newdata=data.frame(hormon=1),add=TRUE)
+plot(pfit,newdata=data.frame(hormon=0),type="haz")
+plot(pfit,newdata=data.frame(hormon=1),type="haz",add=TRUE)
+
+pfit <- pstpm2(Surv(rectime/365,censrec==1)~1,data=brcancer) # OK
+plot(pfit,newdata=data.frame(hormon=0))
+system.time(print(pfit <- pstpm2(Surv(rectime/365,censrec==1)~1,data=brcancer,
+               tvc.formula=~s(log(rectime/365),by=hormon))))
+plot(pfit,newdata=data.frame(hormon=0)) # OK
+
 
 times <- seq(500,2000,by=500)
 meansurv1 <- t(sapply(times,function(time) predict(pfit,transform(brcancer,rectime=time,hormon=1),type="meansurv",se.fit=TRUE)))

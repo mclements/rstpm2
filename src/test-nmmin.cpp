@@ -418,9 +418,11 @@ namespace rstpm2 {
     typedef pstpm2<Smooth> Data;
     Data * data = (Data *) ex;
 
+    double lsp = -9.0, usp = 9.0;
+
     for (int i=0; i < data->sp.size(); ++i)
       //data->sp[i] = exp(logsp[i]);
-      data->sp[i] = exp(bound(logsp[i],-7.0,7.0));
+      data->sp[i] = exp(bound(logsp[i],lsp,usp));
 
     if (data->trace > 0) {
       for (int i = 0; i < data->sp.size(); ++i)
@@ -443,10 +445,10 @@ namespace rstpm2 {
     double constraint = 0.0;
     // double kappa = 1.0;
     for (int i=0; i < data->sp.size(); ++i) {
-      if (logsp[i] < -7.0)
-	constraint +=  pow(logsp[i]+7.0,2.0);
-      if (logsp[i] > 7.0)
-	constraint +=  pow(logsp[i]-7.0,2.0);
+      if (logsp[i] < lsp)
+	constraint +=  pow(logsp[i]-lsp,2.0);
+      if (logsp[i] > usp)
+	constraint +=  pow(logsp[i]-usp,2.0);
     }
     double objective =  data->criterion==1 ? 
       gcv + data->kappa/2.0*constraint : 
@@ -552,6 +554,7 @@ namespace rstpm2 {
     nlm.iagflg = 0;
     nlm.gradtl = 1.0e-4;
     nlm.steptl = 1.0e-4;
+    nlm.msg = 9 + 4;
     for (int i=0; i<n; ++i) data.init[i] /= data.parscale[i];
 
     NumericVector logsp(data.sp.size());
