@@ -924,7 +924,7 @@ pstpm2 <- function(formula, data,
                    logH.args = NULL, logH.formula = NULL,
                    tvc = NULL, tvc.formula = NULL,
                    control = list(parscale = 0.1, maxit = 300), init = NULL,
-                   coxph.strata = NULL, nStrata=5, weights = NULL, robust = FALSE, baseoff = FALSE,
+                   coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
                    bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1.4,BIC=1) else 1, sp.init=NULL, trace = 0,
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
@@ -1006,13 +1006,6 @@ pstpm2 <- function(formula, data,
         rhs(coxph.formula) <- rhs(formula) %call+% call("strata",coxph.strata)
         coxph.call$formula <- coxph.formula
     }
-    if (nStrata) {
-        coxph.strata <- substitute(GrOuP)
-        coxph.data[["GrOuP"]] <- sample(1:nrow(data) %% nStrata ,nrow(data))
-        coxph.formula <- coxph.call$formula
-        rhs(coxph.formula) <- rhs(formula) %call+% call("strata",coxph.strata)
-        coxph.call$formula <- coxph.formula
-    }
     coxph.call$model <- TRUE
     ## coxph.obj <- eval(coxph.call, envir=parent.frame())
     coxph.obj <- eval(coxph.call, coxph.data)
@@ -1068,14 +1061,17 @@ pstpm2 <- function(formula, data,
                    betai <- beta[smoother$first.para:smoother$last.para]
                    sp[i]/2 * betai %*% smoother$S[[1]] %*% betai
                  }))
-    negllsp <- function(beta,sp) {
+    negllsp <- function(beta,sp,gamma=10) {
         eta <- X %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
-        ll <- sum(wt[event]*log(h[event])) - sum(wt*exp(eta)) - pfun(beta,sp)
+        constraint <- gamma*sum(h[h<0]^2)
+        h <- pmax(h,1e-16)
+        ll <- sum(wt[event]*log(h[event])) - sum(wt*exp(eta)) - pfun(beta,sp) - constraint
         if (delayed) {
             eta0 <- X0 %*% beta
             ll <- ll + sum(wt0*exp(eta0))
         }
+        attr(ll,"infeasible") <- constraint > 0
         return(-ll)
     }
     dpfun <- function(beta,sp) {
@@ -1165,11 +1161,16 @@ pstpm2 <- function(formula, data,
       ## initial values
     if (is.null(init)) {
       init <- coef(gam.obj)
-      while(is.na(negllsp(coef(gam.obj),gam.obj$sp))) {
-          gam.call$sp <- gam.call$sp * 10
-          gam.obj <- eval(gam.call)
-          if (any(gam.obj$sp > 1e5)) stop("Valid initial values not found and revised sp>1e5")
-      }
+    }
+    if(!is.null(gam.obj$full.sp)) gam.obj$sp <- gam.obj$full.sp
+    while(is.na(value <- negllsp(init,gam.obj$sp)) || attr(value,"infeasible")) {
+        if (all(gam.obj$sp > 1e5)) stop("Initial values not valid and revised sp>1e5")
+        gam.call$sp <- gam.obj$sp * 10
+        if (no.sp) sp <- gam.call$sp
+        ## Unresolved: should we change sp.init if the initial values are not feasible?
+        gam.obj <- eval(gam.call)
+        if(!is.null(gam.obj$full.sp)) gam.obj$sp <- gam.obj$full.sp
+        init <- coef(gam.obj)
     } 
     ## MLE
     if (!is.null(control) && "parscale" %in% names(control)) {

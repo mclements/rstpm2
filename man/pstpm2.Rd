@@ -14,7 +14,7 @@ pstpm2 <- function(formula, data,
                    logH.args = NULL, logH.formula = NULL,
                    tvc = NULL, tvc.formula = NULL,
                    control = list(parscale = 0.1, maxit = 300), init = FALSE,
-                   coxph.strata = NULL, nStrata=5, weights = NULL, robust = FALSE, baseoff = FALSE,
+                   coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
                    bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=switch(criterion,BIC=1,GCV=1.4), sp.init=NULL, trace = 0,
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
@@ -54,7 +54,6 @@ time-varying coefficient is being model, then only one of
                   vector of initial values.}
 \item{coxph.strata}{variable in the \code{data} argument for
   stratification of the \code{coxph} model fit for estimating initial values.}
-\item{nStrata}{number of random strata used in the Cox regression that is used to estimate the initial values.}
 \item{weights}{an optional vector of 'prior weights' to be used in the
   fitting process. Should be \code{NULL} or a numeric vector.}
 \item{robust}{Boolean used to determine whether to use a robust variance
