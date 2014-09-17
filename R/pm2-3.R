@@ -1367,21 +1367,22 @@ setClass("pstpm2", representation(xlevels="list",
                                   sp="numeric"
                                   ),
          contains="mle2")
-pstpm2 <- function(formula, data,
-                   logH.args = NULL, logH.formula = NULL,
-                   tvc = NULL, tvc.formula = NULL,
+pstpm2 <- function(formula, data, smooth.formula = NULL,
+                   logH.args = NULL, 
+                   tvc = NULL, 
                    control = list(parscale = 0.1, maxit = 300), init = NULL,
-                   coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
-                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
+                   coxph.strata = NULL, coxph.formula = NULL,
+                   weights = NULL, robust = FALSE, 
+                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE,
+                   criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1.4,BIC=1) else 1, sp.init=NULL, trace = 0,
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
   {
-    ## set up the data
-    ## ensure that data is a data frame
+      ## set up the data
+      ## ensure that data is a data frame
       temp.formula <- formula
-      if (!is.null(logH.formula)) rhs(temp.formula) <-rhs(temp.formula) %call+% rhs(logH.formula)
-      if (!is.null(tvc.formula)) rhs(temp.formula) <-rhs(temp.formula) %call+% rhs(tvc.formula)
+      if (!is.null(smooth.formula)) rhs(temp.formula) <-rhs(temp.formula) %call+% rhs(smooth.formula)
       raw.data <- data
     data <- get_all_vars(temp.formula, raw.data)
     criterion <- match.arg(criterion)
@@ -1391,7 +1392,7 @@ pstpm2 <- function(formula, data,
                        lapply(model.frame(formula, data, na.action=na.pass),
                               Negate(is.na)),
                        TRUE)
-    data <- data[.include, , drop=FALSE]
+    data <- data[.include, , drop=FALSE] ### REPLACEMENT ###
     ##
     ## parse the function call
     Call <- match.call()
@@ -1416,13 +1417,13 @@ pstpm2 <- function(formula, data,
     event <- event > min(event)
     ##
     ## set up the formulae
-    if (is.null(logH.formula) && is.null(logH.args)) {
+    if (is.null(smooth.formula) && is.null(logH.args)) {
       logH.args$k <- -1
     }
-    if (is.null(logH.formula))
-      logH.formula <- as.formula(call("~",as.call(c(quote(s),call("log",timeExpr),
+    if (is.null(smooth.formula))
+      smooth.formula <- as.formula(call("~",as.call(c(quote(s),call("log",timeExpr),
                                                     vector2call(logH.args)))))
-    if (is.null(tvc.formula) && !is.null(tvc)) {
+    if (!is.null(tvc)) {
       tvc.formulas <-
         lapply(names(tvc), function(name)
                call(":",
@@ -1433,14 +1434,10 @@ pstpm2 <- function(formula, data,
       if (length(tvc.formulas)>1)
         tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
       tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
+      rhs(smooth.formula) <- rhs(smooth.formula) %call+% rhs(tvc.formula)
     }
-    if (!is.null(tvc.formula)) {
-      rhs(logH.formula) <- rhs(logH.formula) %call+% rhs(tvc.formula)
-    }
-    if (baseoff)
-      rhs(logH.formula) <- rhs(tvc.formula)
     full.formula <- formula
-    rhs(full.formula) <- rhs(formula) %call+% rhs(logH.formula)
+    rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
     ##
     ## Cox regression
     coxph.call <- mf
@@ -1448,10 +1445,15 @@ pstpm2 <- function(formula, data,
     coxph.strata <- substitute(coxph.strata)
     coxph.call$data <- quote(coxph.data)
     coxph.data <- data
+    if (!is.null(coxph.formula)) {
+        coxph.formula2 <- coxph.call$formula
+        rhs(coxph.formula2) <- rhs(formula) %call+% rhs(coxph.formula)
+        coxph.call$formula <- coxph.formula2
+    }
     if (!is.null(coxph.strata)) {
-        coxph.formula <- coxph.call$formula
-        rhs(coxph.formula) <- rhs(formula) %call+% call("strata",coxph.strata)
-        coxph.call$formula <- coxph.formula
+        coxph.formula2 <- coxph.call$formula
+        rhs(coxph.formula2) <- rhs(formula) %call+% call("strata",coxph.strata)
+        coxph.call$formula <- coxph.formula2
     }
     coxph.call$model <- TRUE
     ## coxph.obj <- eval(coxph.call, envir=parent.frame())
@@ -1949,7 +1951,7 @@ opt.val<-function(pstpm2.fit,nn){
 # ),
 #          contains="pstpm2")
 # #########################
-# opt.fit<-function(formula,data,logH.formula,sp.low,sp.upp,num.sp,timeVar = NULL){
+# opt.fit<-function(formula,data,smooth.formula,sp.low,sp.upp,num.sp,timeVar = NULL){
 #   ###number of individual
 #   num.ind <- nrow(data)
 #   #####Censoring rate####
@@ -1979,7 +1981,7 @@ opt.val<-function(pstpm2.fit,nn){
 #   #   cr=table(lhs(formula)[[if (delayed) 4 else 3]][2])/nn
 #   ##nn<-length(brcancer$recyear)
 #   # system.time(pfit1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-#   #                             logH.formula=~s(recyear,k=30), sp=1e-1))
+#   #                             smooth.formula=~s(recyear,k=30), sp=1e-1))
 #   # plot(pfit1,newdata=data.frame(hormon=1))
 #   
 #   #sps <- 10^(seq(-4,4,by=0.5))
@@ -1988,7 +1990,7 @@ opt.val<-function(pstpm2.fit,nn){
 #   #   num.sp=30
 #   sps <- 10^(seq(log10(sp.low),log10(sp.upp),length=num.sp))
 #   optvals <- sapply(sps, function(sp) {
-#     opt.val(pstpm2(formula,data,logH.formula=NULL, sp=sp),num.ind)
+#     opt.val(pstpm2(formula,data,smooth.formula=NULL, sp=sp),num.ind)
 #   })
 #   tops<-t(optvals)
 #   colnames(tops) <- c("loglike","gcv","aicc","bic","gcvc")
@@ -2000,7 +2002,7 @@ opt.val<-function(pstpm2.fit,nn){
 #   ###to choose optimal smoothing parameter ###
 #   ind.min <- sapply(2:5,function(x) order(tops[,x])[1])
 #   sp.opt <- sps[ind.min]
-#   obj<-pstpm2(formula,data,logH.formula=NULL, sp=sp.opt[1])
+#   obj<-pstpm2(formula,data,smooth.formula=NULL, sp=sp.opt[1])
 #   fun.min <- sapply(2:5,function(x) min(tops[,x]))
 #   # if(ind.min[1]==1)
 #   # stop("Hit left boundary, make sp.low smaller.")
@@ -2060,7 +2062,7 @@ opt.val<-function(pstpm2.fit,nn){
 ## brcancer$recyear <- brcancer$rectime/365
 ## ####model fit###
 ## opt.fit(Surv(recyear,censrec==1)~hormon,data=brcancer,
-##         logH.formula=~s(recyear), sp.low=10^-4,sp.upp=4000,
+##         smooth.formula=~s(recyear), sp.low=10^-4,sp.upp=4000,
 ##         num.sp=30,timeVar = NULL)
 ## }
 # ###methods for Plot ###
@@ -2099,7 +2101,7 @@ setClass("stpm2Old", representation(xlevels="list",
                                  ),
          contains="mle2")
 stpm2Old <- function(formula, data,
-                  df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
+                  df = 3, cure = FALSE, logH.args = NULL, smooth.formula = NULL,
                   tvc = NULL, tvc.formula = NULL,
                   control = list(parscale = 0.1, maxit = 300), init = FALSE,
                   coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
@@ -2126,14 +2128,14 @@ stpm2Old <- function(formula, data,
     timeVar <- all.vars(timeExpr)
     stopifnot(length(timeVar)==1)
     ## set up the formulae
-    if (is.null(logH.formula) && is.null(logH.args)) {
+    if (is.null(smooth.formula) && is.null(logH.args)) {
       logH.args$df <- df
       if (cure) logH.args$cure <- cure
     }
     if (!is.null(logH.args) && is.null(logH.args$log))
       logH.args$log <- TRUE
-    if (is.null(logH.formula))
-      logH.formula <- as.formula(call("~",as.call(c(quote(nsx),call("log",timeExpr),
+    if (is.null(smooth.formula))
+      smooth.formula <- as.formula(call("~",as.call(c(quote(nsx),call("log",timeExpr),
                                                     vector2call(logH.args)))))
     if (is.null(tvc.formula) && !is.null(tvc)) {
       tvc.formulas <-
@@ -2148,14 +2150,14 @@ stpm2Old <- function(formula, data,
       tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
     }
     if (!is.null(tvc.formula)) {
-      rhs(logH.formula) <- rhs(logH.formula) %call+% rhs(tvc.formula)
+      rhs(smooth.formula) <- rhs(smooth.formula) %call+% rhs(tvc.formula)
     }
     if (baseoff)
-      rhs(logH.formula) <- rhs(tvc.formula)
+      rhs(smooth.formula) <- rhs(tvc.formula)
     full.formula <- formula
-    rhs(full.formula) <- rhs(formula) %call+% rhs(logH.formula)
+    rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
     ## differentiation would be easier if we did not have functions for log(time)
-    logHD.formula <- replaceFormula(logH.formula,quote(nsx),quote(nsxDeriv))
+    logHD.formula <- replaceFormula(smooth.formula,quote(nsx),quote(nsxDeriv))
     ## set up primary terms objects (mt and mtd)
     mf$formula = full.formula
     datae <- data[eval(eventExpression,data)==1, , drop=FALSE]

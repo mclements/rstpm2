@@ -26,7 +26,7 @@ head(predict(fit,se.fit=TRUE))
 head(predict(fit,type="haz",se.fit=TRUE))
 
 brcancer <- brcancer[rep(1:nrow(brcancer),each=500),]
-system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
+system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer))) # faster than Stata!
 system.time(print(pfit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
 
 refresh
