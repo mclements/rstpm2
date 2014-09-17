@@ -400,7 +400,7 @@ setClassUnion("nameOrcallOrNULL",c("name","call","NULL"))
 setOldClass("Surv")
 setOldClass("lm")
 
-## re-factored stpm2
+## log link
 setClass("stpm2", representation(xlevels="list",
                                  contrasts="listOrNULL",
                                  terms="terms",
@@ -549,29 +549,32 @@ stpm2 <- function(formula, data,
     } else {
         X0 <- wt0 <- NULL
     }
-    gradnegll <- function(beta) {
-        eta <- as.vector(X %*% beta)
-        etaD <- as.vector(XD %*% beta)
-        h <- etaD*exp(eta) + bhazard
-        ## h[h<0] <- 1e-100
-        g <- colSums(exp(eta)*wt*(-X + ifelse(event,1/h,0)*(XD + X*etaD)))
-        if (delayed) {
-            eta0 <- as.vector(X0 %*% beta)
-            g <- g + colSums(exp(eta0)*wt0*X0)
-        }
-        return(-g)
-      }
-      negll <- function(beta) {
+    negll <- function(beta,gamma=1) {
         eta <- X %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
-        ## h[h<0] <- 1e-100
-        ll <- sum(wt[event]*log(h[event])) - sum(wt*exp(eta))
+        constraint <- gamma*sum(((wt*h)[h<0])^2)
+        h[h<0] <- 1e-16
+        ll <- sum(wt[event]*log(h[event])) - sum(wt*exp(eta)) - constraint/2
         if (delayed) {
             eta0 <- X0 %*% beta
             ll <- ll + sum(wt0*exp(eta0))
         }
         return(-ll)
       }
+    gradnegll <- function(beta,gamma=1) {
+        eta <- as.vector(X %*% beta)
+        etaD <- as.vector(XD %*% beta)
+        h <- etaD*exp(eta) + bhazard
+        constraint <- gamma*sum(h[h<0])
+        gconstraint <- colSums((wt*(XD*exp(eta)+X*etaD*exp(eta)))[h<0,])
+        h[h<0] <- 1e-16
+        g <- colSums(exp(eta)*wt*(-X + ifelse(event,1/h,0)*(XD + X*etaD))) - gconstraint
+        if (delayed) {
+            eta0 <- as.vector(X0 %*% beta)
+            g <- g + colSums(exp(eta0)*wt0*X0)
+        }
+        return(-g)
+    }
     logli <- function(beta) {
         eta <- X %*% beta
         h <- (XD %*% beta)*exp(eta) + bhazard
@@ -811,6 +814,450 @@ setMethod("predict", "stpm2",
   })
 ##`%c%` <- function(f,g) function(...) g(f(...)) # function composition
 setMethod("plot", signature(x="stpm2", y="missing"),
+          function(x,y,newdata,type="surv",
+                      xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
+                      add=FALSE,ci=!add,rug=!add,
+                      var=NULL,...) {
+  y <- predict(x,newdata,type=type,var=var,grid=TRUE,se.fit=TRUE)
+  if (is.null(xlab)) xlab <- deparse(x@timeExpr)
+  if (is.null(ylab))
+    ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",
+                   sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard")
+  xx <- attr(y,"newdata")
+  xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
+  if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
+  if (ci) polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
+  lines(xx,y[,1],col=line.col,lty=lty)
+  if (rug) {
+      Y <- x@y
+      eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]
+      rug(eventTimes,col=line.col)
+    }
+  return(invisible(y))
+})
+
+
+## logit link
+setClass("stpm2Logit", representation(xlevels="list",
+                                 contrasts="listOrNULL",
+                                 terms="terms",
+                                 logli="function",
+                                 ## weights="numericOrNULL",
+                                 lm="lm",
+                                 timeVar="character",
+                                 time0Var="character",
+                                 timeExpr="nameOrcall",
+                                 time0Expr="nameOrcallOrNULL",
+                                 delayed="logical",
+                                 model.frame="list",
+                                 call.formula="formula",
+                                 x="matrix",
+                                 xd="matrix",
+                                 termsd="terms",
+                                 Call="call",
+                                 y="Surv"
+                                 ),
+         contains="mle2")
+expit <- function(x) {
+    ifelse(x==-Inf, 0, ifelse(x==Inf, 1, 1/(1+exp(-x))))
+}
+logit <- function(p) {
+    ifelse(p==0, -Inf, ifelse(p==1, Inf, log(p/(1-p))))
+}
+## numerical safety for large values?
+## check: weights
+stpm2Logit <- function(formula, data,
+                     df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
+                     tvc = NULL, tvc.formula = NULL,
+                     control = list(parscale = 0.1, maxit = 300), init = FALSE,
+                     coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
+                     bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE, use.rcpp= TRUE,
+                  reltol=1.0e-8, trace = 0,
+                     contrasts = NULL, subset = NULL, ...)
+  {
+    ## parse the event expression
+    stopifnot(length(lhs(formula))>=2)
+    eventExpr <- lhs(formula)[[length(lhs(formula))]]
+    delayed <- length(lhs(formula))==4
+    timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
+    if (timeVar == "")
+        timeVar <- all.vars(timeExpr)
+    ## set up the formulae
+    if (is.null(logH.formula) && is.null(logH.args)) {
+        logH.args$df <- df
+        if (cure) logH.args$cure <- cure
+    }
+    if (is.null(logH.formula))
+      logH.formula <- as.formula(call("~",as.call(c(quote(nsx),call("log",timeExpr),
+                                                    vector2call(logH.args)))))
+    if (is.null(tvc.formula) && !is.null(tvc)) {
+      tvc.formulas <-
+        lapply(names(tvc), function(name)
+               call(":",
+                    as.name(name),
+                    as.call(c(quote(nsx),
+                              call("log",timeExpr),
+                              vector2call(if (cure) list(cure=cure,df=tvc[[name]]) else list(df=tvc[[name]])
+                                          )))))
+      if (length(tvc.formulas)>1)
+        tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
+      tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
+    }
+    if (!is.null(tvc.formula)) {
+      rhs(logH.formula) <- rhs(logH.formula) %call+% rhs(tvc.formula)
+    }
+    if (baseoff)
+      rhs(logH.formula) <- rhs(tvc.formula)
+    full.formula <- formula
+    rhs(full.formula) <- rhs(formula) %call+% rhs(logH.formula)
+    ##
+    ## set up the data
+    ## ensure that data is a data frame
+    data <- get_all_vars(full.formula, data)
+    ## restrict to non-missing data (assumes na.action=na.omit)
+    .include <- Reduce(`&`,
+                       lapply(model.frame(formula, data, na.action=na.pass),
+                              Negate(is.na)),
+                       TRUE)
+    data <- data[.include, , drop=FALSE]
+    ##
+    ## parse the function call
+    Call <- match.call()
+    mf <- match.call(expand.dots = FALSE)
+    m <- match(c("formula", "data", "subset", "contrasts", "weights"),
+               names(mf), 0L)
+    mf <- mf[c(1L, m)]
+    ##
+    ## get variables
+    time <- eval(timeExpr, data)
+    time0Expr <- NULL # initialise
+    if (delayed) {
+      time0Expr <- lhs(formula)[[2]]
+      if (time0Var == "")
+        time0Var <- all.vars(time0Expr)
+      time0 <- eval(time0Expr, data)
+    }
+    event <- eval(eventExpr,data)
+    event <- event > min(event)
+    ##
+    ## Cox regression
+    coxph.call <- mf
+    coxph.call[[1L]] <- as.name("coxph")
+    coxph.strata <- substitute(coxph.strata)
+    if (!is.null(coxph.strata)) {
+      coxph.formula <- formula
+      rhs(coxph.formula) <- rhs(formula) %call+% call("strata",coxph.strata)
+      coxph.call$formula <- coxph.formula
+    }
+    coxph.call$model <- TRUE
+    coxph.obj <- eval(coxph.call, envir=parent.frame())
+    y <- model.extract(model.frame(coxph.obj),"response")
+    data$logHhat <- pmax(-18,logit(Shat(coxph.obj))) # change
+    ##
+    ## initial values and object for lpmatrix predictions
+    lm.call <- mf
+    lm.call[[1L]] <- as.name("lm")
+    lm.formula <- full.formula
+    lhs(lm.formula) <- quote(logHhat) # new response
+    lm.call$formula <- lm.formula
+    dataEvents <- data[event,]
+    lm.call$data <- quote(dataEvents) # events only
+    lm.obj <- eval(lm.call)
+    if (is.logical(init) && !init) {
+      init <- coef(lm.obj)
+    }
+    ##
+    ## set up X, mf and wt
+    X <- lpmatrix.lm(lm.obj,data)
+    mt <- terms(lm.obj)
+    mf <- model.frame(lm.obj)
+    wt <- model.weights(lm.obj$model)
+    if (is.null(wt)) wt <- rep(1,nrow(X))
+    ##
+    ## XD matrix
+    lpfunc <- function(delta,fit,dataset,var) {
+      dataset[[var]] <- dataset[[var]]+delta
+      lpmatrix.lm(fit,dataset)
+    }
+    XD <- grad(lpfunc,0,lm.obj,data,timeVar)
+    XD <- matrix(XD,nrow=nrow(X))
+    ##
+    bhazard <- substitute(bhazard)
+    bhazard <- if (is.null(bhazard)) rep(0,nrow(X)) else eval(bhazard,data,parent.frame())
+    if (delayed && all(time0==0)) delayed <- FALSE
+    if (delayed) {
+        ind <- time0>0
+        data0 <- data[ind,,drop=FALSE] # data for delayed entry times
+        X0 <- lpmatrix.lm(lm.obj, data0)
+        wt0 <- wt[ind]
+    } else {
+        X0 <- wt0 <- NULL
+    }
+    negll <- function(beta,gamma=1) {
+        eta <- X %*% beta
+        etaD <- XD %*% beta
+        S <- expit(eta) # ignores bhazard: relative survival
+        H <- -log(S)    # (=log(1+exp(-eta))) cumulative excess hazard
+        h <- -etaD * exp(-eta) * S + bhazard # revised
+        constraint <- gamma*sum(((wt*h)[h<0])^2)
+        h[h<0] <- 1e-16
+        ll <- sum(wt[event]*log(h[event])) - sum(wt*H) - constraint/2
+        if (delayed) {
+            eta0 <- X0 %*% beta
+            H0 <- -log(expit(eta0)) # revised
+            ll <- ll + sum(wt0*H0)
+        }
+        return(-ll)
+    }
+    gradnegll <- function(beta,gamma=1) {
+        eta <- as.vector(X %*% beta)
+        etaD <- as.vector(XD %*% beta)
+        S <- expit(eta)
+        H <- -log(S)
+        h <- -etaD*exp(-eta)*S + bhazard
+        ## gradS <- S^2*exp(-eta)*X
+        gradH <- -X*exp(-eta)*S
+        gradh <- exp(-eta)*X*etaD*S - etaD*X*exp(-2*eta)*S^2 - exp(-eta)*XD*S 
+        constraint <- gamma*sum((wt*h)[h<0])
+        gconstraint <- colSums((wt*(XD*exp(eta)+X*etaD*exp(eta)))[h<0,])
+        h[h<0] <- 1e-16
+        g <- colSums(wt*(-gradH + ifelse(event,1/h,0)*gradh)) - gconstraint
+        if (delayed) {
+            eta0 <- as.vector(X0 %*% beta)
+            S0 <- expit(eta0)
+            gradH0 <- -X0*exp(-eta0)*S0
+            g <- g + colSums(gradH0*wt0)
+        }
+        return(-g)
+      }
+    logli <- function(beta) {
+        stop("logli for logit link not implemented")
+        ## eta <- X %*% beta
+        ## h <- (XD %*% beta)*exp(eta) + bhazard
+        ## ##  h[h<0] <- 1e-100
+        ## out <- - exp(eta)
+        ## out[event] <- out[event]+log(h[event])
+        ## if (delayed) {
+        ##     eta0 <- X0 %*% beta
+        ##     out[ind] <- out[ind] + exp(eta0)
+        ## }
+        ## out <- out*wt
+        ## return(out)
+    }
+    if (!is.null(control) && "parscale" %in% names(control)) {
+      if (length(control$parscale)==1)
+        control$parscale <- rep(control$parscale,length(init))
+      if (is.null(names(control$parscale)))
+        names(control$parscale) <- names(init)
+    }
+    parnames(negll) <- parnames(gradnegll) <- names(init)
+    ## rcpp_stpm2 <- function() {
+    ##     stopifnot(!delayed)
+    ##     parscale <- if (!is.null(control$parscale)) control$parscale else rep(1,length(init))
+    ##     names(parscale) <- names(init)
+    ##     .Call("optim_stpm2",list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
+    ##           delayed=if (delayed) 1 else 0, X0=X0, wt0=wt0, parscale=parscale, reltol=reltol,
+    ##                              kappa=1, trace = trace),
+    ##           package="rstpm2")
+    ## }
+    ## MLE
+    ## if (use.rcpp) {
+    ##     fit <- rcpp_stpm2()
+    ##     coef <- as.vector(fit$coef)
+    ##     hessian <- fit$hessian
+    ##     names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
+    ##     mle2 <- mle2(negll, coef, vecpar=TRUE, control=control, gr=gradnegll, ..., eval.only=TRUE)
+    ##     mle2@vcov <- solve(hessian)
+    ##     mle2@details$convergence <- fit$fail
+    ## } else {
+        mle2 <- if (use.gr)
+            mle2(negll,init,vecpar=TRUE, control=control, gr=gradnegll, ...)
+        else mle2(negll,init,vecpar=TRUE, control=control, ...)
+    ## }
+    out <- new("stpm2Logit",
+               call = mle2@call,
+               call.orig = mle2@call,
+               coef = mle2@coef,
+               fullcoef = mle2@fullcoef,
+               vcov = mle2@vcov,
+               min = mle2@min,
+               details = mle2@details,
+               minuslogl = mle2@minuslogl,
+               method = mle2@method,
+               data = data,
+               formula = mle2@formula,
+               optimizer = "optim",
+               xlevels = .getXlevels(mt, mf),
+               ##contrasts = attr(X, "contrasts"),
+               contrasts = NULL, # wrong!
+               logli = logli,
+               ##weights = weights,
+               Call = Call,
+               terms = mt,
+               model.frame = mf,
+               lm = lm.obj,
+               timeVar = timeVar,
+               time0Var = time0Var,
+               timeExpr = timeExpr,
+               time0Expr = time0Expr,
+               delayed = delayed,
+               call.formula = formula,
+               x = X,
+               xd = XD,
+               termsd = mt, # wrong!
+               y = y)
+    if (robust) # kludge
+      out@vcov <- sandwich.stpm2(out)
+    return(out)
+  }
+setMethod("predictnl", "stpm2Logit",
+          function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"),...)
+  {
+    link <- match.arg(link)
+    invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
+    linkf <- eval(parse(text=link))
+    if (is.null(newdata) && !is.null(object@data))
+      newdata <- object@data
+    localf <- function(coef,...)
+      {
+        object@fullcoef = coef
+        linkf(fun(object,...))
+      }
+    dm <- numDeltaMethod(object,localf,newdata=newdata,...)
+    out <- invlinkf(data.frame(Estimate=dm$Estimate,
+                               lower=dm$Estimate-1.96*dm$SE,
+                               upper=dm$Estimate+1.96*dm$SE))
+    ## cloglog switches the bounds
+    if (link=="cloglog") 
+      out <- data.frame(Estimate=out$Estimate,lower=out$upper,upper=out$lower)
+    return(out)
+  })
+##
+setMethod("predict", "stpm2Logit",
+          function(object,newdata=NULL,
+                   type=c("surv","cumhaz","hazard","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff"),
+                   grid=FALSE,seqLength=300,
+                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
+  {
+    ## exposed is a function that takes newdata and returns the revised newdata
+    ## var is a string for a variable that defines a unit change in exposure
+    local <-  function (object, newdata=NULL, type="surv", exposed)
+      {
+        tt <- object@terms 
+        if (is.null(newdata)) {
+          ##mm <- X <- model.matrix(object) # fails (missing timevar)
+          X <- object@x
+          XD <- object@xd
+          ##y <- model.response(object@model.frame)
+          y <- object@y
+          time <- as.vector(y[,ncol(y)-1])
+        }
+        else {
+          lpfunc <- function(delta,fit,data,var) {
+            data[[var]] <- data[[var]]+delta
+            lpmatrix.lm(fit,data)
+          }
+          X <- lpmatrix.lm(object@lm, newdata)
+          XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
+          XD <- matrix(XD,nrow=nrow(X))
+          ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
+          ## similarly for the derivatives
+          if (type %in% c("hazard","hr","sdiff","hdiff","loghazard")) {
+            ## how to elegantly extract the time variable?
+            ## timeExpr <- 
+            ##   lhs(object@call.formula)[[length(lhs(object@call.formula))-1]]
+            time <- eval(object@timeExpr,newdata)
+            ##
+          }
+          if (object@delayed) {
+            newdata0 <- newdata
+            newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
+            X0 <- lpmatrix.lm(object@lm, newdata0)
+          }
+          if (type %in% c("hr","sdiff","hdiff","meansurvdiff")) {
+            if (missing(exposed))
+              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff')")
+            newdata2 <- exposed(newdata)
+            X2 <- lpmatrix.lm(object@lm, newdata2)
+            XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
+            XD2 <- matrix(XD,nrow=nrow(X))
+          }
+        }
+        beta <- coef(object)
+        eta <- as.vector(X %*% beta)
+        S <- expit(eta)
+        h <- -(XD  %*% beta)*exp(-eta)*expit(eta)
+        H = -log(S)
+        Sigma = vcov(object)
+        if (type=="link") {
+          return(eta)
+        }
+        if (type=="cumhaz") {
+            if (object@delayed) {
+                H0 <- -log(expit(X0 %*% beta))
+                return(H - H0)
+            }
+            else return(H)
+        }
+        if (type=="surv") {
+          return(S)
+        }
+        if (type=="sdiff")
+          return(expit(X2 %*% beta) - S)
+        if (type=="hazard") {
+          return(h)
+        }
+        if (type=="loghazard") {
+            ## check for h<0?
+            return(log(h))
+        }
+        if (type=="hdiff") {
+            h2 <- -(XD2 %*% beta)*exp(-X2 %*% beta)*expit(X2 %*% beta)
+          return(h2 - h)
+        }
+        if (type=="hr") {
+            h2 <- -(XD2 %*% beta)*exp(-X2 %*% beta)*expit(X2 %*% beta)
+            return(h2/h)
+        }
+        if (type=="meansurv") {
+            return(mean(S))
+        }
+        if (type=="meansurvdiff") {
+            S2 <- expit(X2 %*% beta)
+            return(mean(S2-S))
+        }
+      }
+    ##debug(local)
+    type <- match.arg(type)
+    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff"))
+      stop("Prediction using type in ('hr','sdiff','hdiff') requires newdata to be specified.")
+    if (grid) {
+      Y <- object@y
+      event <- Y[,ncol(Y)]==1
+      time <- object@data[[object@timeVar]]
+      eventTimes <- time[event]
+      X <- seq(min(eventTimes),max(eventTimes),length=seqLength)[-1]
+      data.x <- data.frame(X)
+      names(data.x) <- object@timeVar
+      newdata <- merge(newdata,data.x)
+    }
+    pred <- if (!se.fit) {
+      local(object,newdata,type=type,exposed=exposed,
+            ...)
+    }
+    else {
+      if (is.null(link))
+        link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
+                       hdiff="I",loghazard="I",link="I")
+      predictnl(object,local,link=link,newdata=newdata,type=type,
+                exposed=exposed,...) 
+    }
+    attr(pred,"newdata") <- newdata
+    ##if (grid) cbind(newdata,as.data.frame(pred)) else pred
+    return(pred)
+  })
+##`%c%` <- function(f,g) function(...) g(f(...)) # function composition
+setMethod("plot", signature(x="stpm2Logit", y="missing"),
           function(x,y,newdata,type="surv",
                       xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
                       add=FALSE,ci=!add,rug=!add,
