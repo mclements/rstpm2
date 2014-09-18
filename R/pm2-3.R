@@ -545,9 +545,11 @@ stpm2 <- function(formula, data,
         ind <- time0>0
         data0 <- data[ind,,drop=FALSE] # data for delayed entry times
         X0 <- lpmatrix.lm(lm.obj, data0)
+        XD0 <- grad(lpfunc,0,lm.obj,data0,timeVar)
+        XD0 <- matrix(XD0,nrow=nrow(X))
         wt0 <- wt[ind]
     } else {
-        X0 <- wt0 <- NULL
+        XD0 <- X0 <- wt0 <- NULL
     }
     negll <- function(beta,kappa=1) {
         eta <- X %*% beta
@@ -600,7 +602,7 @@ stpm2 <- function(formula, data,
         parscale <- if (!is.null(control$parscale)) control$parscale else rep(1,length(init))
         names(parscale) <- names(init)
         .Call("optim_stpm2",list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
-              delayed=if (delayed) 1 else 0, X0=X0, wt0=wt0, parscale=parscale, reltol=reltol,
+              delayed=if (delayed) 1 else 0, X0=X0, XD0=XD0, wt0=wt0, parscale=parscale, reltol=reltol,
                                  kappa=1, trace = trace),
               package="rstpm2")
     }
@@ -1090,7 +1092,7 @@ stpm2Gen <- function(formula, data,
         names(parscale) <- names(init)
         program <- switch(type,PH="optim_stpm2",PO="optim_stpm2_po",probit="optim_stpm2_probit")
         .Call(program,list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
-              delayed=if (delayed) 1 else 0, X0=X0, wt0=wt0, parscale=parscale, reltol=reltol,
+              delayed=if (delayed) 1 else 0, X0=X0, XD0=XD0, wt0=wt0, parscale=parscale, reltol=reltol,
                                  kappa=1, trace = trace),
               package="rstpm2")
     }

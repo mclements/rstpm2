@@ -33,7 +33,6 @@ namespace rstpm2 {
     return as<NumericVector>(wrap(as<vec>(wrap(nv)) / v));
   }
 
-
   void Rprint(NumericMatrix m) {
     for (int i=0; i<m.nrow(); ++i) {
       for (int j=0; j<m.ncol(); ++j) 
@@ -48,6 +47,22 @@ namespace rstpm2 {
 	Rprintf("%f ", m(i,j));
       Rprintf("\n");
     }
+  }
+
+  vec pnorm01(vec x) {
+    return as<vec>(wrap(pnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
+  }
+
+  vec dnorm01(vec x) {
+    return as<vec>(wrap(dnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
+  }
+
+  vec logit(vec p) {
+    return log(p/(1-p));
+  }
+
+  vec expit(vec x) {
+    return 1/(1+exp(-x));
   }
 
   RcppExport SEXP tapplySum(SEXP s_y, SEXP s_group) {
@@ -85,12 +100,55 @@ namespace rstpm2 {
       kappa = as<double>(list["kappa"]);
       trace = as<int>(list["trace"]);
     }
+    // defaults are for the PH model
+    virtual vec link(vec S) { return log(-log(S)); }
+    virtual vec ilink(vec x) { return exp(-exp(x)); }
+    virtual vec h(vec eta, vec etaD) { return etaD % exp(eta); }
+    virtual vec H(vec eta, vec etaD) { return exp(eta); }
+    virtual mat gradH(vec eta, vec etaD, mat X, mat XD) { return rmult(X,exp(eta)); }
+    virtual mat gradh(vec eta, vec etaD, mat X, mat XD) { 
+      return rmult(XD, exp(eta)) + rmult(X, etaD % exp(eta));
+    }
     NumericVector init;
-    mat X, XD,X0; 
+    mat X, XD,X0,XD0; 
     vec bhazard,wt,wt0,event,parscale;
     double reltol, kappa;
     int delayed, trace;
   };
+
+  class stpm2PO : public stpm2 {
+  public:
+    stpm2PO(SEXP sexp) : stpm2(sexp) { }
+    vec link(vec S) { return -logit(S); }
+    vec ilink(vec x) { return expit(-x); }
+    vec h(vec eta, vec etaD) { return etaD % exp(eta) % expit(-eta); }
+    vec H(vec eta, vec etaD) { return log(1+exp(eta)); }
+    mat gradH(vec eta, vec etaD, mat X, mat XD) { 
+      return rmult(X,exp(eta) % expit(-eta));
+    }
+    mat gradh(vec eta, vec etaD, mat X, mat XD) { 
+      return rmult(X, etaD % exp(eta) % expit(-eta)) - 
+	rmult(X, exp(2*eta) % etaD % expit(-eta) % expit(-eta)) +
+	rmult(XD, exp(eta) % expit(-eta));
+    }
+  };
+
+  // class stpm2Probit : public stpm2 {
+  // public:
+  //   stpm2Probit(SEXP sexp) : stpm2(sexp) { }
+  //   vec link(vec S) { return -logit(S); }
+  //   vec ilink(vec x) { return expit(-x); }
+  //   vec h(vec eta, vec etaD) { return etaD % exp(eta) % expit(-eta); }
+  //   vec H(vec eta, vec etaD) { return log(1+exp(eta)); }
+  //   mat gradH(vec eta, vec etaD, mat X, mat XD) { 
+  //     return rmult(X,exp(eta) % expit(-eta));
+  //   }
+  //   mat gradh(vec eta, vec etaD, mat X, mat XD) { 
+  //     return rmult(X, etaD % exp(eta) % expit(-eta)) - 
+  // 	rmult(X, exp(2*eta) % etaD % expit(-eta) % expit(-eta)) +
+  // 	rmult(XD, exp(eta) % expit(-eta));
+  //   }
+  // };
 
   struct SmoothLogH {
     int first_para, last_para;
@@ -212,13 +270,18 @@ namespace rstpm2 {
     vec vbeta(beta,n);
     vbeta = vbeta % data->parscale;
     vec eta = data->X * vbeta;
-    vec h = (data->XD * vbeta) % exp(eta) + data->bhazard;
+    vec etaD = data->XD * vbeta;
+    vec h = data->h(eta,etaD) + data->bhazard;
+    vec H = data->H(eta,etaD) + data->bhazard;
     double constraint = data->kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
     vec eps = h*0.0 + 1.0e-16; 
     h = max(h,eps);
-    double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % exp(eta)) - constraint;
+    double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % H) - constraint;
     if (data->delayed == 1) {
-      ll += sum(data->wt0 % exp(data->X0 * vbeta));
+      eta = data->X0 * vbeta;
+      etaD = data->XD0 * vbeta;
+      H = data->H(eta,etaD);
+      ll += sum(data->wt0 % H);
     }
     return -ll;  
   }
@@ -229,7 +292,8 @@ namespace rstpm2 {
     vec vbeta(beta,n);
     vbeta = vbeta % data->parscale;
     vec eta = data->X * vbeta;
-    vec h = (data->XD * vbeta) % exp(eta) + data->bhazard;
+    vec etaD = data->XD * vbeta;
+    vec h = data->h(eta, etaD) + data->bhazard;
     return all(h>0);
   }
 
@@ -289,19 +353,19 @@ namespace rstpm2 {
     vbeta = vbeta % data->parscale;
     vec eta = data->X * vbeta;
     vec etaD = data->XD * vbeta;
-    vec h = etaD % exp(eta) + data->bhazard;
+    vec h = data->h(eta,etaD) + data->bhazard;
     // vec H = exp(eta);
-    mat gradH = rmult(data->X,exp(eta));
-    mat gradh = rmult(data->XD,exp(eta)) + rmult(data->X,etaD % exp(eta));
+    mat gradH = data->gradH(eta,etaD,data->X,data->XD);
+    mat gradh = data->gradh(eta,etaD,data->X,data->XD);
     mat Xgrad = -gradH + rmult(gradh, data->event / h);
     mat Xconstraint = - data->kappa*rmult(gradh,h);
-    //vec eps = h*0.0 + 1.0e-16; // hack
+    vec eps = h*0.0 + 1.0e-16; // hack
     //Xgrad.rows(h<=eps) = Xconstraint.rows(h<=eps);
     Xgrad = rmult(Xgrad,data->wt);
-    // h(h<eps) = eps(h<eps);
     rowvec vgr = sum(Xgrad,0);
     if (data->delayed == 1) {
-      vgr += sum(rmult(data->X0, data->wt0 % exp(data->X0 * vbeta)),0);
+      mat gradH0 = data->gradH(data->X0 * vbeta, data->XD0 * vbeta, data->X0, data->XD0); 
+      vgr += sum(rmult(gradH0, data->wt0),0);
     }
     for (int i = 0; i<n; ++i) {
       gr[i] = -vgr[i]*data->parscale[i];
@@ -661,86 +725,13 @@ namespace rstpm2 {
 
   /* PROPORTIONAL ODDS MODELS */
 
-  vec logit(vec p) {
-    return log(p/(1-p));
-  }
-
-  vec expit(vec x) {
-    return 1/(1+exp(-x));
-  }
-
-  template<class Data>
-  double fminfn_po(int n, double * beta, void *ex) {
-    Data * data = (Data *) ex;
-    vec vbeta(beta,n);
-    vbeta = vbeta % data->parscale;
-    vec eta = data->X * vbeta;
-    vec S = expit(-eta);
-    vec H = -log(S);
-    vec h = (data->XD * vbeta) % exp(eta) % S + data->bhazard;
-    double constraint = data->kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
-    vec eps = h*0.0 + 1.0e-16; 
-    h = max(h,eps);
-    double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % H) - constraint;
-    if (data->delayed == 1) {
-      ll += sum(data->wt0 % (-log(expit(-data->X0 * vbeta))));
-    }
-    return -ll;  
-  }
-
-  template<class Data>
-  bool fminfn_po_constraint(int n, double * beta, void *ex) {
-    Data * data = (Data *) ex;
-    vec vbeta(beta,n);
-    vbeta = vbeta % data->parscale;
-    vec eta = data->X * vbeta;
-    vec h = (data->XD * vbeta) % exp(eta) % expit(-eta) + data->bhazard;
-    return all(h>0);
-  }
-
-  template<class Data>
-  void fminfn_po_nlm(int n, double * beta, double * f, void *ex) {
-    *f = fminfn_po<Data>(n, beta, ex);
-  };
-
-  template<class Data>
-  void grfn_po(int n, double * beta, double * gr, void *ex) {
-    Data * data = (Data *) ex;
-    vec vbeta(beta,n);
-    vbeta = vbeta % data->parscale;
-    vec eta = data->X * vbeta;
-    vec etaD = data->XD * vbeta;
-    vec S = expit(-eta);
-    vec H = -log(S);
-    vec h = etaD % exp(eta) % S + data->bhazard;
-    mat gradH = rmult(data->X, exp(eta) % S);
-    mat gradh = rmult(data->X,exp(eta) % etaD % S) - 
-      rmult(data->X, etaD % exp(2*eta) % S % S) +
-      rmult(data->XD, exp(eta) % S);
-    mat Xgrad = -gradH + rmult(gradh, data->event/h);
-    mat Xconstraint = rmult(gradh, -data->kappa * h);
-    vec zero = h*0.0; // hack
-    Xgrad.rows(h<=zero) = Xconstraint.rows(h<=zero);
-    Xgrad = rmult(Xgrad,data->wt);
-    rowvec vgr = sum(Xgrad,0);
-    if (data->delayed == 1) {
-      vec eta0 = data->X0 * vbeta;
-      vec S0 = expit(-eta0);
-      mat gradH0 = rmult(data->X0, exp(eta0) % S0 % data->wt0);
-      vgr += sum(gradH0,0);
-    }
-    for (int i = 0; i<n; ++i) {
-      gr[i] = -vgr[i]*data->parscale[i];
-    }
-  }
-
   RcppExport SEXP optim_stpm2_po(SEXP args) {
 
-    stpm2 data(args);
+    stpm2PO data(args);
 
-    BFGS2<stpm2> bfgs;
+    BFGS2<stpm2PO> bfgs;
     bfgs.reltol = data.reltol;
-    bfgs.optimWithConstraint(fminfn_po<stpm2>, grfn_po<stpm2>, data.init, (void *) &data, fminfn_po_constraint<stpm2>);
+    bfgs.optimWithConstraint(fminfn<stpm2PO>, grfn<stpm2PO>, data.init, (void *) &data, fminfn_constraint<stpm2PO>);
 
     return List::create(_("fail")=bfgs.fail,
 			_("coef")=wrap(bfgs.coef),
@@ -748,42 +739,7 @@ namespace rstpm2 {
   }
 
 
-  RcppExport SEXP optim_stpm2_po_nlm(SEXP args) {
-
-    stpm2 data(args);
-
-    data.init = ew_div(data.init,data.parscale);
-    int n = data.init.size();
-    
-    Nlm nlm;
-    nlm.gradtl = nlm.steptl = data.reltol;
-    //nlm.method=2; nlm.stepmx=0.0;
-    bool satisfied;
-    do {
-      nlm.optim(& fminfn_po_nlm<stpm2>, & grfn_po<stpm2>, data.init, (void *) &data);
-      satisfied = fminfn_po_constraint<stpm2>(n,&nlm.coef[0],(void *) &data);
-      if (!satisfied) data.kappa *= 2.0;
-    } while (!satisfied && data.kappa<1.0e5);
-
-    nlm.coef = ew_mult(nlm.coef, data.parscale);
-
-    return List::create(_("itrmcd")=wrap(nlm.itrmcd),
-			_("niter")=wrap(nlm.itncnt),
-			_("coef")=wrap(nlm.coef),
-			_("hessian")=wrap(nlm.hessian));
-  }
-
-
-
   /* PROBIT MODELS */
-
-  vec pnorm01(vec x) {
-    return as<vec>(wrap(pnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
-  }
-
-  vec dnorm01(vec x) {
-    return as<vec>(wrap(dnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
-  }
 
   template<class Data>
   double fminfn_probit(int n, double * beta, void *ex) {
