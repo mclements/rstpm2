@@ -215,7 +215,7 @@ namespace rstpm2 {
     vec h = (data->XD * vbeta) % exp(eta) + data->bhazard;
     double constraint = data->kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
     vec eps = h*0.0 + 1.0e-16; 
-    h(h<eps) = eps(h<eps);
+    h = max(h,eps);
     double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % exp(eta)) - constraint;
     if (data->delayed == 1) {
       ll += sum(data->wt0 % exp(data->X0 * vbeta));
@@ -287,19 +287,19 @@ namespace rstpm2 {
     Data * data = (Data *) ex;
     vec vbeta(beta,n);
     vbeta = vbeta % data->parscale;
+    vec eta = data->X * vbeta;
     vec etaD = data->XD * vbeta;
-    vec exp_eta = exp(data->X * vbeta);
-    vec h = etaD % exp_eta + data->bhazard;
-    mat X_exp_eta = rmult(data->X,exp_eta);
-    mat X_exp_eta_etaD = rmult(X_exp_eta,etaD);
-    mat XD_exp_eta = rmult(data->XD,exp_eta);
-    mat Xnew = - X_exp_eta + rmult(XD_exp_eta + X_exp_eta_etaD, data->event / h);
-    mat Xconstrained = -X_exp_eta - data->kappa*rmult(XD_exp_eta+X_exp_eta_etaD,h);
-    vec eps = h*0.0 + 1.0e-16; // hack
-    Xnew.rows(h<=eps) = Xconstrained.rows(h<=eps);
-    Xnew = rmult(Xnew,data->wt);
+    vec h = etaD % exp(eta) + data->bhazard;
+    // vec H = exp(eta);
+    mat gradH = rmult(data->X,exp(eta));
+    mat gradh = rmult(data->XD,exp(eta)) + rmult(data->X,etaD % exp(eta));
+    mat Xgrad = -gradH + rmult(gradh, data->event / h);
+    mat Xconstraint = - data->kappa*rmult(gradh,h);
+    //vec eps = h*0.0 + 1.0e-16; // hack
+    //Xgrad.rows(h<=eps) = Xconstraint.rows(h<=eps);
+    Xgrad = rmult(Xgrad,data->wt);
     // h(h<eps) = eps(h<eps);
-    rowvec vgr = sum(Xnew,0);
+    rowvec vgr = sum(Xgrad,0);
     if (data->delayed == 1) {
       vgr += sum(rmult(data->X0, data->wt0 % exp(data->X0 * vbeta)),0);
     }
@@ -675,15 +675,15 @@ namespace rstpm2 {
     vec vbeta(beta,n);
     vbeta = vbeta % data->parscale;
     vec eta = data->X * vbeta;
-    vec S = expit(eta);
+    vec S = expit(-eta);
     vec H = -log(S);
-    vec h = -(data->XD * vbeta) % exp(-eta) % S + data->bhazard;
+    vec h = (data->XD * vbeta) % exp(eta) % S + data->bhazard;
     double constraint = data->kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
     vec eps = h*0.0 + 1.0e-16; 
-    h(h<eps) = eps(h<eps);
+    h = max(h,eps);
     double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % H) - constraint;
     if (data->delayed == 1) {
-      ll += sum(data->wt0 % (-log(expit(data->X0 * vbeta))));
+      ll += sum(data->wt0 % (-log(expit(-data->X0 * vbeta))));
     }
     return -ll;  
   }
@@ -694,7 +694,7 @@ namespace rstpm2 {
     vec vbeta(beta,n);
     vbeta = vbeta % data->parscale;
     vec eta = data->X * vbeta;
-    vec h = -(data->XD * vbeta) % exp(-eta) % expit(eta) + data->bhazard;
+    vec h = (data->XD * vbeta) % exp(eta) % expit(-eta) + data->bhazard;
     return all(h>0);
   }
 
@@ -710,24 +710,24 @@ namespace rstpm2 {
     vbeta = vbeta % data->parscale;
     vec eta = data->X * vbeta;
     vec etaD = data->XD * vbeta;
-    vec S = expit(eta);
+    vec S = expit(-eta);
     vec H = -log(S);
-    vec h = -etaD % exp(-eta) % S + data->bhazard;
-    mat gradH = -rmult(data->X, exp(-eta) % S);
-    mat gradh = rmult(data->X,exp(-eta) % etaD % S) - 
-      rmult(data->X, etaD % exp(-2*eta) % S % S) -
-      rmult(data->XD, exp(-eta) % S);
+    vec h = etaD % exp(eta) % S + data->bhazard;
+    mat gradH = rmult(data->X, exp(eta) % S);
+    mat gradh = rmult(data->X,exp(eta) % etaD % S) - 
+      rmult(data->X, etaD % exp(2*eta) % S % S) +
+      rmult(data->XD, exp(eta) % S);
     mat Xgrad = -gradH + rmult(gradh, data->event/h);
-    mat Xconstraint = rmult(gradh, data->kappa * h);
-    vec eps = h*0.0 + 1.0e-16; // hack
-    Xgrad.rows(h<=eps) = Xconstraint.rows(h<=eps);
+    mat Xconstraint = rmult(gradh, -data->kappa * h);
+    vec zero = h*0.0; // hack
+    Xgrad.rows(h<=zero) = Xconstraint.rows(h<=zero);
     Xgrad = rmult(Xgrad,data->wt);
     rowvec vgr = sum(Xgrad,0);
     if (data->delayed == 1) {
       vec eta0 = data->X0 * vbeta;
-      vec S0 = expit(eta0);
-      mat gradH0 = -rmult(data->X0, exp(-eta0) % S0 % data->wt0);
-      vgr += sum(rmult(data->X0, data->wt0 % exp(data->X0 * vbeta)),0);
+      vec S0 = expit(-eta0);
+      mat gradH0 = rmult(data->X0, exp(eta0) % S0 % data->wt0);
+      vgr += sum(gradH0,0);
     }
     for (int i = 0; i<n; ++i) {
       gr[i] = -vgr[i]*data->parscale[i];
@@ -772,6 +772,126 @@ namespace rstpm2 {
 			_("coef")=wrap(nlm.coef),
 			_("hessian")=wrap(nlm.hessian));
   }
+
+
+
+  /* PROBIT MODELS */
+
+  vec pnorm01(vec x) {
+    return as<vec>(wrap(pnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
+  }
+
+  vec dnorm01(vec x) {
+    return as<vec>(wrap(dnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
+  }
+
+  template<class Data>
+  double fminfn_probit(int n, double * beta, void *ex) {
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n);
+    vbeta = vbeta % data->parscale;
+    vec eta = data->X * vbeta;
+    vec etaD = data->XD * vbeta;
+    vec H = -log(pnorm01(-eta));
+    vec h =  dnorm01(eta) / pnorm01(-eta) % etaD + data->bhazard;
+    double constraint = data->kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
+    vec eps = h*0.0 + 1.0e-16; 
+    h = max(h,eps);
+    double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % H) - constraint;
+    if (data->delayed == 1) {
+      vec eta0 = data->X0 * vbeta;
+      vec H0 = -log(pnorm01(-eta0));
+      ll += sum(data->wt0 % H0);
+    }
+    return -ll;  
+  }
+
+  template<class Data>
+  bool fminfn_probit_constraint(int n, double * beta, void *ex) {
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n);
+    vbeta = vbeta % data->parscale;
+    vec eta = data->X * vbeta;
+    vec etaD = data->XD * vbeta;
+    vec h =  dnorm01(eta) / pnorm01(-eta) % etaD + data->bhazard;
+    return all(h>0);
+  }
+
+  template<class Data>
+  void fminfn_probit_nlm(int n, double * beta, double * f, void *ex) {
+    *f = fminfn_po<Data>(n, beta, ex);
+  };
+
+  template<class Data>
+  void grfn_probit(int n, double * beta, double * gr, void *ex) {
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n);
+    vbeta = vbeta % data->parscale;
+    vec eta = data->X * vbeta;
+    vec etaD = data->XD * vbeta;
+    vec H = -log(pnorm01(-eta));
+    vec h =  dnorm01(eta) / pnorm01(-eta) % etaD + data->bhazard;
+    mat gradH = rmult(data->X, dnorm01(eta)/pnorm01(-eta)); 
+    mat gradh = rmult(data->X, -eta % dnorm01(eta) % etaD / pnorm01(-eta)) +
+      rmult(data->X, dnorm01(eta) % dnorm01(eta)/pnorm01(-eta)/pnorm01(-eta) % etaD) +
+      rmult(data->XD, dnorm01(eta) / pnorm01(-eta));
+    mat Xgrad = -gradH + rmult(gradh, data->event/h);
+    mat Xconstraint = rmult(gradh, data->kappa * h);
+    vec eps = h*0.0 + 1.0e-16; // hack
+    Xgrad.rows(h<=eps) = Xconstraint.rows(h<=eps);
+    Xgrad = rmult(Xgrad,data->wt);
+    rowvec vgr = sum(Xgrad,0);
+    if (data->delayed == 1) {
+      vec eta0 = data->X0 * vbeta;
+      mat gradH0 = rmult(data->X, data->wt0 % dnorm01(eta0)/pnorm01(-eta0)); 
+      vgr += sum(-gradH0,0);
+    }
+    for (int i = 0; i<n; ++i) {
+      gr[i] = -vgr[i]*data->parscale[i];
+    }
+  }
+
+  RcppExport SEXP optim_stpm2_probit(SEXP args) {
+
+    stpm2 data(args);
+
+    BFGS2<stpm2> bfgs;
+    bfgs.reltol = data.reltol;
+    bfgs.optimWithConstraint(fminfn_probit<stpm2>, grfn_probit<stpm2>, data.init, (void *) &data, fminfn_probit_constraint<stpm2>);
+
+    return List::create(_("fail")=bfgs.fail,
+			_("coef")=wrap(bfgs.coef),
+			_("hessian")=wrap(bfgs.hessian));
+  }
+
+
+  RcppExport SEXP optim_stpm2_probit_nlm(SEXP args) {
+
+    stpm2 data(args);
+
+    data.init = ew_div(data.init,data.parscale);
+    int n = data.init.size();
+    
+    Nlm nlm;
+    nlm.gradtl = nlm.steptl = data.reltol;
+    //nlm.method=2; nlm.stepmx=0.0;
+    bool satisfied;
+    do {
+      nlm.optim(& fminfn_probit_nlm<stpm2>, & grfn_probit<stpm2>, data.init, (void *) &data);
+      satisfied = fminfn_probit_constraint<stpm2>(n,&nlm.coef[0],(void *) &data);
+      if (!satisfied) data.kappa *= 2.0;
+    } while (!satisfied && data.kappa<1.0e5);
+
+    nlm.coef = ew_mult(nlm.coef, data.parscale);
+
+    return List::create(_("itrmcd")=wrap(nlm.itrmcd),
+			_("niter")=wrap(nlm.itncnt),
+			_("coef")=wrap(nlm.coef),
+			_("hessian")=wrap(nlm.hessian));
+  }
+
+
+
 
 
   // R CMD INSTALL ~/src/R/microsimulation
