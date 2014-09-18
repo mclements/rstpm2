@@ -165,7 +165,7 @@ plot(fit.stpm2,newdata=data.frame(hormon=1),type="hazard",line.col="orange",lwd=
 ## time-varying coefficient
 ##summary(fit.tvc <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
 ##                     tvc=list(hormon=3)))
-##anova(fit,fit.tvc) # compare with and without tvc
+##anova(fit,fit.tvc) # compare with and without tvc (unclear whether this is valid)
 
 ## some more plots
 ## plot(fit.tvc,newdata=data.frame(hormon=0),type="hr",var="hormon")

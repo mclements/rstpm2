@@ -217,6 +217,9 @@ namespace rstpm2 {
     vec eps = h*0.0 + 1.0e-16; 
     h(h<eps) = eps(h<eps);
     double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % exp(eta)) - constraint;
+    if (data->delayed == 1) {
+      ll += sum(data->wt0 % exp(data->X0 * vbeta));
+    }
     return -ll;  
   }
 
@@ -296,9 +299,12 @@ namespace rstpm2 {
     Xnew.rows(h<=eps) = Xconstrained.rows(h<=eps);
     Xnew = rmult(Xnew,data->wt);
     // h(h<eps) = eps(h<eps);
-    rowvec vgr = -sum(Xnew,0);
+    rowvec vgr = sum(Xnew,0);
+    if (data->delayed == 1) {
+      vgr += sum(rmult(data->X0, data->wt0 % exp(data->X0 * vbeta)),0);
+    }
     for (int i = 0; i<n; ++i) {
-      gr[i] = vgr[i]*data->parscale[i];
+      gr[i] = -vgr[i]*data->parscale[i];
     }
   }
 
@@ -651,6 +657,122 @@ namespace rstpm2 {
   RcppExport SEXP test_pstpm2Haz(SEXP args) {
     return test_pstpm2<SmoothHaz>(args);
   }
+
+
+  /* PROPORTIONAL ODDS MODELS */
+
+  vec logit(vec p) {
+    return log(p/(1-p));
+  }
+
+  vec expit(vec x) {
+    return 1/(1+exp(-x));
+  }
+
+  template<class Data>
+  double fminfn_po(int n, double * beta, void *ex) {
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n);
+    vbeta = vbeta % data->parscale;
+    vec eta = data->X * vbeta;
+    vec S = expit(eta);
+    vec H = -log(S);
+    vec h = -(data->XD * vbeta) % exp(-eta) % S + data->bhazard;
+    double constraint = data->kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
+    vec eps = h*0.0 + 1.0e-16; 
+    h(h<eps) = eps(h<eps);
+    double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % H) - constraint;
+    if (data->delayed == 1) {
+      ll += sum(data->wt0 % (-log(expit(data->X0 * vbeta))));
+    }
+    return -ll;  
+  }
+
+  template<class Data>
+  bool fminfn_po_constraint(int n, double * beta, void *ex) {
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n);
+    vbeta = vbeta % data->parscale;
+    vec eta = data->X * vbeta;
+    vec h = -(data->XD * vbeta) % exp(-eta) % expit(eta) + data->bhazard;
+    return all(h>0);
+  }
+
+  template<class Data>
+  void fminfn_po_nlm(int n, double * beta, double * f, void *ex) {
+    *f = fminfn_po<Data>(n, beta, ex);
+  };
+
+  template<class Data>
+  void grfn_po(int n, double * beta, double * gr, void *ex) {
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n);
+    vbeta = vbeta % data->parscale;
+    vec eta = data->X * vbeta;
+    vec etaD = data->XD * vbeta;
+    vec S = expit(eta);
+    vec H = -log(S);
+    vec h = -etaD % exp(-eta) % S + data->bhazard;
+    mat gradH = -rmult(data->X, exp(-eta) % S);
+    mat gradh = rmult(data->X,exp(-eta) % etaD % S) - 
+      rmult(data->X, etaD % exp(-2*eta) % S % S) -
+      rmult(data->XD, exp(-eta) % S);
+    mat Xgrad = -gradH + rmult(gradh, data->event/h);
+    mat Xconstraint = rmult(gradh, data->kappa * h);
+    vec eps = h*0.0 + 1.0e-16; // hack
+    Xgrad.rows(h<=eps) = Xconstraint.rows(h<=eps);
+    Xgrad = rmult(Xgrad,data->wt);
+    rowvec vgr = sum(Xgrad,0);
+    if (data->delayed == 1) {
+      vec eta0 = data->X0 * vbeta;
+      vec S0 = expit(eta0);
+      mat gradH0 = -rmult(data->X0, exp(-eta0) % S0 % data->wt0);
+      vgr += sum(rmult(data->X0, data->wt0 % exp(data->X0 * vbeta)),0);
+    }
+    for (int i = 0; i<n; ++i) {
+      gr[i] = -vgr[i]*data->parscale[i];
+    }
+  }
+
+  RcppExport SEXP optim_stpm2_po(SEXP args) {
+
+    stpm2 data(args);
+
+    BFGS2<stpm2> bfgs;
+    bfgs.reltol = data.reltol;
+    bfgs.optimWithConstraint(fminfn_po<stpm2>, grfn_po<stpm2>, data.init, (void *) &data, fminfn_po_constraint<stpm2>);
+
+    return List::create(_("fail")=bfgs.fail,
+			_("coef")=wrap(bfgs.coef),
+			_("hessian")=wrap(bfgs.hessian));
+  }
+
+
+  RcppExport SEXP optim_stpm2_po_nlm(SEXP args) {
+
+    stpm2 data(args);
+
+    data.init = ew_div(data.init,data.parscale);
+    int n = data.init.size();
+    
+    Nlm nlm;
+    nlm.gradtl = nlm.steptl = data.reltol;
+    //nlm.method=2; nlm.stepmx=0.0;
+    bool satisfied;
+    do {
+      nlm.optim(& fminfn_po_nlm<stpm2>, & grfn_po<stpm2>, data.init, (void *) &data);
+      satisfied = fminfn_po_constraint<stpm2>(n,&nlm.coef[0],(void *) &data);
+      if (!satisfied) data.kappa *= 2.0;
+    } while (!satisfied && data.kappa<1.0e5);
+
+    nlm.coef = ew_mult(nlm.coef, data.parscale);
+
+    return List::create(_("itrmcd")=wrap(nlm.itrmcd),
+			_("niter")=wrap(nlm.itncnt),
+			_("coef")=wrap(nlm.coef),
+			_("hessian")=wrap(nlm.hessian));
+  }
+
 
   // R CMD INSTALL ~/src/R/microsimulation
   // R -q -e "require(microsimulation); .Call('test_nmmin',1:2,PACKAGE='microsimulation')"

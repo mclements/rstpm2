@@ -1,6 +1,6 @@
 ##exportPattern("^[[:alpha:]]+")
 useDynLib(rstpm2)
-export(stpm2,stpm2Logit,pstpm2,incrVar,
+export(stpm2,stpm2Logit,stpm2Gen,pstpm2,incrVar,
        nsx,makepredictcall.nsx,predict.nsx,
        nsxDeriv,makepredictcall.nsxDeriv,predict.nsxDeriv,
        predictnl,predictnl.default

@@ -21,7 +21,10 @@
 refresh
 require(rstpm2)
 data(brcancer)
-system.time(print(fit <- stpm2Logit(Surv(rectime,censrec==1)~hormon,data=brcancer)))
+system.time(print(fit <- stpm2Gen(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
+system.time(print(fit2 <- stpm2Gen(Surv(rectime,censrec==1)~hormon,data=brcancer, type="PO")))
+## system.time(print(stpm2Logit(Surv(rectime,censrec==1)~hormon,data=brcancer, type="PO")))
+system.time(print(fit3 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer, use.rcpp=FALSE)))
 head(predict(fit,se.fit=TRUE))
 head(predict(fit,type="haz",se.fit=TRUE))
 
