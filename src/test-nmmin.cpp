@@ -50,15 +50,25 @@ namespace rstpm2 {
   }
 
   vec pnorm01(vec x) {
-    return as<vec>(wrap(pnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
+    vec out(x.size());
+    for (size_t i=0; i<x.size(); ++i)
+      out(i) = R::pnorm(x(i),0.0,1.0,1,0);
+    return out;
+    //return as<vec>(wrap(pnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
   }
 
   vec qnorm01(vec x) {
-    return as<vec>(wrap(qnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
+    vec out(x.size());
+    for (size_t i=0; i<x.size(); ++i)
+      out(i) = R::qnorm(x(i),0.0,1.0,1,0);
+    return out;
   }
 
   vec dnorm01(vec x) {
-    return as<vec>(wrap(dnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
+    vec out(x.size());
+    for (size_t i=0; i<x.size(); ++i)
+      out(i) = R::dnorm(x(i),0.0,1.0,0);
+    return out;
   }
 
   vec logit(vec p) {
@@ -97,6 +107,7 @@ namespace rstpm2 {
       wt0.set_size(1); wt0.fill(0.0);
       if (delayed == 1) {
 	X0 = as<mat>(list["X0"]); // optional
+	XD0 = as<mat>(list["XD0"]); // optional
 	wt0 = as<vec>(list["wt0"]); // optional
       }
       parscale = as<vec>(list["parscale"]);
@@ -282,10 +293,10 @@ namespace rstpm2 {
     h = max(h,eps);
     double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % H) - constraint;
     if (data->delayed == 1) {
-      eta = data->X0 * vbeta;
-      etaD = data->XD0 * vbeta;
-      H = data->H(eta,etaD);
-      ll += sum(data->wt0 % H);
+      vec eta0 = data->X0 * vbeta;
+      vec etaD0 = data->XD0 * vbeta;
+      mat H0 = data->H(eta0,etaD0);
+      ll += sum(data->wt0 % H0);
     }
     return -ll;  
   }
@@ -466,11 +477,11 @@ namespace rstpm2 {
   template<class Stpm2>
   SEXP optim_stpm2(SEXP args) {
 
-    stpm2 data(args);
+    Stpm2 data(args);
 
-    BFGS2<stpm2> bfgs;
+    BFGS2<Stpm2> bfgs;
     bfgs.reltol = data.reltol;
-    bfgs.optimWithConstraint(fminfn<stpm2>, grfn<stpm2>, data.init, (void *) &data, fminfn_constraint<stpm2>);
+    bfgs.optimWithConstraint(fminfn<Stpm2>, grfn<Stpm2>, data.init, (void *) &data, fminfn_constraint<Stpm2>);
 
     return List::create(_("fail")=bfgs.fail,
 			_("coef")=wrap(bfgs.coef),

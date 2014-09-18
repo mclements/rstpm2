@@ -21,25 +21,46 @@
 refresh
 require(rstpm2)
 data(brcancer)
+brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime*0.5,0))
+## debug(stpm2)
+stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)
+stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,use.rcpp=FALSE)
+(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
+                     logH.formula=~nsx(log(rectime),df=3,stata=TRUE)))
 
-system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
+## Stata estimated coef for hormon
+## PH:     -.3614357
+## PO:     -.474102
+## Probit: -.2823338
 system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
-system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO")))
+system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
+##
 system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO")))
-system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
+system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO")))
+##
 system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
+system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit"))) # slow
+
+## delayed entry
+brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime*0.5,0))
+## debug(stpm2)
+(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
+                     logH.formula=~nsx(log(rectime),df=3,stata=TRUE)))
+head(predict(fit,se.fit=TRUE))
+## delayed entry and tvc
+summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
+                     tvc.formula=~hormon:nsx(log(rectime),df=3,stata=TRUE)))
+head(predict(fit,se.fit=TRUE))
 
 
-system.time(print(fit <- stpm2Gen(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
-system.time(print(fit <- stpm2Gen(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit",use.rcpp=FALSE)))
+system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
+system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit",use.rcpp=FALSE)))
 
-system.time(print(fit2 <- stpm2Gen(Surv(rectime,censrec==1)~hormon,data=brcancer, type="PO")))
-system.time(print(fit2 <- stpm2Gen(Surv(rectime,censrec==1)~hormon,data=brcancer, type="PO",use.rcpp=FALSE)))
+system.time(print(fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer, type="PO")))
+system.time(print(fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer, type="PO",use.rcpp=FALSE)))
 
 system.time(print(stpm2Gen(Surv(rectime,censrec==1)~hormon,data=brcancer)))
 system.time(print(stpm2Gen(Surv(rectime,censrec==1)~hormon,data=brcancer, use.rcpp=FALSE)))
-system.time(print(stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
-system.time(print(stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer, use.rcpp=FALSE)))
 head(predict(fit,se.fit=TRUE))
 head(predict(fit,type="haz",se.fit=TRUE))
 
