@@ -307,15 +307,11 @@ namespace rstpm2 {
   };
 
 
-  // empty default
-  template<class Smooth>
-  double pfminfn(int n, double * beta, void *ex) { return 0.0; };
-
   // log H penalty - using penalty matrices from mgcv
-  template<>
-  double pfminfn<SmoothLogH>(int n, double * beta, void *ex) {
+  template<class Stpm2>
+  double pfminfn_SmoothLogH(int n, double * beta, void *ex) {
     typedef SmoothLogH Smooth;
-    typedef pstpm2<Smooth> Data;
+    typedef pstpm2<Smooth,Stpm2> Data;
     double ll = -fminfn<Data>(n,beta,ex);
     Data * data = (Data *) ex;
     vec vbeta(beta,n);
@@ -330,10 +326,10 @@ namespace rstpm2 {
   }
 
   // hazard penalty
-  template<>
-  double pfminfn<SmoothHaz>(int n, double * beta, void *ex) {
+  template<class Stpm2>
+  double pfminfn_SmoothHaz(int n, double * beta, void *ex) {
     typedef SmoothHaz Smooth;
-    typedef pstpm2<Smooth> Data;
+    typedef pstpm2<Smooth,Stpm2> Data;
     double ll = -fminfn<Data>(n,beta,ex);
     Data * data = (Data *) ex;
     vec vbeta(beta,n);
@@ -376,13 +372,10 @@ namespace rstpm2 {
     }
   }
 
-  template<class Smooth>
-  void pgrfn(int n, double * beta, double * gr, void *ex) { };
-
-  template<>
-  void pgrfn<SmoothLogH>(int n, double * beta, double * gr, void *ex) {
+  template<class Stpm2>
+  void pgrfn_SmoothLogH(int n, double * beta, double * gr, void *ex) {
     typedef SmoothLogH Smooth;
-    typedef pstpm2<Smooth> Data;
+    typedef pstpm2<Smooth,Stpm2> Data;
     grfn<Data>(n, beta, gr, ex);
     Data * data = (Data *) ex;
     vec vbeta(beta,n);
@@ -396,10 +389,10 @@ namespace rstpm2 {
     for (int i = 0; i<n; ++i) gr[i] += vgr[i]*data->parscale[i];
   }
 
-  template<>
-  void pgrfn<SmoothHaz>(int n, double * beta, double * gr, void *ex) {
+  template<class Stpm2>
+  void pgrfn_SmoothHaz(int n, double * beta, double * gr, void *ex) {
     typedef SmoothHaz Smooth;
-    typedef pstpm2<Smooth> Data;
+    typedef pstpm2<Smooth,Stpm2> Data;
     grfn<Data>(n, beta, gr, ex);
     Data * data = (Data *) ex;
     vec vbeta(beta,n);
@@ -421,8 +414,57 @@ namespace rstpm2 {
     for (int i = 0; i<n; ++i) gr[i] += vgr[i] * data->parscale[i];
   }
 
+  // oh, for partial template specialisation for functions...
 
-  RcppExport SEXP optim_stpm2(SEXP args) {
+  template<class Smooth,class Stpm2>
+  double pfminfn(int n, double * beta, void *ex) { return 0.0; }
+
+  template<>
+  double pfminfn<SmoothLogH,stpm2>(int n, double * beta, void *ex) {
+    return pfminfn_SmoothLogH<stpm2>(n, beta, ex); }
+  template<>
+  double pfminfn<SmoothLogH,stpm2PO>(int n, double * beta, void *ex) {
+    return pfminfn_SmoothLogH<stpm2PO>(n, beta, ex); }
+  template<>
+  double pfminfn<SmoothLogH,stpm2Probit>(int n, double * beta, void *ex) {
+    return pfminfn_SmoothLogH<stpm2Probit>(n, beta, ex); }
+
+  template<>
+  double pfminfn<SmoothHaz,stpm2>(int n, double * beta, void *ex) {
+    return pfminfn_SmoothHaz<stpm2>(n, beta, ex); }
+  template<>
+  double pfminfn<SmoothHaz,stpm2PO>(int n, double * beta, void *ex) {
+    return pfminfn_SmoothHaz<stpm2PO>(n, beta, ex); }
+  template<>
+  double pfminfn<SmoothHaz,stpm2Probit>(int n, double * beta, void *ex) {
+    return pfminfn_SmoothHaz<stpm2Probit>(n, beta, ex); }
+
+  template<class Smooth, class Stpm2>
+  void pgrfn(int n, double * beta, double * gr, void *ex) { }
+
+  template<>
+  void pgrfn<SmoothLogH,stpm2>(int n, double * beta, double * gr, void *ex) {
+    pgrfn_SmoothLogH<stpm2>(n, beta, gr, ex); }
+  template<>
+  void pgrfn<SmoothLogH,stpm2PO>(int n, double * beta, double * gr, void *ex) {
+    pgrfn_SmoothLogH<stpm2PO>(n, beta, gr, ex); }
+  template<>
+  void pgrfn<SmoothLogH,stpm2Probit>(int n, double * beta, double * gr, void *ex) {
+    pgrfn_SmoothLogH<stpm2Probit>(n, beta, gr, ex);}
+
+  template<>
+  void pgrfn<SmoothHaz,stpm2>(int n, double * beta, double * gr, void *ex) {
+    pgrfn_SmoothHaz<stpm2>(n, beta, gr, ex); }
+  template<>
+  void pgrfn<SmoothHaz,stpm2PO>(int n, double * beta, double * gr, void *ex) {
+    pgrfn_SmoothHaz<stpm2PO>(n, beta, gr, ex); }
+  template<>
+  void pgrfn<SmoothHaz,stpm2Probit>(int n, double * beta, double * gr, void *ex) {
+    pgrfn_SmoothHaz<stpm2Probit>(n, beta, gr, ex); }
+
+
+  template<class Stpm2>
+  SEXP optim_stpm2(SEXP args) {
 
     stpm2 data(args);
 
@@ -434,6 +476,13 @@ namespace rstpm2 {
 			_("coef")=wrap(bfgs.coef),
 			_("hessian")=wrap(bfgs.hessian));
   }
+
+  RcppExport SEXP optim_stpm2_ph(SEXP args) {
+    return optim_stpm2<stpm2>(args); }
+  RcppExport SEXP optim_stpm2_po(SEXP args) {
+    return optim_stpm2<stpm2PO>(args); }
+  RcppExport SEXP optim_stpm2_probit(SEXP args) {
+    return optim_stpm2<stpm2Probit>(args); }
 
 
   RcppExport SEXP optim_stpm2_nlm(SEXP args) {
@@ -462,9 +511,9 @@ namespace rstpm2 {
   }
 
 
-  template<class Smooth>
+  template<class Smooth, class Stpm2>
   double pstpm2_step_first(double logsp, void * ex) {
-    typedef pstpm2<Smooth> Data;
+    typedef pstpm2<Smooth,Stpm2> Data;
     Data * data = (Data *) ex;
 
     data->sp[0] = exp(logsp);
@@ -472,7 +521,7 @@ namespace rstpm2 {
     BFGS2<Data> bfgs;
     bfgs.reltol = data->reltol;
 
-    bfgs.optimWithConstraint(pfminfn<Smooth>, pgrfn<Smooth>, data->init, ex, fminfn_constraint<Data>, false); // do not apply parscale b4/after
+    bfgs.optimWithConstraint(pfminfn<Smooth,Stpm2>, pgrfn<Smooth,Stpm2>, data->init, ex, fminfn_constraint<Data>, false); // do not apply parscale b4/after
 
     NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, ex);
 
@@ -487,9 +536,9 @@ namespace rstpm2 {
     return data->criterion==1 ? gcv : bic;
   }    
 
-  template<class Smooth>
+  template<class Smooth, class Stpm2>
   double pstpm2_step_multivariate(int n, double * logsp, void * ex) {
-    typedef pstpm2<Smooth> Data;
+    typedef pstpm2<Smooth,Stpm2> Data;
     Data * data = (Data *) ex;
 
     double lsp = -9.0, usp = 9.0;
@@ -505,7 +554,7 @@ namespace rstpm2 {
 
     BFGS2<Data> bfgs; 
     bfgs.reltol = data->reltol_search;
-    bfgs.optimWithConstraint(pfminfn<Smooth>, pgrfn<Smooth>, data->init, ex, fminfn_constraint<Data>, false); // do not apply parscale b4/after
+    bfgs.optimWithConstraint(pfminfn<Smooth,Stpm2>, pgrfn<Smooth,Stpm2>, data->init, ex, fminfn_constraint<Data>, false); // do not apply parscale b4/after
 
     NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, ex);
 
@@ -535,28 +584,28 @@ namespace rstpm2 {
   }    
 
 
-  template<class Smooth>
+  template<class Smooth, class Stpm2>
   void pstpm2_step_multivariate_nlm(int n, double * logsp, double * f, void *ex) {
-    *f = pstpm2_step_multivariate<Smooth>(n, logsp, ex);
+    *f = pstpm2_step_multivariate<Smooth,Stpm2>(n, logsp, ex);
   };
 
 
-  template<class Smooth>
+  template<class Smooth, class Stpm2>
   SEXP optim_pstpm2_first(SEXP args) { 
 
-    typedef pstpm2<Smooth> Data;
+    typedef pstpm2<Smooth,Stpm2> Data;
     Data data(args);
     int n = data.init.size();
 
     for (int i=0; i<n; ++i) data.init[i] /= data.parscale[i];
-    double opt_sp = exp(Brent_fmin(log(0.001),log(1000.0),&pstpm2_step_first<Smooth>,&data,1.0e-2));
+    double opt_sp = exp(Brent_fmin(log(0.001),log(1000.0),&pstpm2_step_first<Smooth,Stpm2>,&data,1.0e-2));
     data.sp[0] = opt_sp;
     for (int i=0; i<n; ++i) data.init[i] *= data.parscale[i];
 
     BFGS2<Data> bfgs;
     bfgs.coef = data.init;
     bfgs.reltol = data.reltol;
-    bfgs.optimWithConstraint(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data, fminfn_constraint<Data>);
+    bfgs.optimWithConstraint(pfminfn<Smooth,Stpm2>, pgrfn<Smooth,Stpm2>, data.init, (void *) &data, fminfn_constraint<Data>);
 
     return List::create(_("sp")=wrap(opt_sp),
 			_("coef")=wrap(bfgs.coef),
@@ -564,18 +613,24 @@ namespace rstpm2 {
 
   }
 
-  RcppExport SEXP optim_pstpm2LogH_first(SEXP args) {
-    return optim_pstpm2_first<SmoothLogH>(args);
-  }
+  RcppExport SEXP optim_pstpm2LogH_first_ph(SEXP args) {
+    return optim_pstpm2_first<SmoothLogH,stpm2>(args); }
+  RcppExport SEXP optim_pstpm2Haz_first_ph(SEXP args) {
+    return optim_pstpm2_first<SmoothHaz,stpm2>(args); }
+  RcppExport SEXP optim_pstpm2LogH_first_po(SEXP args) {
+    return optim_pstpm2_first<SmoothLogH,stpm2PO>(args); }
+  RcppExport SEXP optim_pstpm2Haz_first_po(SEXP args) {
+    return optim_pstpm2_first<SmoothHaz,stpm2PO>(args); }
+  RcppExport SEXP optim_pstpm2LogH_first_probit(SEXP args) {
+    return optim_pstpm2_first<SmoothLogH,stpm2Probit>(args); }
+  RcppExport SEXP optim_pstpm2Haz_first_probit(SEXP args) {
+    return optim_pstpm2_first<SmoothHaz,stpm2Probit>(args); }
 
-  RcppExport SEXP optim_pstpm2Haz_first(SEXP args) {
-    return optim_pstpm2_first<SmoothHaz>(args);
-  }
 
-  template<class Smooth>
+  template<class Smooth, class Stpm2>
   SEXP optim_pstpm2_multivariate(SEXP args) {
 
-    typedef pstpm2<Smooth> Data;
+    typedef pstpm2<Smooth,Stpm2> Data;
     Data data(args);
     int n = data.init.size();
     data.kappa = 10.0;
@@ -591,7 +646,7 @@ namespace rstpm2 {
 
     bool satisfied;
     do {
-      nm.optim(pstpm2_step_multivariate<Smooth>, logsp, (void *) &data);
+      nm.optim(pstpm2_step_multivariate<Smooth,Stpm2>, logsp, (void *) &data);
       satisfied = true;
       for (int i=0; i < data.sp.size(); ++i)
 	if (logsp[i]< -7.0 || logsp[i] > 7.0) satisfied = false;
@@ -608,7 +663,7 @@ namespace rstpm2 {
     bfgs.coef = data.init;
     bfgs.reltol = data.reltol;
     data.kappa = 1.0;
-    bfgs.optimWithConstraint(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data, fminfn_constraint<Data>);
+    bfgs.optimWithConstraint(pfminfn<Smooth,Stpm2>, pgrfn<Smooth,Stpm2>, data.init, (void *) &data, fminfn_constraint<Data>);
 
     return List::create(_("sp")=wrap(data.sp),
   			_("coef")=wrap(bfgs.coef),
@@ -616,10 +671,10 @@ namespace rstpm2 {
 
   }
 
-  template<class Smooth>
+  template<class Smooth, class Stpm2>
   SEXP optim_pstpm2_multivariate_nlm(SEXP args) {
 
-    typedef pstpm2<Smooth> Data;
+    typedef pstpm2<Smooth,Stpm2> Data;
     Data data(args);
     int n = data.init.size();
     data.kappa = 10.0;
@@ -637,7 +692,7 @@ namespace rstpm2 {
 
     bool satisfied;
     do {
-      nlm.optim(pstpm2_step_multivariate_nlm<Smooth>, (fcn_p) 0, logsp, (void *) &data, false);
+      nlm.optim(pstpm2_step_multivariate_nlm<Smooth,Stpm2>, (fcn_p) 0, logsp, (void *) &data, false);
       satisfied = true;
       for (int i=0; i < data.sp.size(); ++i)
 	if (logsp[i]< -7.0 || logsp[i] > 7.0) satisfied = false;
@@ -652,62 +707,67 @@ namespace rstpm2 {
     bfgs.coef = data.init;
     bfgs.reltol = data.reltol;
     data.kappa = 1.0;
-    bfgs.optimWithConstraint(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data, fminfn_constraint<Data>);
+    bfgs.optimWithConstraint(pfminfn<Smooth,Stpm2>, pgrfn<Smooth,Stpm2>, data.init, (void *) &data, fminfn_constraint<Data>);
 
     return List::create(_("sp")=wrap(data.sp),
   			_("coef")=wrap(bfgs.coef),
   			_("hessian")=wrap(bfgs.hessian));
   }
 
+  RcppExport SEXP optim_pstpm2LogH_multivariate_ph(SEXP args) { 
+    return optim_pstpm2_multivariate_nlm<SmoothLogH,stpm2>(args); }
+  RcppExport SEXP optim_pstpm2Haz_multivariate_ph(SEXP args) {
+    return optim_pstpm2_multivariate_nlm<SmoothHaz,stpm2>(args); }
+  RcppExport SEXP optim_pstpm2LogH_multivariate_po(SEXP args) {
+    return optim_pstpm2_multivariate_nlm<SmoothLogH,stpm2PO>(args); }
+  RcppExport SEXP optim_pstpm2Haz_multivariate_po(SEXP args) {
+    return optim_pstpm2_multivariate_nlm<SmoothHaz,stpm2PO>(args); }
+  RcppExport SEXP optim_pstpm2LogH_multivariate_probit(SEXP args) {
+    return optim_pstpm2_multivariate_nlm<SmoothLogH,stpm2Probit>(args); }
+  RcppExport SEXP optim_pstpm2Haz_multivariate_probit(SEXP args) {
+    return optim_pstpm2_multivariate_nlm<SmoothHaz,stpm2Probit>(args); }
 
-  RcppExport SEXP optim_pstpm2LogH_multivariate(SEXP args) {
-    return optim_pstpm2_multivariate_nlm<SmoothLogH>(args);
-  }
 
-  RcppExport SEXP optim_pstpm2Haz_multivariate(SEXP args) {
-    return optim_pstpm2_multivariate_nlm<SmoothHaz>(args);
-  }
-
-
-
-  template<class Smooth>
+  template<class Smooth, class Stpm2>
   SEXP optim_pstpm2_fixedsp(SEXP args) { 
 
-    typedef pstpm2<Smooth> Data;
+    typedef pstpm2<Smooth,Stpm2> Data;
     Data data(args);
     BFGS2<Data> bfgs;
     bfgs.coef = data.init;
     bfgs.reltol = data.reltol;
 
-    bfgs.optimWithConstraint(pfminfn<Smooth>, pgrfn<Smooth>, data.init, (void *) &data, fminfn_constraint<Data>);
+    bfgs.optimWithConstraint(pfminfn<Smooth,Stpm2>, pgrfn<Smooth,Stpm2>, data.init, (void *) &data, fminfn_constraint<Data>);
 
     return List::create(_("sp")=wrap(data.sp),
 			_("coef")=wrap(bfgs.coef),
 			_("hessian")=wrap(bfgs.hessian));
-
   }
 
-  RcppExport SEXP optim_pstpm2LogH_fixedsp(SEXP args) {
-    return optim_pstpm2_fixedsp<SmoothLogH>(args);
-  }
+  RcppExport SEXP optim_pstpm2LogH_fixedsp_ph(SEXP args) {
+    return optim_pstpm2_fixedsp<SmoothLogH,stpm2>(args); }
+  RcppExport SEXP optim_pstpm2Haz_fixedsp_ph(SEXP args) {
+    return optim_pstpm2_fixedsp<SmoothHaz,stpm2>(args); }
+  RcppExport SEXP optim_pstpm2LogH_fixedsp_po(SEXP args) {
+    return optim_pstpm2_fixedsp<SmoothLogH,stpm2PO>(args); }
+  RcppExport SEXP optim_pstpm2Haz_fixedsp_po(SEXP args) {
+    return optim_pstpm2_fixedsp<SmoothHaz,stpm2PO>(args); }
+  RcppExport SEXP optim_pstpm2LogH_fixedsp_probit(SEXP args) { 
+    return optim_pstpm2_fixedsp<SmoothLogH,stpm2Probit>(args); }
+  RcppExport SEXP optim_pstpm2Haz_fixedsp_probit(SEXP args) {
+    return optim_pstpm2_fixedsp<SmoothHaz,stpm2Probit>(args); }
 
-  RcppExport SEXP optim_pstpm2Haz_fixedsp(SEXP args) {
-    return optim_pstpm2_fixedsp<SmoothHaz>(args);
-  }
-
-
-
-  template<class Smooth>
+  template<class Smooth, class Stpm2>
   SEXP test_pstpm2(SEXP args) { 
 
-    pstpm2<Smooth> data(args);
+    pstpm2<Smooth,Stpm2> data(args);
     int n = data.init.size();
 
     NumericVector init = ew_div(data.init,data.parscale);
 
-    double pfmin = pfminfn<Smooth>(n,&init[0],(void *) &data);
+    double pfmin = pfminfn<Smooth,Stpm2>(n,&init[0],(void *) &data);
     NumericVector gr(n);
-    pgrfn<Smooth>(n,&init[0], &gr[0], (void *) &data);
+    pgrfn<Smooth,Stpm2>(n,&init[0], &gr[0], (void *) &data);
 
     init = ew_mult(init,data.parscale);
 
@@ -719,43 +779,11 @@ namespace rstpm2 {
   }
 
   RcppExport SEXP test_pstpm2LogH(SEXP args) {
-    return test_pstpm2<SmoothLogH>(args);
+    return test_pstpm2<SmoothLogH,stpm2>(args);
   }
 
   RcppExport SEXP test_pstpm2Haz(SEXP args) {
-    return test_pstpm2<SmoothHaz>(args);
-  }
-
-
-  /* PROPORTIONAL ODDS MODELS */
-
-  RcppExport SEXP optim_stpm2_po(SEXP args) {
-
-    stpm2PO data(args);
-
-    BFGS2<stpm2PO> bfgs;
-    bfgs.reltol = data.reltol;
-    bfgs.optimWithConstraint(fminfn<stpm2PO>, grfn<stpm2PO>, data.init, (void *) &data, fminfn_constraint<stpm2PO>);
-
-    return List::create(_("fail")=bfgs.fail,
-			_("coef")=wrap(bfgs.coef),
-			_("hessian")=wrap(bfgs.hessian));
-  }
-
-
-  /* PROBIT MODELS */
-
-  RcppExport SEXP optim_stpm2_probit(SEXP args) {
-
-    stpm2Probit data(args);
-
-    BFGS2<stpm2Probit> bfgs;
-    bfgs.reltol = data.reltol;
-    bfgs.optimWithConstraint(fminfn<stpm2Probit>, grfn<stpm2Probit>, data.init, (void *) &data, fminfn_constraint<stpm2Probit>);
-
-    return List::create(_("fail")=bfgs.fail,
-			_("coef")=wrap(bfgs.coef),
-			_("hessian")=wrap(bfgs.hessian));
+    return test_pstpm2<SmoothHaz,stpm2>(args);
   }
 
   // R CMD INSTALL ~/src/R/microsimulation

@@ -22,6 +22,14 @@ refresh
 require(rstpm2)
 data(brcancer)
 
+system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
+system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
+system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO")))
+system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO")))
+system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
+system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
+
+
 system.time(print(fit <- stpm2Gen(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
 system.time(print(fit <- stpm2Gen(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit",use.rcpp=FALSE)))
 

@@ -399,8 +399,45 @@ setClassUnion("nameOrcallOrNULL",c("name","call","NULL"))
 ##setClassUnion("numericOrNULL",c("numeric","NULL"))
 setOldClass("Surv")
 setOldClass("lm")
+expit <- function(x) {
+    ifelse(x==-Inf, 0, ifelse(x==Inf, 1, 1/(1+exp(-x))))
+}
+logit <- function(p) {
+    ifelse(p==0, -Inf, ifelse(p==1, Inf, log(p/(1-p))))
+} # numerical safety for large values?
+## check: weights
 
-## log link
+## link families
+link.PH <- list(link=function(S) log(-log(S)),
+                ilink=function(eta) exp(-exp(eta)),
+                h=function(eta,etaD) etaD*exp(eta),
+                H=function(eta,etaD) exp(eta),
+                gradh=function(eta,etaD,obj) obj$XD*exp(eta)+obj$X*etaD*exp(eta),
+                gradH=function(eta,etaD,obj) obj$X*exp(eta))
+link.PO <- list(link=function(S) -logit(S),
+                ilink=function(eta) expit(-eta),
+                H=function(eta,etaD) log(1+exp(eta)),
+                h=function(eta,etaD) etaD*exp(eta)*expit(-eta),
+                gradh=function(eta,etaD,obj) {
+                    etaD*exp(eta)*obj$X*expit(-eta) -
+                        exp(2*eta)*obj$X*etaD*expit(-eta)^2 +
+                            exp(eta)*obj$XD*expit(-eta)
+                    },
+                gradH=function(eta,etaD,obj) obj$X*exp(eta)*expit(-eta))
+link.probit <-
+    list(link=function(S) -qnorm(S),
+         ilink=function(eta) pnorm(-eta),
+         H=function(eta,etaD) -log(pnorm(-eta)),
+         h=function(eta,etaD) dnorm(eta)/pnorm(-eta)*etaD,
+         gradh=function(eta,etaD,obj) {
+             -eta*obj$X*dnorm(eta)*etaD/pnorm(-eta) +
+                 obj$X*dnorm(eta)^2/pnorm(-eta)^2*etaD +
+                     dnorm(eta)/pnorm(-eta)*obj$XD
+         },
+         gradH=function(eta,etaD,obj) obj$X*dnorm(eta)/pnorm(-eta))
+
+
+## log link (legacy code)
 setClass("stpm2", representation(xlevels="list",
                                  contrasts="listOrNULL",
                                  terms="terms",
@@ -601,7 +638,7 @@ stpm2 <- function(formula, data,
         stopifnot(!delayed)
         parscale <- if (!is.null(control$parscale)) control$parscale else rep(1,length(init))
         names(parscale) <- names(init)
-        .Call("optim_stpm2",list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
+        .Call("optim_stpm2_ph",list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
               delayed=if (delayed) 1 else 0, X0=X0, XD0=XD0, wt0=wt0, parscale=parscale, reltol=reltol,
                                  kappa=1, trace = trace),
               package="rstpm2")
@@ -838,8 +875,7 @@ setMethod("plot", signature(x="stpm2", y="missing"),
   return(invisible(y))
 })
 
-## general link function will require:
-## h(data,beta), H(data,beta), gradh(data,beta), gradH(data,beta)
+## general link functions
 setClass("stpm2Gen", representation(xlevels="list",
                                  contrasts="listOrNULL",
                                  terms="terms",
@@ -861,42 +897,6 @@ setClass("stpm2Gen", representation(xlevels="list",
                                  link="list"
                                  ),
          contains="mle2")
-expit <- function(x) {
-    ifelse(x==-Inf, 0, ifelse(x==Inf, 1, 1/(1+exp(-x))))
-}
-logit <- function(p) {
-    ifelse(p==0, -Inf, ifelse(p==1, Inf, log(p/(1-p))))
-} # numerical safety for large values?
-## check: weights
-##
-## link families
-link.PH <- list(link=function(S) log(-log(S)),
-                ilink=function(eta) exp(-exp(eta)),
-                h=function(eta,etaD) etaD*exp(eta),
-                H=function(eta,etaD) exp(eta),
-                gradh=function(eta,etaD,obj) obj$XD*exp(eta)+obj$X*etaD*exp(eta),
-                gradH=function(eta,etaD,obj) obj$X*exp(eta))
-link.PO <- list(link=function(S) -logit(S),
-                ilink=function(eta) expit(-eta),
-                H=function(eta,etaD) log(1+exp(eta)),
-                h=function(eta,etaD) etaD*exp(eta)*expit(-eta),
-                gradh=function(eta,etaD,obj) {
-                    etaD*exp(eta)*obj$X*expit(-eta) -
-                        exp(2*eta)*obj$X*etaD*expit(-eta)^2 +
-                            exp(eta)*obj$XD*expit(-eta)
-                    },
-                gradH=function(eta,etaD,obj) obj$X*exp(eta)*expit(-eta))
-link.probit <-
-    list(link=function(S) -qnorm(S),
-         ilink=function(eta) pnorm(-eta),
-         H=function(eta,etaD) -log(pnorm(-eta)),
-         h=function(eta,etaD) dnorm(eta)/pnorm(-eta)*etaD,
-         gradh=function(eta,etaD,obj) {
-             -eta*obj$X*dnorm(eta)*etaD/pnorm(-eta) +
-                 obj$X*dnorm(eta)^2/pnorm(-eta)^2*etaD +
-                     dnorm(eta)/pnorm(-eta)*obj$XD
-         },
-         gradH=function(eta,etaD,obj) obj$X*dnorm(eta)/pnorm(-eta))
 stpm2Gen <- function(formula, data,
                      df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
                      tvc = NULL, tvc.formula = NULL,
@@ -1037,7 +1037,7 @@ stpm2Gen <- function(formula, data,
         eta <- as.vector(pars$X %*% beta)
         etaD <- as.vector(pars$XD %*% beta)
         H <- link$H(eta,etaD) 
-        h <- link$h(eta,etaD)
+        h <- link$h(eta,etaD) + bhazard
         constraint <- kappa*sum(((pars$wt*h)[h<0])^2)
         h[h<0] <- 1e-16
         ll <- sum(pars$wt[pars$event]*log(h[pars$event])) - sum(pars$wt*H) - constraint/2
@@ -1090,7 +1090,7 @@ stpm2Gen <- function(formula, data,
     rcpp_stpm2 <- function() {
         parscale <- if (!is.null(control$parscale)) control$parscale else rep(1,length(init))
         names(parscale) <- names(init)
-        program <- switch(type,PH="optim_stpm2",PO="optim_stpm2_po",probit="optim_stpm2_probit")
+        program <- switch(type,PH="optim_stpm2_ph",PO="optim_stpm2_po",probit="optim_stpm2_probit")
         .Call(program,list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
               delayed=if (delayed) 1 else 0, X0=X0, XD0=XD0, wt0=wt0, parscale=parscale, reltol=reltol,
                                  kappa=1, trace = trace),
@@ -1413,7 +1413,8 @@ setClass("pstpm2", representation(xlevels="list",
                                   termsd="terms",
                                   Call="call",
                                   y="Surv",
-                                  sp="numeric"
+                                  sp="numeric",
+                                  link="list"
                                   ),
          contains="mle2")
 pstpm2 <- function(formula, data, smooth.formula = NULL,
@@ -1425,9 +1426,12 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE,
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1.4,BIC=1) else 1, sp.init=NULL, trace = 0,
+                   type=c("PH","PO","probit"),
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
   {
+      type <- match.arg(type)
+      link <- switch(type,PH=link.PH,PO=link.PO,probit=link.probit)
       ## set up the data
       ## ensure that data is a data frame
       temp.formula <- formula
@@ -1508,7 +1512,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     ## coxph.obj <- eval(coxph.call, envir=parent.frame())
     coxph.obj <- eval(coxph.call, coxph.data)
     y <- model.extract(model.frame(coxph.obj),"response")
-    data$logHhat <- pmax(-18,log(-log(Shat(coxph.obj))))
+    data$logHhat <- pmax(-18,link$link(Shat(coxph.obj)))
     ##
     ## initial values and object for lpmatrix predictions
     gam.call <- mf
@@ -1546,6 +1550,21 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     ##
     bhazard <- substitute(bhazard)
     bhazard <- if (is.null(bhazard)) rep(0,nrow(X)) else eval(bhazard,data,parent.frame())
+    if (delayed && all(time0==0)) delayed <- FALSE
+    if (delayed) {
+        ind <- time0>0
+        data0 <- data[ind,,drop=FALSE] # data for delayed entry times
+        X0 <- lpmatrix.lm(lm.obj, data0)
+        wt0 <- wt[ind]
+        XD0 <- grad(lpfunc,0,lm.obj,data0,timeVar)
+        XD0 <- matrix(XD0,nrow=nrow(X))
+    } else {
+        XD0 <- X0 <- wt0 <- NULL
+    }
+    pars <- structure(list(event=event,X=X,XD=XD,wt=wt,bhazard=bhazard,delayed=delayed),
+                      class=type)
+    pars0 <- structure(list(event=event,X=X0,XD=XD0,wt=wt0,bhazard=bhazard,delayed=delayed),
+                       class=type)
     ## smoothing parameters
     if (no.sp <- is.null(sp)) {
         sp <- if(is.null(gam.obj$full.sp)) gam.obj$sp else gam.obj$full.sp
@@ -1560,14 +1579,17 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    sp[i]/2 * betai %*% smoother$S[[1]] %*% betai
                  }))
     negllsp <- function(beta,sp,gamma=10) {
-        eta <- X %*% beta
-        h <- (XD %*% beta)*exp(eta) + bhazard
-        constraint <- gamma*sum(h[h<0]^2)
+        eta <- as.vector(X %*% beta)
+        etaD <- as.vector(XD %*% beta)
+        H <- link$H(eta,etaD) 
+        h <- link$h(eta,etaD) + bhazard
+        constraint <- gamma*sum((wt*h)[h<0]^2)
         h <- pmax(h,1e-16)
-        ll <- sum(wt[event]*log(h[event])) - sum(wt*exp(eta)) - pfun(beta,sp) - constraint
+        ll <- sum(wt[event]*log(h[event])) - sum(wt*H) - pfun(beta,sp) - constraint
         if (delayed) {
-            eta0 <- X0 %*% beta
-            ll <- ll + sum(wt0*exp(eta0))
+            eta0 <- as.vector(X0 %*% beta)
+            etaD0 <- as-vector(XD0 %*% beta)
+            ll <- ll + sum(wt0*link$H(eta0,etaD0))
         }
         attr(ll,"infeasible") <- constraint > 0
         return(-ll)
@@ -1614,45 +1636,46 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
             deriv
         }
     }
-    if (delayed && all(time0==0)) delayed <- FALSE
-    if (delayed) {
-        ind <- time0>0
-        data0 <- data[ind,,drop=FALSE] # data for delayed entry times
-        X0 <- predict(gam.obj, data0, type="lpmatrix")
-        wt0 <- wt[ind]
-    } else {
-        X0 <- wt0 <- NULL
-    }
     gradnegllsp <- function(beta,sp) {
         eta <- as.vector(X %*% beta)
         etaD <- as.vector(XD %*% beta)
-        h <- etaD*exp(eta) + bhazard
-        g <- colSums(exp(eta)*wt*(-X + ifelse(event,1/h,0)*(XD + X*etaD))) - dpfun(beta,sp)
+        h <- link$h(eta,etaD) + bhazard
+        H <- link$H(eta,etaD)
+        gradh <- link$gradh(eta,etaD,pars)
+        gradH <- link$gradH(eta,etaD,pars)
+        g <- colSums(wt*(-gradH + ifelse(event,1/h,0)*gradh)) - dpfun(beta,sp)
         if (delayed) {
             eta0 <- as.vector(X0 %*% beta)
-            g <- g + colSums(exp(eta0)*wt0*X0)
+            etaD0 <- as.vector(XD0 %*% beta)
+            g <- g + colSums(wt0*link$gradH(eta0,etaD0,pars0))
         }
         return(-g)
       }
     logli <- function(beta) {
-        eta <- X %*% beta
-        h <- (XD %*% beta)*exp(eta) + bhazard
-        out <- - exp(eta)
+        eta <- as.vector(X %*% beta)
+        etaD <- as.vector(XD %*% beta)
+        h <- link$h(eta,etaD) + bhazard
+        H <- link$H(eta,etaD) + bhazard
+        out <- - H
         out[event] <- out[event]+log(h[event])
         if (delayed) {
-            eta0 <- X0 %*% beta
-            out[ind] <- out[ind] + exp(eta0)
+            eta0 <- as.vector(X0 %*% beta)
+            eta0 <- as.vector(XD0 %*% beta)
+            out[ind] <- out[ind] + link$H(eta0,etaD0)
         }
         out <- out*wt
         return(out)
     }
     like <- function(beta) {
-        eta <- X %*% beta
-        h <- (XD %*% beta)*exp(eta) + bhazard
-        ll <- sum(wt[event]*log(h[event])) - sum(wt*exp(eta))
+        eta <- as.vector(X %*% beta)
+        etaD <- as.vector(XD %*% beta)
+        h <- link$h(eta,etaD) + bhazard
+        H <- link$H(eta,etaD)
+        ll <- sum(wt[event]*log(h[event])) - sum(wt*H)
         if (delayed) {
-            eta0 <- X0 %*% beta
-            ll <- ll + sum(wt0*exp(eta0))
+            eta0 <- as.vector(X0 %*% bet)
+            etaD0 <- as.vector(XD0 %*% bet)
+            ll <- ll + sum(wt0*link$H(eta0,etaD0))
         }
         return(ll)
       }
@@ -1684,6 +1707,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     }
     rcpp_optim <- function() {
         ## stopifnot(!delayed)
+        suffix <- switch(type,PH="ph",PO="po",probit="probit")
+        pen <- if(penalty=="logH") "LogH" else "Haz"
         args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
                      delayed=if (delayed) 1 else 0, X0=X0, wt0=wt0, parscale=control$parscale,
                      smooth=if(penalty == "logH") gam.obj$smooth else design,
@@ -1691,18 +1716,15 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                      kappa=1.0,
                      alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2))
         if (!no.sp) { # fixed sp as specified
-          if (penalty == "logH")
-              .Call("optim_pstpm2LogH_fixedsp", args, package = "rstpm2") else
-          .Call("optim_pstpm2Haz_fixedsp", args, package = "rstpm2")
+            program <- sprintf("optim_pstpm2%s_fixedsp_%s",pen,suffix)
+            .Call(program, args, package = "rstpm2") 
         }
         else if (length(sp)>1) {
-            if (penalty == "logH")
-            .Call("optim_pstpm2LogH_multivariate", args, package = "rstpm2") else
-            .Call("optim_pstpm2Haz_multivariate", args, package = "rstpm2")
+            program <- sprintf("optim_pstpm2%s_multivariate_%s",pen,suffix)
+            .Call(program, args, package = "rstpm2")
         } else {
-            if (penalty == "logH")
-            .Call("optim_pstpm2LogH_first", args, package = "rstpm2") else
-            .Call("optim_pstpm2Haz_first", args, package = "rstpm2")
+            program <- sprintf("optim_pstpm2%s_first_%s",pen,suffix)
+            .Call(program, args, package = "rstpm2")
         }
     }
     if (use.rcpp) {
