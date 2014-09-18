@@ -26,6 +26,10 @@ dopredictions
 stpm2 hormon, df(3) scale(odds)
 dopredictions
 
+* normal model
+stpm2 hormon, df(3) scale(normal)
+dopredictions
+
 * tvc
 stpm2 hormon, df(3) tvc(hormon) dftvc(3) scale(h)
 dopredictions

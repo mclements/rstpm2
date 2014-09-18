@@ -53,6 +53,10 @@ namespace rstpm2 {
     return as<vec>(wrap(pnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
   }
 
+  vec qnorm01(vec x) {
+    return as<vec>(wrap(qnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
+  }
+
   vec dnorm01(vec x) {
     return as<vec>(wrap(dnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
   }
@@ -133,22 +137,22 @@ namespace rstpm2 {
     }
   };
 
-  // class stpm2Probit : public stpm2 {
-  // public:
-  //   stpm2Probit(SEXP sexp) : stpm2(sexp) { }
-  //   vec link(vec S) { return -logit(S); }
-  //   vec ilink(vec x) { return expit(-x); }
-  //   vec h(vec eta, vec etaD) { return etaD % exp(eta) % expit(-eta); }
-  //   vec H(vec eta, vec etaD) { return log(1+exp(eta)); }
-  //   mat gradH(vec eta, vec etaD, mat X, mat XD) { 
-  //     return rmult(X,exp(eta) % expit(-eta));
-  //   }
-  //   mat gradh(vec eta, vec etaD, mat X, mat XD) { 
-  //     return rmult(X, etaD % exp(eta) % expit(-eta)) - 
-  // 	rmult(X, exp(2*eta) % etaD % expit(-eta) % expit(-eta)) +
-  // 	rmult(XD, exp(eta) % expit(-eta));
-  //   }
-  // };
+  class stpm2Probit : public stpm2 {
+  public:
+    stpm2Probit(SEXP sexp) : stpm2(sexp) { }
+    vec link(vec S) { return -qnorm01(S); }
+    vec ilink(vec eta) { return pnorm01(-eta); }
+    vec H(vec eta, vec etaD) { return -log(pnorm01(-eta)); }
+    vec h(vec eta, vec etaD) { return etaD % dnorm01(eta) / pnorm01(-eta); }
+    mat gradH(vec eta, vec etaD, mat X, mat XD) { 
+      return rmult(X, dnorm01(eta) / pnorm01(-eta));
+    }
+    mat gradh(vec eta, vec etaD, mat X, mat XD) { 
+      return rmult(X, -eta % dnorm01(eta) % etaD / pnorm01(-eta)) +
+	rmult(X, dnorm01(eta) % dnorm01(eta) / pnorm01(-eta) / pnorm01(-eta) % etaD) +
+	rmult(XD,dnorm01(eta) / pnorm01(-eta));
+    }
+  };
 
   struct SmoothLogH {
     int first_para, last_para;
@@ -198,15 +202,15 @@ namespace rstpm2 {
     return smooth;
   }
 
-  template<class Smooth>
-  class pstpm2 : public stpm2 {
+  template<class Smooth, class Stpm2 = stpm2>
+  class pstpm2 : public Stpm2 {
   public:
-    pstpm2(SEXP sexp) : stpm2(sexp) {
+    pstpm2(SEXP sexp) : Stpm2(sexp) {
       List list = as<List>(sexp);
       List lsmooth = as<List>(list["smooth"]);
       sp = as<NumericVector>(list["sp"]);
       reltol_search = as<double>(list["reltol_search"]);
-      reltol = as<double>(list["reltol"]);
+      // reltol = as<double>(list["reltol"]);
       alpha = as<double>(list["alpha"]);
       criterion = as<int>(list["criterion"]);
       smooth = read_smoothers<Smooth>(lsmooth);
@@ -741,114 +745,18 @@ namespace rstpm2 {
 
   /* PROBIT MODELS */
 
-  template<class Data>
-  double fminfn_probit(int n, double * beta, void *ex) {
-    Data * data = (Data *) ex;
-    vec vbeta(beta,n);
-    vbeta = vbeta % data->parscale;
-    vec eta = data->X * vbeta;
-    vec etaD = data->XD * vbeta;
-    vec H = -log(pnorm01(-eta));
-    vec h =  dnorm01(eta) / pnorm01(-eta) % etaD + data->bhazard;
-    double constraint = data->kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
-    vec eps = h*0.0 + 1.0e-16; 
-    h = max(h,eps);
-    double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % H) - constraint;
-    if (data->delayed == 1) {
-      vec eta0 = data->X0 * vbeta;
-      vec H0 = -log(pnorm01(-eta0));
-      ll += sum(data->wt0 % H0);
-    }
-    return -ll;  
-  }
-
-  template<class Data>
-  bool fminfn_probit_constraint(int n, double * beta, void *ex) {
-    Data * data = (Data *) ex;
-    vec vbeta(beta,n);
-    vbeta = vbeta % data->parscale;
-    vec eta = data->X * vbeta;
-    vec etaD = data->XD * vbeta;
-    vec h =  dnorm01(eta) / pnorm01(-eta) % etaD + data->bhazard;
-    return all(h>0);
-  }
-
-  template<class Data>
-  void fminfn_probit_nlm(int n, double * beta, double * f, void *ex) {
-    *f = fminfn_po<Data>(n, beta, ex);
-  };
-
-  template<class Data>
-  void grfn_probit(int n, double * beta, double * gr, void *ex) {
-    Data * data = (Data *) ex;
-    vec vbeta(beta,n);
-    vbeta = vbeta % data->parscale;
-    vec eta = data->X * vbeta;
-    vec etaD = data->XD * vbeta;
-    vec H = -log(pnorm01(-eta));
-    vec h =  dnorm01(eta) / pnorm01(-eta) % etaD + data->bhazard;
-    mat gradH = rmult(data->X, dnorm01(eta)/pnorm01(-eta)); 
-    mat gradh = rmult(data->X, -eta % dnorm01(eta) % etaD / pnorm01(-eta)) +
-      rmult(data->X, dnorm01(eta) % dnorm01(eta)/pnorm01(-eta)/pnorm01(-eta) % etaD) +
-      rmult(data->XD, dnorm01(eta) / pnorm01(-eta));
-    mat Xgrad = -gradH + rmult(gradh, data->event/h);
-    mat Xconstraint = rmult(gradh, data->kappa * h);
-    vec eps = h*0.0 + 1.0e-16; // hack
-    Xgrad.rows(h<=eps) = Xconstraint.rows(h<=eps);
-    Xgrad = rmult(Xgrad,data->wt);
-    rowvec vgr = sum(Xgrad,0);
-    if (data->delayed == 1) {
-      vec eta0 = data->X0 * vbeta;
-      mat gradH0 = rmult(data->X, data->wt0 % dnorm01(eta0)/pnorm01(-eta0)); 
-      vgr += sum(-gradH0,0);
-    }
-    for (int i = 0; i<n; ++i) {
-      gr[i] = -vgr[i]*data->parscale[i];
-    }
-  }
-
   RcppExport SEXP optim_stpm2_probit(SEXP args) {
 
-    stpm2 data(args);
+    stpm2Probit data(args);
 
-    BFGS2<stpm2> bfgs;
+    BFGS2<stpm2Probit> bfgs;
     bfgs.reltol = data.reltol;
-    bfgs.optimWithConstraint(fminfn_probit<stpm2>, grfn_probit<stpm2>, data.init, (void *) &data, fminfn_probit_constraint<stpm2>);
+    bfgs.optimWithConstraint(fminfn<stpm2Probit>, grfn<stpm2Probit>, data.init, (void *) &data, fminfn_constraint<stpm2Probit>);
 
     return List::create(_("fail")=bfgs.fail,
 			_("coef")=wrap(bfgs.coef),
 			_("hessian")=wrap(bfgs.hessian));
   }
-
-
-  RcppExport SEXP optim_stpm2_probit_nlm(SEXP args) {
-
-    stpm2 data(args);
-
-    data.init = ew_div(data.init,data.parscale);
-    int n = data.init.size();
-    
-    Nlm nlm;
-    nlm.gradtl = nlm.steptl = data.reltol;
-    //nlm.method=2; nlm.stepmx=0.0;
-    bool satisfied;
-    do {
-      nlm.optim(& fminfn_probit_nlm<stpm2>, & grfn_probit<stpm2>, data.init, (void *) &data);
-      satisfied = fminfn_probit_constraint<stpm2>(n,&nlm.coef[0],(void *) &data);
-      if (!satisfied) data.kappa *= 2.0;
-    } while (!satisfied && data.kappa<1.0e5);
-
-    nlm.coef = ew_mult(nlm.coef, data.parscale);
-
-    return List::create(_("itrmcd")=wrap(nlm.itrmcd),
-			_("niter")=wrap(nlm.itncnt),
-			_("coef")=wrap(nlm.coef),
-			_("hessian")=wrap(nlm.hessian));
-  }
-
-
-
-
 
   // R CMD INSTALL ~/src/R/microsimulation
   // R -q -e "require(microsimulation); .Call('test_nmmin',1:2,PACKAGE='microsimulation')"
