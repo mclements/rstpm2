@@ -584,12 +584,12 @@ stpm2 <- function(formula, data,
     if (delayed) {
         ind <- time0>0
         data0 <- data[ind,,drop=FALSE] # data for delayed entry times
+        .timeVar <- data0[[timeVar]] <- data0[[time0Var]]
         X0 <- lpmatrix.lm(lm.obj, data0)
         wt0 <- wt[ind]
-        temp <- data0[[timeVar]] <- data0[[time0Var]]
         XD0 <- grad(lpfunc,0,lm.obj,data0,timeVar)
         XD0 <- matrix(XD0,nrow=nrow(X0))
-        data0[[timeVar]] <- temp
+        data0[[timeVar]] <- .timeVar
     } else {
         XD0 <- X0 <- wt0 <- matrix(0,1,1)
     }
@@ -976,6 +976,7 @@ setClass("pstpm2", representation(xlevels="list",
                                   logli="function",
                                   gam="gam",
                                   timeVar="character",
+                                  time0Var="character",
                                   timeExpr="nameOrcall",
                                   like="function",
                                   model.frame="list",
@@ -996,7 +997,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    control = list(parscale = 0.1, maxit = 300), init = NULL,
                    coxph.strata = NULL, coxph.formula = NULL,
                    weights = NULL, robust = FALSE, 
-                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE,
+                   bhazard = NULL, timeVar = "", time0Var = "",
+                   sp=NULL, use.gr = TRUE, use.rcpp = TRUE,
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1.4,BIC=1) else 1, sp.init=NULL, trace = 0,
                    type=c("PH","PO","probit"),
@@ -1032,11 +1034,13 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     eventExpr <- lhs(formula)[[length(lhs(formula))]]
     delayed <- length(lhs(formula))==4
     timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
-    if (is.null(timeVar))
+    if (timeVar == "")
       timeVar <- all.vars(timeExpr)
     time <- eval(timeExpr, data)
     if (delayed) {
       time0Expr <- lhs(formula)[[2]]
+      if (time0Var == "")
+        time0Var <- all.vars(time0Expr)
       time0 <- eval(time0Expr, data)
     }
     event <- eval(eventExpr,data)
@@ -1127,6 +1131,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     if (delayed) {
         ind <- time0>0
         data0 <- data[ind,,drop=FALSE] # data for delayed entry times
+        .timeVar <- data0[[timeVar]] <- data0[[time0Var]]
         X0 <- predict(gam.obj,data0,type="lpmatrix")
         wt0 <- wt[ind]
         lpfunc <- function(x,...) {
@@ -1134,7 +1139,6 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
             newdata[[timeVar]] <- x
             predict(gam.obj,newdata,type="lpmatrix")
         }
-        .timeVar <- data0[[timeVar]] <- data0[[time0Var]]
         XD0 <- grad1(lpfunc,data0[[timeVar]])
         data0[[timeVar]] <- .timeVar
         ## XD0 <- grad(lpfunc,0,lm.obj,data0,timeVar)
@@ -1354,6 +1358,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    model.frame = mf,
                    gam = gam.obj,
                    timeVar = timeVar,
+                   time0Var = time0Var,
                    timeExpr = timeExpr,
                    like = like,
                    call.formula = formula,

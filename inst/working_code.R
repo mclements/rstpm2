@@ -21,15 +21,6 @@
 refresh
 require(rstpm2)
 data(brcancer)
-brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime*0.5,0))
-## debug(stpm2)
-## debug(pstpm2)
-stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,use.rcpp=FALSE,use.gr=FALSE)@coef
-stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)@coef
-pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)
-stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,use.rcpp=FALSE)@coef
-(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
-                     logH.formula=~nsx(log(rectime),df=3,stata=TRUE)))
 
 ## Stata estimated coef for hormon
 ## PH:     -.3614357
@@ -45,15 +36,17 @@ system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="pro
 system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit"))) # slow
 
 ## delayed entry
+## Stata estimated coef for hormon (PH): -1.162504
 brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime*0.5,0))
 ## debug(stpm2)
-(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
-                     logH.formula=~nsx(log(rectime),df=3,stata=TRUE)))
+stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
+      logH.formula=~nsx(log(rectime),df=3,stata=TRUE))
 head(predict(fit,se.fit=TRUE))
 ## delayed entry and tvc
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
                      tvc.formula=~hormon:nsx(log(rectime),df=3,stata=TRUE)))
 head(predict(fit,se.fit=TRUE))
+pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)
 
 
 system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
