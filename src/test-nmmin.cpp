@@ -125,7 +125,7 @@ namespace rstpm2 {
       return rmult(XD, exp(eta)) + rmult(X, etaD % exp(eta));
     }
     NumericVector init;
-    mat X, XD,X0,XD0; 
+    mat X, XD, X0, XD0; 
     vec bhazard,wt,wt0,event,parscale;
     double reltol, kappa;
     int delayed, trace;
@@ -375,7 +375,9 @@ namespace rstpm2 {
     Xgrad = rmult(Xgrad,data->wt);
     rowvec vgr = sum(Xgrad,0);
     if (data->delayed == 1) {
-      mat gradH0 = data->gradH(data->X0 * vbeta, data->XD0 * vbeta, data->X0, data->XD0); 
+      vec eta0 = data->X0 * vbeta;
+      vec etaD0 = data->XD0 * vbeta;
+      mat gradH0 = data->gradH(eta0, etaD0, data->X0, data->XD0); 
       vgr += sum(rmult(gradH0, data->wt0),0);
     }
     for (int i = 0; i<n; ++i) {

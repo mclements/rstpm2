@@ -462,7 +462,7 @@ setClass("stpm2", representation(xlevels="list",
 stpm2 <- function(formula, data,
                      df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
                      tvc = NULL, tvc.formula = NULL,
-                     control = list(parscale = 0.1, maxit = 300), init = FALSE,
+                     control = list(parscale = 0.1, maxit = 300), init = NULL,
                      coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE, use.rcpp= TRUE,
                      reltol=1.0e-8, trace = 0,
@@ -559,7 +559,7 @@ stpm2 <- function(formula, data,
     dataEvents <- data[event,]
     lm.call$data <- quote(dataEvents) # events only
     lm.obj <- eval(lm.call)
-    if (is.logical(init) && !init) {
+    if (is.null(init)) {
       init <- coef(lm.obj)
     }
     ##
@@ -586,10 +586,12 @@ stpm2 <- function(formula, data,
         data0 <- data[ind,,drop=FALSE] # data for delayed entry times
         X0 <- lpmatrix.lm(lm.obj, data0)
         wt0 <- wt[ind]
+        temp <- data0[[timeVar]] <- data0[[time0Var]]
         XD0 <- grad(lpfunc,0,lm.obj,data0,timeVar)
         XD0 <- matrix(XD0,nrow=nrow(X0))
+        data0[[timeVar]] <- temp
     } else {
-        XD0 <- X0 <- wt0 <- NULL
+        XD0 <- X0 <- wt0 <- matrix(0,1,1)
     }
       pars <- list(event=event,X=X,XD=XD,wt=wt,bhazard=bhazard,delayed=delayed)
       pars0 <- list(event=event,X=X0,XD=XD0,wt=wt0,bhazard=bhazard,delayed=delayed)
@@ -602,10 +604,10 @@ stpm2 <- function(formula, data,
         h[h<0] <- 1e-16
         ll <- sum(pars$wt[pars$event]*log(h[pars$event])) - sum(pars$wt*H) - constraint/2
         if (delayed) {
-            eta <- pars0$X %*% beta
-            etaD <- pars0$XD %*% beta
-            H <- link$H(eta,etaD)
-            ll <- ll + sum(pars0$wt*H)
+            eta0 <- as.vector(pars0$X %*% beta)
+            etaD0 <- as.vector(pars0$XD %*% beta)
+            H0 <- link$H(eta0,etaD0)
+            ll <- ll + sum(pars0$wt*H0)
         }
         return(-ll)
     }
@@ -888,7 +890,6 @@ setMethod("plot", signature(x="stpm2", y="missing"),
     }
   return(invisible(y))
 })
-
 if (FALSE) {
     lpfunc <- function(delta,fit,dataset,var) {
       dataset[[var]] <- dataset[[var]]+delta
@@ -896,8 +897,7 @@ if (FALSE) {
     }
     XD <- grad(lpfunc,0,lm.obj,data,timeVar)
     XD <- matrix(XD,nrow=nrow(X))
-
-
+    #
     XD <- grad1(lpfunc,data[[timeVar]])    
 }
 
@@ -1127,18 +1127,20 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     if (delayed) {
         ind <- time0>0
         data0 <- data[ind,,drop=FALSE] # data for delayed entry times
-        X0 <- lpmatrix.lm(lm.obj, data0)
+        X0 <- predict(gam.obj,data0,type="lpmatrix")
         wt0 <- wt[ind]
         lpfunc <- function(x,...) {
             newdata <- data0
             newdata[[timeVar]] <- x
             predict(gam.obj,newdata,type="lpmatrix")
         }
-        XD0 <- grad1(lpfunc,data0[[timeVar]])    
+        .timeVar <- data0[[timeVar]] <- data0[[time0Var]]
+        XD0 <- grad1(lpfunc,data0[[timeVar]])
+        data0[[timeVar]] <- .timeVar
         ## XD0 <- grad(lpfunc,0,lm.obj,data0,timeVar)
         ## XD0 <- matrix(XD0,nrow=nrow(X))
     } else {
-        XD0 <- X0 <- wt0 <- NULL
+        XD0 <- X0 <- wt0 <- matrix(0,1,1)
     }
     pars <- list(event=event,X=X,XD=XD,wt=wt,bhazard=bhazard,delayed=delayed)
     pars0 <- list(event=event,X=X0,XD=XD0,wt=wt0,bhazard=bhazard,delayed=delayed)
@@ -1165,7 +1167,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         ll <- sum(wt[event]*log(h[event])) - sum(wt*H) - pfun(beta,sp) - constraint
         if (delayed) {
             eta0 <- as.vector(X0 %*% beta)
-            etaD0 <- as-vector(XD0 %*% beta)
+            etaD0 <- as.vector(XD0 %*% beta)
             ll <- ll + sum(wt0*link$H(eta0,etaD0))
         }
         attr(ll,"infeasible") <- constraint > 0
@@ -1287,7 +1289,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         suffix <- switch(type,PH="ph",PO="po",probit="probit")
         pen <- if(penalty=="logH") "LogH" else "Haz"
         args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
-                     delayed=if (delayed) 1 else 0, X0=X0, wt0=wt0, parscale=control$parscale,
+                     delayed=if (delayed) 1 else 0, X0=X0, XD0=XD0, wt0=wt0, parscale=control$parscale,
                      smooth=if(penalty == "logH") gam.obj$smooth else design,
                      sp=sp, reltol_search=reltol$search, reltol=reltol$final, trace=trace,
                      kappa=1.0,
@@ -1446,6 +1448,7 @@ setMethod("predict", "pstpm2",
     local <-  function (object, newdata=NULL, type="surv", exposed)
       {
         tt <- object@terms 
+        link <- object@link
         if (is.null(newdata)) {
           ##mm <- X <- model.matrix(object) # fails (missing timevar)
           X <- object@x
