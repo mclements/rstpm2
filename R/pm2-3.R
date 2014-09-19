@@ -463,18 +463,24 @@ stpm2 <- function(formula, data,
                      df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
                      tvc = NULL, tvc.formula = NULL,
                      control = list(parscale = 0.1, maxit = 300), init = NULL,
-                     coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
+                     coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE, 
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE, use.rcpp= TRUE,
                      reltol=1.0e-8, trace = 0,
                      type=c("PH","PO","probit"),
-                     contrasts = NULL, subset = NULL, ...)
-  {
-      type <- match.arg(type)
-      link <- switch(type,PH=link.PH,PO=link.PO,probit=link.probit)
+                     contrasts = NULL, subset = NULL, ...) {
+    type <- match.arg(type)
+    link <- switch(type,PH=link.PH,PO=link.PO,probit=link.probit)
     ## parse the event expression
+    eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
     eventExpr <- lhs(formula)[[length(lhs(formula))]]
-    delayed <- length(lhs(formula))==4
+    delayed <- length(lhs(formula))>=4
+    counting <- attr(eventInstance,"type") == "counting"
+    interval <- attr(eventInstance,"type") == "interval"
+    if (interval) {
+        use.rcpp <- FALSE
+        use.gr <- FALSE
+    }
     timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
     if (timeVar == "")
         timeVar <- all.vars(timeExpr)
@@ -536,19 +542,31 @@ stpm2 <- function(formula, data,
     event <- eval(eventExpr,data)
     event <- event > min(event)
     ##
-    ## Cox regression
-    coxph.call <- mf
-    coxph.call[[1L]] <- as.name("coxph")
-    coxph.strata <- substitute(coxph.strata)
-    if (!is.null(coxph.strata)) {
-      coxph.formula <- formula
-      rhs(coxph.formula) <- rhs(formula) %call+% call("strata",coxph.strata)
-      coxph.call$formula <- coxph.formula
+    if (!interval) {
+        ## Cox regression
+        coxph.call <- mf
+        coxph.call[[1L]] <- as.name("coxph")
+        coxph.strata <- substitute(coxph.strata)
+        if (!is.null(coxph.strata)) {
+            coxph.formula <- formula
+            rhs(coxph.formula) <- rhs(formula) %call+% call("strata",coxph.strata)
+            coxph.call$formula <- coxph.formula
+        }
+        coxph.call$model <- TRUE
+        coxph.obj <- eval(coxph.call, envir=parent.frame())
+        y <- model.extract(model.frame(coxph.obj),"response")
+        data$logHhat <- pmax(-18,link$link(Shat(coxph.obj)))
     }
-    coxph.call$model <- TRUE
-    coxph.obj <- eval(coxph.call, envir=parent.frame())
-    y <- model.extract(model.frame(coxph.obj),"response")
-    data$logHhat <- pmax(-18,link$link(Shat(coxph.obj)))
+    if (interval) {
+        ## survref regression
+        survreg.call <- mf
+        survreg.call[[1L]] <- as.name("survreg")
+        survreg.obj <- eval(survreg.call, envir=parent.frame())
+        weibullShape <- 1/survreg.obj$scale
+        weibullScale <- predict(survreg.obj)
+        y <- model.extract(model.frame(survreg.obj),"response")
+        data$logHhat <- pmax(-18,link$link(pweibull(time,weibullShape,weibullScale,lower.tail=FALSE)))
+    }
     ##
     ## initial values and object for lpmatrix predictions
     lm.call <- mf
@@ -557,6 +575,8 @@ stpm2 <- function(formula, data,
     lhs(lm.formula) <- quote(logHhat) # new response
     lm.call$formula <- lm.formula
     dataEvents <- data[event,]
+    if (interval)
+        dataEvents <- data
     lm.call$data <- quote(dataEvents) # events only
     lm.obj <- eval(lm.call)
     if (is.null(init)) {
@@ -593,8 +613,20 @@ stpm2 <- function(formula, data,
     } else {
         XD0 <- X0 <- wt0 <- matrix(0,1,1)
     }
-      pars <- list(event=event,X=X,XD=XD,wt=wt,bhazard=bhazard,delayed=delayed)
-      pars0 <- list(event=event,X=X0,XD=XD0,wt=wt0,bhazard=bhazard,delayed=delayed)
+    if (interval) {
+        ttime <- eventInstance[,1]
+        ttime2 <- eventInstance[,2]
+        ttype <- eventInstance[,3]
+        data0 <- data
+        .timeVar <- data0[[timeVar]] <- data0[[time0Var]]
+        X0 <- lpmatrix.lm(lm.obj, data0)
+        wt0 <- wt
+        XD0 <- grad(lpfunc,0,lm.obj,data0,timeVar)
+        XD0 <- matrix(XD0,nrow=nrow(X0))
+        data0[[timeVar]] <- .timeVar
+    }
+    pars <- list(event=event,X=X,XD=XD,wt=wt,bhazard=bhazard,delayed=delayed)
+    pars0 <- list(event=event,X=X0,XD=XD0,wt=wt0,bhazard=bhazard,delayed=delayed)
     negll <- function(beta,kappa=1) {
         eta <- as.vector(pars$X %*% beta)
         etaD <- as.vector(pars$XD %*% beta)
@@ -603,11 +635,24 @@ stpm2 <- function(formula, data,
         constraint <- kappa*sum(((pars$wt*h)[h<0])^2)
         h[h<0] <- 1e-16
         ll <- sum(pars$wt[pars$event]*log(h[pars$event])) - sum(pars$wt*H) - constraint/2
-        if (delayed) {
+        if (delayed) { # includes counting and interval types
             eta0 <- as.vector(pars0$X %*% beta)
             etaD0 <- as.vector(pars0$XD %*% beta)
             H0 <- link$H(eta0,etaD0)
             ll <- ll + sum(pars0$wt*H0)
+        }
+        if (interval) {
+            ## initial values will be a problem
+            h0 <- link$h(eta0,etaD0)
+            ll <- 0
+            i <- ttype==0 # right censoring
+            ll <- ll - sum((H0*wt0)[i])
+            i <- ttype==1 # exact
+            ll <- ll - sum((H0*wt0)[i]) + sum(log(h0*wt0)[i])
+            i <- ttype==2 # left censoring
+            ll <- ll + sum((log(1-exp(-H0))*wt0)[i])
+            i <- ttype==3 # interval censoring
+            ll <- ll + sum((log(exp(-H0)-exp(-H))*wt)[i])
         }
         return(-ll)
     }
@@ -734,7 +779,7 @@ setMethod("predictnl", "stpm2",
 ##
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
   {
@@ -806,6 +851,8 @@ setMethod("predict", "stpm2",
             ## else 
                 return(H)
         }
+        if (type=="density")
+            return (S*h)
         if (type=="surv") {
           return(S)
         }
@@ -876,7 +923,7 @@ setMethod("plot", signature(x="stpm2", y="missing"),
   y <- predict(x,newdata,type=type,var=var,grid=TRUE,se.fit=TRUE)
   if (is.null(xlab)) xlab <- deparse(x@timeExpr)
   if (is.null(ylab))
-    ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",
+    ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
                    sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard")
   xx <- attr(y,"newdata")
   xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
