@@ -648,6 +648,8 @@ namespace rstpm2 {
     int n = data.init.size();
     data.kappa = 10.0;
 
+    Rprintf("trace=%i.\n",data.trace);
+
     NelderMead nm;
     nm.reltol = 1.0e-5;
     nm.maxit = 500;
@@ -683,6 +685,20 @@ namespace rstpm2 {
   			_("hessian")=wrap(bfgs.hessian));
 
   }
+
+  RcppExport SEXP optim_pstpm2LogH_multivariate_ph(SEXP args) { 
+    return optim_pstpm2_multivariate<SmoothLogH,stpm2>(args); }
+  RcppExport SEXP optim_pstpm2Haz_multivariate_ph(SEXP args) {
+    return optim_pstpm2_multivariate<SmoothHaz,stpm2>(args); }
+  RcppExport SEXP optim_pstpm2LogH_multivariate_po(SEXP args) {
+    return optim_pstpm2_multivariate<SmoothLogH,stpm2PO>(args); }
+  RcppExport SEXP optim_pstpm2Haz_multivariate_po(SEXP args) {
+    return optim_pstpm2_multivariate<SmoothHaz,stpm2PO>(args); }
+  RcppExport SEXP optim_pstpm2LogH_multivariate_probit(SEXP args) {
+    return optim_pstpm2_multivariate<SmoothLogH,stpm2Probit>(args); }
+  RcppExport SEXP optim_pstpm2Haz_multivariate_probit(SEXP args) {
+    return optim_pstpm2_multivariate<SmoothHaz,stpm2Probit>(args); }
+
 
   template<class Smooth, class Stpm2>
   SEXP optim_pstpm2_multivariate_nlm(SEXP args) {
@@ -727,18 +743,18 @@ namespace rstpm2 {
   			_("hessian")=wrap(bfgs.hessian));
   }
 
-  RcppExport SEXP optim_pstpm2LogH_multivariate_ph(SEXP args) { 
-    return optim_pstpm2_multivariate_nlm<SmoothLogH,stpm2>(args); }
-  RcppExport SEXP optim_pstpm2Haz_multivariate_ph(SEXP args) {
-    return optim_pstpm2_multivariate_nlm<SmoothHaz,stpm2>(args); }
-  RcppExport SEXP optim_pstpm2LogH_multivariate_po(SEXP args) {
-    return optim_pstpm2_multivariate_nlm<SmoothLogH,stpm2PO>(args); }
-  RcppExport SEXP optim_pstpm2Haz_multivariate_po(SEXP args) {
-    return optim_pstpm2_multivariate_nlm<SmoothHaz,stpm2PO>(args); }
-  RcppExport SEXP optim_pstpm2LogH_multivariate_probit(SEXP args) {
-    return optim_pstpm2_multivariate_nlm<SmoothLogH,stpm2Probit>(args); }
-  RcppExport SEXP optim_pstpm2Haz_multivariate_probit(SEXP args) {
-    return optim_pstpm2_multivariate_nlm<SmoothHaz,stpm2Probit>(args); }
+  // RcppExport SEXP optim_pstpm2LogH_multivariate_ph(SEXP args) { 
+  //   return optim_pstpm2_multivariate_nlm<SmoothLogH,stpm2>(args); }
+  // RcppExport SEXP optim_pstpm2Haz_multivariate_ph(SEXP args) {
+  //   return optim_pstpm2_multivariate_nlm<SmoothHaz,stpm2>(args); }
+  // RcppExport SEXP optim_pstpm2LogH_multivariate_po(SEXP args) {
+  //   return optim_pstpm2_multivariate_nlm<SmoothLogH,stpm2PO>(args); }
+  // RcppExport SEXP optim_pstpm2Haz_multivariate_po(SEXP args) {
+  //   return optim_pstpm2_multivariate_nlm<SmoothHaz,stpm2PO>(args); }
+  // RcppExport SEXP optim_pstpm2LogH_multivariate_probit(SEXP args) {
+  //   return optim_pstpm2_multivariate_nlm<SmoothLogH,stpm2Probit>(args); }
+  // RcppExport SEXP optim_pstpm2Haz_multivariate_probit(SEXP args) {
+  //   return optim_pstpm2_multivariate_nlm<SmoothHaz,stpm2Probit>(args); }
 
 
   template<class Smooth, class Stpm2>

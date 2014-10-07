@@ -449,6 +449,7 @@ setClass("stpm2", representation(xlevels="list",
                                  timeExpr="nameOrcall",
                                  time0Expr="nameOrcallOrNULL",
                                  delayed="logical",
+                                 interval="logical",
                                  model.frame="list",
                                  call.formula="formula",
                                  x="matrix",
@@ -744,6 +745,7 @@ stpm2 <- function(formula, data,
                timeExpr = timeExpr,
                time0Expr = time0Expr,
                delayed = delayed,
+               interval = interval,
                call.formula = formula,
                x = X,
                xd = XD,
@@ -814,7 +816,7 @@ setMethod("predict", "stpm2",
             time <- eval(object@timeExpr,newdata)
             ##
           }
-          if (object@delayed) {
+          if (object@delayed && !object@interval) {
             newdata0 <- newdata
             newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
             X0 <- lpmatrix.lm(object@lm, newdata0)
@@ -891,7 +893,7 @@ setMethod("predict", "stpm2",
       stop("Prediction using type in ('hr','sdiff','hdiff') requires newdata to be specified.")
     if (grid) {
       Y <- object@y
-      event <- Y[,ncol(Y)]==1
+      event <- Y[,ncol(Y)]==1 | object@interval
       time <- object@data[[object@timeVar]]
       eventTimes <- time[event]
       X <- seq(min(eventTimes),max(eventTimes),length=seqLength)[-1]
@@ -1315,13 +1317,14 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     }
     if(!is.null(gam.obj$full.sp)) gam.obj$sp <- gam.obj$full.sp
     while(is.na(value <- negllsp(init,gam.obj$sp)) || attr(value,"infeasible")) {
-        if (all(gam.obj$sp > 1e5)) stop("Initial values not valid and revised sp>1e5")
-        gam.call$sp <- gam.obj$sp * 10
+        gam.call$sp <- gam.obj$sp * 5
         if (no.sp) sp <- gam.call$sp
         ## Unresolved: should we change sp.init if the initial values are not feasible?
         gam.obj <- eval(gam.call)
         if(!is.null(gam.obj$full.sp)) gam.obj$sp <- gam.obj$full.sp
         init <- coef(gam.obj)
+        if (all(gam.obj$sp > 1e5)) break
+        ## stop("Initial values not valid and revised sp>1e5")
     } 
     ## MLE
     if (!is.null(control) && "parscale" %in% names(control)) {
