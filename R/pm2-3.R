@@ -1037,7 +1037,8 @@ setClass("pstpm2", representation(xlevels="list",
                                   Call="call",
                                   y="Surv",
                                   sp="numeric",
-                                  link="list"
+                                  link="list",
+                                  edf="numeric", df="numeric"
                                   ),
          contains="mle2")
 pstpm2 <- function(formula, data, smooth.formula = NULL,
@@ -1366,6 +1367,9 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         names(fit$coef) <- names(init)
         init <- fit$coef
         if (!no.sp) sp <- fit$sp
+        edf <- fit$edf
+    } else {
+      edf <- NA
     }
     negll <- function(beta) negllsp(beta,sp)
     gradnegll <- function(beta) gradnegllsp(beta,sp)
@@ -1418,7 +1422,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    termsd = mt, # wrong!
                    y = y,
                    sp = sp,
-               link=link)
+               link=link,
+               edf=edf, df=edf)
     if (robust) # kludge
         out@vcov <- sandwich.stpm2(out)
     return(out)
