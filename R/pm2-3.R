@@ -1047,7 +1047,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    bhazard = NULL, timeVar = "", time0Var = "",
                    sp=NULL, use.gr = TRUE, use.rcpp = TRUE,
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
-                   alpha=if (is.null(sp)) switch(criterion,GCV=1.4,BIC=1) else 1, sp.init=NULL, trace = 0,
+                   alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=NULL, trace = 0,
                    type=c("PH","PO","probit"),
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
