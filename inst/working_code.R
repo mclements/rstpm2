@@ -37,6 +37,7 @@ system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="pro
 
 ## delayed entry
 ## Stata estimated coef for hormon (PH): -1.162504
+data(brcancer)
 brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime*0.5,0))
 ## debug(stpm2)
 stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
@@ -44,8 +45,9 @@ stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
 head(predict(fit,se.fit=TRUE))
 ## delayed entry and tvc
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
-                     tvc.formula=~hormon:nsx(log(rectime),df=3,stata=TRUE)))
-head(predict(fit,se.fit=TRUE)) # predictions do not work for interval censored or left truncated data
+                     logH.formula=~nsx(rectime,df=3),
+                     tvc.formula=~hormon:nsx(rectime,df=3,stata=TRUE)))
+head(predict(fit,se.fit=TRUE)) 
 pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)
 
 refresh
@@ -56,20 +58,27 @@ ICHemophiliac2 <- transform(as.data.frame(ICHemophiliac),event=3)
 fit1 <- stpm2(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2)
 estimate <- ickde(ICHemophiliac, m=200, h=0.9)
 plot(estimate, type="l", ylim=c(0,0.20))
-tt <- seq(0,15,length=301)
-points(ICHemophiliac2$left,predict(fit1,type="density"))
+tt <- seq(0,20,length=301)[-1]
+## plot(fit1,newdata=data.frame(x=1),type="density",add=TRUE,line.col="blue")
+lines(tt,predict(fit1,newdata=data.frame(right=tt),type="density"),col="blue")
 
-reg1 <- survreg(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2)
-weibullShape <- 1/reg1$scale
-## weibullScale <- exp(predict(reg1,type="lp"))
-weibullScale <- predict(reg1)
-tt <- seq(0,20,length=301)
-estimate <- ickde(ICHemophiliac, m=200, h=0.9)
-plot(estimate, type="l", ylim=c(0,0.15))
-lines(tt,dweibull(tt,weibullShape,weibullScale),lty=2)
+## reg1 <- survreg(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2)
+## weibullShape <- 1/reg1$scale
+## ## weibullScale <- exp(predict(reg1,type="lp"))
+## weibullScale <- predict(reg1);
+## tt <- seq(0,20,length=301)
+## estimate <- ickde(ICHemophiliac, m=200, h=0.9)
+## plot(estimate, type="l", ylim=c(0,0.15))
+## lines(tt,dweibull(tt,weibullShape,weibullScale),lty=2)
 
-system.time(print(fit <- stpm2(Surv(left,right,event)~1,data=ICHemophiliac2)))
 
+## two-dimensional smoothers
+x1 <- x2 <- seq(0,1,length=11)
+dat <- expand.grid(x1=x1,x2=x2)
+dat$y <- rnorm(nrow(dat))
+require(mgcv)
+fit <- gam(y~s(x1,x2),data=dat)
+fit$smooth
 
 
 system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
