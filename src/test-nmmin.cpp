@@ -746,9 +746,13 @@ namespace rstpm2 {
     data.kappa = 1.0;
     bfgs.optimWithConstraint(pfminfn<Smooth,Stpm2>, pgrfn<Smooth,Stpm2>, data.init, (void *) &data, fminfn_constraint<Data>);
 
+    NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, (void *) &data);
+    double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
+
     return List::create(_("sp")=wrap(data.sp),
   			_("coef")=wrap(bfgs.coef),
-  			_("hessian")=wrap(bfgs.hessian));
+  			_("hessian")=wrap(bfgs.hessian),
+			_("edf")=wrap(edf));
   }
 
   RcppExport SEXP optim_pstpm2LogH_multivariate_ph_nlm(SEXP args) { 
@@ -776,9 +780,13 @@ namespace rstpm2 {
 
     bfgs.optimWithConstraint(pfminfn<Smooth,Stpm2>, pgrfn<Smooth,Stpm2>, data.init, (void *) &data, fminfn_constraint<Data>);
 
+    NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, (void *) &data);
+    double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
+
     return List::create(_("sp")=wrap(data.sp),
 			_("coef")=wrap(bfgs.coef),
-			_("hessian")=wrap(bfgs.hessian));
+			_("hessian")=wrap(bfgs.hessian),
+			_("edf")=wrap(edf));
   }
 
   RcppExport SEXP optim_pstpm2LogH_fixedsp_ph(SEXP args) {
