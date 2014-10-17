@@ -64,10 +64,13 @@ namespace rstpm2 {
 
     double llike = 0.0;
   
-    vec eta; 
+    vec eta;
+    // ivec index = linspace<ivec>(0, data->n - 1, data->n);
+    // uvec indexi;
 
     for (int i=0; i < data->n; ++i) {
       if (data->event(i) == 1) {
+	// indexi = find(index >= i);
 	eta = beta[0]*data->x(span(i,data->n-1)) + 
 	  beta[1]*log(data->time(i)) * data->x(span(i,data->n-1));
 	llike += eta(0) - log(sum(exp(eta)));

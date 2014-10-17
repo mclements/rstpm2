@@ -652,8 +652,6 @@ namespace rstpm2 {
     int n = data.init.size();
     data.kappa = 10.0;
 
-    Rprintf("trace=%i.\n",data.trace);
-
     NelderMead nm;
     nm.reltol = 1.0e-5;
     nm.maxit = 500;
