@@ -53,10 +53,10 @@ namespace rstpm2 {
 	risk = exp(eta0(span(i,n-1)) + beta(c)*log(time(i))*X(span(i,n-1),k));
         Xrisk = X(span(i,n-1), span::all);
         Xrisk.each_col() %= risk;
-        lsum(span(0,c-1)) = sum(Xrisk, 0)/sum(risk);
+        lsum(span(0,c-1)) = sum(Xrisk, 0).t() / sum(risk);
         lsum(c) = sum(log(time(i))*Xrisk(span::all,k))/sum(risk);
         for (int j=i; j<n && time(j)==time(i) && event(j)==1; ++j) {
-	  grad(span(0,c-1)) += X(j,span::all) - lsum(span(0,c-1));
+	  grad(span(0,c-1)) += X(j,span::all).t() - lsum(span(0,c-1));
 	  grad(c) += X(j,k)*log(time(i)) - lsum(c);
         }
       }

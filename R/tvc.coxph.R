@@ -1,6 +1,13 @@
-tvc.coxph <- function(obj,var,method="logt") {
+setClass("tvcCoxph", contains="mle2")
+setClass("tvcCoxphList", contains="list")
+
+cox.tvc <- function(obj,var=NULL,method="logt") {
     stopifnot(attr(obj$y,"type") == "right")
-    stopifnot(method == "logt")
+    if (is.null(var))
+        return(as(lapply(attr(obj$terms,"term.labels"),
+                      function(name) cox.tvc(obj, var=name,method=method)),
+                  "tvcCoxList"))
+    method <- match.arg(method)
     y <- as.matrix(obj$y)
     time <- y[,1]
     status <- y[,2]
@@ -9,7 +16,7 @@ tvc.coxph <- function(obj,var,method="logt") {
     X <- X[index, , drop = FALSE]
     time <- time[index]
     status <- status[index]
-    k <- match(attr(obj$terms,"term.labels"),var)
+    k <- match(var,attr(obj$terms,"term.labels"))
     beta <- c(coef(obj),0)
     names(beta) <- c(names(coef(obj)),sprintf("%s:log(t)",var))
     minuslogl <- function(beta) -.Call("test_cox_tvc2",
@@ -21,18 +28,35 @@ tvc.coxph <- function(obj,var,method="logt") {
                  minuslogl = minuslogl,
                  gr = gr,
                  method="BFGS", hessian=TRUE)
-    fit@data <- list(object=obj)
-    ## plot the result
-    betak <- beta*0
-    index2 <- c(k,length(betak))
-    betak[index2] <- coef(fit)[index2]
-    Xk <- cbind(X,log(time))
-    Xk[,-index2] <- 0
-    Xk[,k] <- 1
-    fitted <- as.vector(Xk %*% betak)
-    gd <- t(Xk)
-    se.fit <- sqrt(colSums(gd * (vcov(fit) %*% gd)))
-    matplot(time,exp(fitted+cbind(0,-1.96*se.fit,1.96*se.fit)),type="l",lty=c(1,2,2),col=1,ylab="Effect",log="y")
-    abline(h=exp(coef(obj)[k]),lty=3)
-    fit
+    fit@data <- list(object=obj,k=k,var=var)
+    ## return the mle2 object
+    as(fit,"tvcCoxph")
 }
+
+setMethod("show", "tvcCoxph", function(object) print(summary(object)))
+
+setMethod("plot", signature(x="tvcCoxph", y="missing"),
+          function(x,y,
+                   add=FALSE,rug=!add,
+                   type="l",lty=c(1,2,2),col=1,ylab="Effect",log="y",...) {
+              obj <- x@data$object
+              y <- as.matrix(obj$y)
+              time <- y[,1]
+              status <- y[,2]
+              timek <- seq(min(time[status==1]), max(time[status==1]), length=301)
+              Xk <- cbind(1,log(timek))
+              k <- x@data$k
+              index <- c(k,length(coef(x)))
+              betak <- coef(x)[index]
+              fitted <- as.vector(Xk %*% betak)
+              gd <- t(Xk)
+              se.fit <- sqrt(colSums(gd * (vcov(x)[index,index] %*% gd)))
+              if (add) {
+                  matlines(timek,exp(fitted+cbind(0,-1.96*se.fit,1.96*se.fit)),lty=lty,col=col,...)
+              } else {
+                  matplot(timek,exp(fitted+cbind(0,-1.96*se.fit,1.96*se.fit)),type=type,lty=lty,col=col,ylab=ylab,log=log,...)
+              }
+              abline(h=exp(coef(obj)[k]),lty=3)
+              if (rug)
+                  rug(time[status==1])
+          })

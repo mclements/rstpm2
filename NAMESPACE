@@ -3,7 +3,8 @@ useDynLib(rstpm2)
 export(stpm2,stpm2Old,pstpm2,incrVar,
        nsx,makepredictcall.nsx,predict.nsx,
        nsxDeriv,makepredictcall.nsxDeriv,predict.nsxDeriv,
-       predictnl,predictnl.default
+       predictnl,predictnl.default,
+       cox.tvc
        )
 exportMethods(
               "plot",
@@ -12,8 +13,10 @@ exportMethods(
 )
 exportClasses(
     "listOrNULL",
-     "mle2",
-     "stpm2" 
+    "mle2",
+    "stpm2",
+    "pstpm2",
+    "tvcCoxph"
 )
 importFrom(graphics,plot)
 import(splines)
