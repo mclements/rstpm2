@@ -6,24 +6,28 @@ namespace rstpm2 {
   using namespace Rcpp;
   using namespace arma;
 
-  // assume right censored values in ascending order of time and no ties
+  // assume right censored values in ascending order of time
 
   RcppExport SEXP test_cox_tvc2(SEXP args) {
   
     List largs = as<List>(args);
     vec time   = as<vec>(largs["time"]); // length n
     vec event  = as<vec>(largs["event"]); // length n
-    vec x      = as<vec>(largs["x"]); // one covariate, length n
-    vec beta   = as<vec>(largs["beta"]); // length 2
+    mat X      = as<mat>(largs["X"]); // design matrix, n*c
+    vec beta   = as<vec>(largs["beta"]); // length c+1
+    int k      = as<int>(largs["k"]); // column to use for tvc
     int n      = time.size();
-  
-    double llike = 0.0;
+    int c      = X.n_cols;
+    double llike = 0.0, lsum;
     vec eta;
-  
+    vec eta0 = X * beta(span(0,c-1));
     for (int i=0; i<n; ++i) {
-      if (event(i) == 1) {
-	eta = beta(0)*x(span(i,n-1)) + beta(1)*log(time(i))*x(span(i,n-1));
-	llike += eta(0) - log(sum(exp(eta)));
+      if (event(i) == 1 && (i==0 || time(i) != time(i-1))) {
+	eta = eta0(span(i,n-1)) + beta(c)*log(time(i))*X(span(i,n-1),k);
+        lsum = log(sum(exp(eta)));
+        for (int j=i; j<n && time(j)==time(i) && event(j)==1; ++j) {
+          llike += eta(j-i) - lsum;
+        }
       }
     }
     return wrap(llike);
@@ -34,23 +38,31 @@ namespace rstpm2 {
     List largs = as<List>(args);
     vec time   = as<vec>(largs["time"]); // length n
     vec event  = as<vec>(largs["event"]); // length n
-    vec x      = as<vec>(largs["x"]); // one covariate, length n
+    mat X      = as<mat>(largs["X"]); // one covariate, length n
     vec beta   = as<vec>(largs["beta"]); // length 2
+    int k      = as<int>(largs["k"]); // column to use for tvc
     int n      = time.size();
-  
-    vec grad(beta.size());
+    int c      = X.n_cols;
+    vec grad(beta.size(),fill::zeros);
+    vec lsum(beta.size(),fill::zeros);
+    vec eta0 = X * beta(span(0,c-1));
     vec risk;
-  
+    mat Xrisk;
     for (int i=0; i<n; ++i) {
-      if (event(i) == 1) {
-	risk = exp(beta(0)*x(span(i,n-1))+beta(1)*x(span(i,n-1))*log(time(i)));
-	grad(0) += x(i) - sum(x(span(i,n-1)) % risk)/sum(risk);
-	grad(1) += x(i)*log(time(i)) - sum(log(time(i))*x(span(i,n-1)) % risk)/sum(risk);
+      if (event(i) == 1 && (i==0 || time(i) != time(i-1))) {
+	risk = exp(eta0(span(i,n-1)) + beta(c)*log(time(i))*X(span(i,n-1),k));
+        Xrisk = X(span(i,n-1), span::all);
+        Xrisk.each_col() %= risk;
+        lsum(span(0,c-1)) = sum(Xrisk, 0)/sum(risk);
+        lsum(c) = sum(log(time(i))*Xrisk(span::all,k))/sum(risk);
+        for (int j=i; j<n && time(j)==time(i) && event(j)==1; ++j) {
+	  grad(span(0,c-1)) += X(j,span::all) - lsum(span(0,c-1));
+	  grad(c) += X(j,k)*log(time(i)) - lsum(c);
+        }
       }
     }
     return wrap(grad);
   }
-
 
   struct Tvc {
     int n;
@@ -65,12 +77,9 @@ namespace rstpm2 {
     double llike = 0.0;
   
     vec eta;
-    // ivec index = linspace<ivec>(0, data->n - 1, data->n);
-    // uvec indexi;
 
     for (int i=0; i < data->n; ++i) {
       if (data->event(i) == 1) {
-	// indexi = find(index >= i);
 	eta = beta[0]*data->x(span(i,data->n-1)) + 
 	  beta[1]*log(data->time(i)) * data->x(span(i,data->n-1));
 	llike += eta(0) - log(sum(exp(eta)));
@@ -103,7 +112,7 @@ namespace rstpm2 {
     vec time   = as<vec>(largs["time"]); // length n
     vec event  = as<vec>(largs["event"]); // length n
     vec x      = as<vec>(largs["x"]); // one covariate, length n
-    NumericVector beta   = as<NumericVector>(largs["beta"]); // length 2
+    NumericVector beta   = clone(as<NumericVector>(largs["beta"])); // length 2
     int n      = time.size();
 
     Tvc data = {n, time, event, x, beta};
