@@ -33,6 +33,71 @@ namespace rstpm2 {
     return wrap(llike);
   }
 
+  // Breslow estimator of the baseline cumulative hazard;
+  // assumes right censored values in ascending order of time
+  RcppExport SEXP test_cox_tvc2_H0(SEXP args) {
+  
+    List largs = as<List>(args);
+    vec time   = as<vec>(largs["time"]); // length n
+    vec event  = as<vec>(largs["event"]); // length n
+    mat X      = as<mat>(largs["X"]); // design matrix, n*c
+    vec beta   = as<vec>(largs["beta"]); // length c+1
+    int k      = as<int>(largs["k"]); // column to use for tvc
+    int n      = time.size();
+    int c      = X.n_cols;
+    double logHk, lsum;
+    std::vector<double> H, etimes;
+    vec eta;
+    vec eta0 = X * beta(span(0,c-1));
+    for (int i=0; i<n; ++i) {
+      if (event(i) == 1 && (i==0 || time(i) != time(i-1))) {
+	eta = eta0(span(i,n-1)) + beta(c)*log(time(i))*X(span(i,n-1),k);
+	logHk = 0.0;
+        lsum = sum(exp(eta));
+        for (int j=i; j<n && time(j)==time(i) && event(j)==1; ++j) {
+          logHk += 1 - lsum;
+        }
+	etimes.push_back(time(i));
+	H.push_back(exp(logHk));
+      }
+    }
+    return List::create(_("H")=wrap(H),_("times")=wrap(etimes));
+  }
+
+
+  // // Breslow estimator of the cumulative hazard for a given set of covariates;
+  // // assumes right censored values in ascending order of time
+  // RcppExport SEXP test_cox_tvc2_Hx0(SEXP args) {
+  //   List largs = as<List>(args);
+  //   vec time   = as<vec>(largs["time"]); // length n
+  //   vec event  = as<vec>(largs["event"]); // length n
+  //   mat X      = as<mat>(largs["X"]); // design matrix, n*c
+  //   vec x0      = as<vec>(largs["x0"]); // design row for specific covariate pattern, length c
+  //   vec beta   = as<vec>(largs["beta"]); // length c+1
+  //   int k      = as<int>(largs["k"]); // column to use for tvc
+  //   int n      = time.size();
+  //   int c      = X.n_cols;
+  //   double logHk, lsum;
+  //   std::vector<double> H, etimes;
+  //   vec eta;
+  //   vec eta1 = X * beta(span(0,c-1));
+  //   double eta0;
+  //   for (int i=0; i<n; ++i) {
+  //     if (event(i) == 1 && (i==0 || time(i) != time(i-1))) {
+  // 	eta = eta1(span(i,n-1)) + beta(c)*log(time(i))*X(span(i,n-1),k);
+  // 	eta0 = x0 * beta(span(0,c-1)) + beta(c)*log(time(i))*x0(k);
+  // 	logHk = 0.0;
+  //       lsum = sum(exp(eta));
+  //       for (int j=i; j<n && time(j)==time(i) && event(j)==1; ++j) {
+  //         logHk += eta0 - lsum;
+  //       }
+  // 	etimes.push_back(time(i));
+  // 	H.push_back(exp(logHk));
+  //     }
+  //   }
+  //   return List::create(_("H")=wrap(H),_("times")=wrap(etimes));
+  // }
+
   RcppExport SEXP test_cox_tvc2_grad(SEXP args) {
   
     List largs = as<List>(args);

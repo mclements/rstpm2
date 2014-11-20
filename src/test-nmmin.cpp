@@ -232,6 +232,22 @@ namespace rstpm2 {
     std::vector<Smooth> smooth;
   };
 
+  /** 
+      Extension of stpm2 and pstpm2 to include shared frailties with a cluster variable
+  **/
+  template<class Stpm2>
+  class stpm2Shared : public Stpm2 {
+  public:
+    stpm2Shared(SEXP sexp) : Stpm2(sexp) {
+      List list = as<List>(sexp);
+      IntegerVector cluster = as<IntegerVector>(list["cluster"]);
+      // wragged array indexed by a map of vectors
+      for (int i=0; i<cluster.size(); ++i) {
+	clusters[cluster[i]].push_back(i);
+      }
+    }
+    std::map<int,std::vector<int> > clusters;
+  };
 
 
   /**
@@ -300,6 +316,110 @@ namespace rstpm2 {
     }
     return -ll;  
   }
+
+  /** 
+      Objective function for a Gamma shared frailty
+      Assumes that weights == 1.
+      The implementation is incomplete, requiring either the use of optimisation without
+      gradients or the calculation of the gradients.
+  **/
+  template<class Data>
+  double fminfnShared(int n, double * beta, void *ex) {
+    typedef std::vector<int> Index;
+    typedef std::map<int,Index> IndexMap;
+    Data * data = (Data *) ex;
+    vec vbeta(beta,n-1); // theta is the last parameter in beta
+    double theta = beta[n-1];
+    vbeta = vbeta % data->parscale;
+    vec eta = data->X * vbeta;
+    vec etaD = data->XD * vbeta;
+    vec h = data->h(eta,etaD) + data->bhazard;
+    vec H = data->H(eta,etaD) + data->bhazard;
+    double constraint = data->kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
+    vec eps = h*0.0 + 1.0e-16; 
+    h = max(h,eps);
+    mat H0;
+    //double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % H) - constraint;
+    if (data->delayed == 1) {
+      vec eta0 = data->X0 * vbeta;
+      vec etaD0 = data->XD0 * vbeta;
+      H0 = data->H(eta0,etaD0);
+      //ll += sum(data->wt0 % H0);
+    }
+    double ll;
+    for (IndexMap::iterator it=data->clusters.begin(); it!=data->clusters.end(); ++it) {
+      int mi=0;
+      double sumH = 0.0, sumHenter = 0.0;
+      for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
+	if (data->event(*j)==1) {
+	  mi++;
+	  ll += log(h(*j));
+	}
+	sumH += H(*j);
+	if (data->delayed == 1)
+	  sumHenter += H0(*j);
+      }
+      ll -= (1.0/theta+mi)*log(1.0+theta*sumH);
+      if (data->delayed == 1)
+	ll += 1.0/theta*log(1.0+theta*sumHenter);
+      if (mi>0) {
+	int k=1;
+	for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
+	  if (data->event(*j)==1) {
+	    ll += log(1.0+theta*(mi-k));
+	    k++;
+	  }
+	}
+      }
+    }
+    ll -= constraint;
+    return -ll;  
+  }
+
+  /** 
+      Utility function for calculating a gamma frailty log-likelihood within R code 
+   **/
+  RcppExport SEXP llgammafrailty(SEXP _theta, SEXP _h, SEXP _H, SEXP _d,
+				    SEXP _cluster) {
+    double theta = as<double>(_theta);
+    NumericVector h = as<NumericVector>(_h);
+    NumericVector H = as<NumericVector>(_H);
+    IntegerVector d = as<IntegerVector>(_d);
+    IntegerVector cluster = as<IntegerVector>(_cluster);
+    double ll = 0.0;
+    // wragged array indexed by a map of vectors
+    typedef std::vector<int> Index;
+    typedef std::map<int,Index> IndexMap;
+    IndexMap clusters;
+    for (int i=0; i<cluster.size(); ++i) {
+      clusters[cluster[i]].push_back(i);
+    }
+    for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+      int mi=0;
+      double sumH = 0.0;
+      for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
+	if (d[*j]==1) {
+	  mi++;
+	  ll += log(h[*j]);
+	}
+	sumH += H[*j];
+	// sumHenter += Henter[*j];
+      }
+      ll -= (1.0/theta+mi)*log(1.0+theta*sumH);
+      // ll += 1.0/theta*log(1.0+theta*sumHenter);
+      if (mi>0) {
+	int k=1;
+	for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
+	  if (d[*j]==1) {
+	    ll += log(1.0+theta*(mi-k));
+	    k++;
+	  }
+	}
+      }
+    }
+    return wrap(ll);
+  }
+
 
   template<class Data>
   bool fminfn_constraint(int n, double * beta, void *ex) {
@@ -522,6 +642,7 @@ namespace rstpm2 {
 			_("coef")=wrap(nlm.coef),
 			_("hessian")=wrap(nlm.hessian));
   }
+
 
 
   template<class Smooth, class Stpm2>

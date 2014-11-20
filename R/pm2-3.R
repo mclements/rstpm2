@@ -468,6 +468,7 @@ stpm2 <- function(formula, data,
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE, use.rcpp= TRUE,
                      reltol=1.0e-8, trace = 0,
                      type=c("PH","PO","probit"),
+                     frailty = FALSE, cluster = NULL, logtheta=0,
                      contrasts = NULL, subset = NULL, ...) {
     type <- match.arg(type)
     link <- switch(type,PH=link.PH,PO=link.PO,probit=link.probit)
@@ -478,7 +479,7 @@ stpm2 <- function(formula, data,
     delayed <- length(lhs(formula))>=4
     counting <- attr(eventInstance,"type") == "counting"
     interval <- attr(eventInstance,"type") == "interval"
-    if (interval) {
+    if (interval || frailty) { # early code
         use.rcpp <- FALSE
         use.gr <- FALSE
     }
@@ -629,6 +630,10 @@ stpm2 <- function(formula, data,
     pars <- list(event=event,X=X,XD=XD,wt=wt,bhazard=bhazard,delayed=delayed)
     pars0 <- list(event=event,X=X0,XD=XD0,wt=wt0,bhazard=bhazard,delayed=delayed)
     negll <- function(beta,kappa=1) {
+        if (frailty) {
+            theta <- exp(beta[length(beta)])
+            beta <- beta[-length(beta)]
+        }
         eta <- as.vector(pars$X %*% beta)
         etaD <- as.vector(pars$XD %*% beta)
         H <- link$H(eta,etaD) 
@@ -654,6 +659,10 @@ stpm2 <- function(formula, data,
             ll <- ll + sum((log(1-exp(-H0))*wt0)[i])
             i <- ttype==3 # interval censoring
             ll <- ll + sum((log(exp(-H0)-exp(-H))*wt)[i])
+        }
+        if (frailty) {
+            ll <- .Call("llgammafrailty",theta=theta,h=h,H=H,d=as.integer(pars$event),
+                        cluster=as.integer(cluster),package="rstpm2")
         }
         return(-ll)
     }
@@ -688,6 +697,8 @@ stpm2 <- function(formula, data,
         ## out <- out*wt
         ## return(out)
     }
+    if (frailty)
+        init <- c(init,logtheta=logtheta)
     if (!is.null(control) && "parscale" %in% names(control)) {
       if (length(control$parscale)==1)
         control$parscale <- rep(control$parscale,length(init))
