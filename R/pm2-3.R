@@ -1048,6 +1048,7 @@ setClass("pstpm2", representation(xlevels="list",
                                   Call="call",
                                   y="Surv",
                                   sp="numeric",
+                                  nevent="numeric",
                                   link="list",
                                   edf="numeric", df="numeric"
                                   ),
@@ -1106,6 +1107,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     }
     event <- eval(eventExpr,data)
     event <- event > min(event)
+    nevent <- sum(event)
     ##
     ## set up the formulae
     if (is.null(smooth.formula) && is.null(logH.args)) {
@@ -1433,6 +1435,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    termsd = mt, # wrong!
                    y = y,
                    sp = sp,
+               nevent="numeric",
                link=link,
                edf=edf, df=edf)
     if (robust) # kludge
@@ -1479,7 +1482,7 @@ return(-2*ll+trace*log(nn))
 gcvc<-function(pstpm2.fit,nn){
   like<-pstpm2.fit@like
   Hl<-numDeriv::hessian(like,coef(pstpm2.fit))
-  Hinv<-vcov(pstpm2.fit)
+  Hinv<--vcov(pstpm2.fit)
   trace<-sum(diag(Hinv %*% Hl))
   ll<-like(coef(pstpm2.fit))
 return(-2*ll-2*nn*log(1-trace/nn))
