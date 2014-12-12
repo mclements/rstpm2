@@ -1435,7 +1435,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    termsd = mt, # wrong!
                    y = y,
                    sp = sp,
-               nevent="numeric",
+               nevent=nevent,
                link=link,
                edf=edf, df=edf)
     if (robust) # kludge
