@@ -221,6 +221,18 @@ lhs <- function(formula)
     newformula
   }
 }
+
+### Integrating full formula
+formula_full <- function(temp,smooth){
+  left <- deparse(substitute(temp))
+  tf <- terms.formula(smooth,specials=c("s","te"))
+  terms <- attr(tf,"term.labels")
+  right <- paste0(terms,collapse="+")
+  as.formula(paste0(left, "+", right))	
+}
+### full.formula <- formula_full(temp.formula,smooth.formula)
+### Output: formula=full.formula
+
 ## numerically calculate the partial gradient \partial func_j \over \partial x_i
 ## (dim(grad(func,x)) == c(length(x),length(func(x)))
 grad <- function(func,x,...) # would shadow numDeriv::grad()
@@ -1131,7 +1143,10 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     }
     full.formula <- formula
     rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
+    
     ##
+    full.formula <- formula_full(temp.formula,smooth.formula)
+    
     ## Cox regression
     coxph.call <- mf
     coxph.call[[1L]] <- as.name("coxph")
@@ -1425,7 +1440,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    method = mle2@method,
                    optimizer = "optim", # mle2@optimizer
                    data = data, # mle2@data, which uses as.list()
-                   formula = mle2@formula,
+                   #formula = mle2@formula,
+                   formula = full.formula,
                    xlevels = .getXlevels(mt, mf),
                    ##contrasts = attr(X, "contrasts"),
                    contrasts = NULL, # wrong!
