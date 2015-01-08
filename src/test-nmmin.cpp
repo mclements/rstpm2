@@ -277,10 +277,11 @@ namespace rstpm2 {
       do {
 	BFGS::optim(fn,gr,init,ex,eps);
 	satisfied = constraint(n,&coef[0],ex);
-	if (!satisfied) data->kappa *= 2.0;
-      } while ((!satisfied) && data->kappa < 1.0e5);
+	if (!satisfied) data->kappa *= 2.0;   
+      } while ((!satisfied)&& data->kappa < 4*1.0e18);      
       if (apply_parscale) for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
       hessian = calc_hessian(gr, ex, eps);
+   // Rprintf("kappa=%f\n",data->kappa);
     }
     NumericMatrix calc_hessian(optimgr gr, void * ex, double eps = 1.0e-8) {
       Data * data = (Data *) ex;
