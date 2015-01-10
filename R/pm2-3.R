@@ -222,17 +222,6 @@ lhs <- function(formula)
   }
 }
 
-### Integrating full formula
-formula_full <- function(temp,smooth){
-  left <- deparse(substitute(temp))
-  tf <- terms.formula(smooth,specials=c("s","te"))
-  terms <- attr(tf,"term.labels")
-  right <- paste0(terms,collapse="+")
-  as.formula(paste0(left, "+", right))	
-}
-### full.formula <- formula_full(temp.formula,smooth.formula)
-### Output: formula=full.formula
-
 ## numerically calculate the partial gradient \partial func_j \over \partial x_i
 ## (dim(grad(func,x)) == c(length(x),length(func(x)))
 grad <- function(func,x,...) # would shadow numDeriv::grad()
@@ -1051,8 +1040,8 @@ setClass("pstpm2", representation(xlevels="list",
                                   time0Var="character",
                                   timeExpr="nameOrcall",
                                   like="function",
-                                  model.frame="list",
-                                  call.formula="formula",
+	                                model.frame="list",
+	                                fullformula="formula",
                                   delayed="logical",
                                   x="matrix",
                                   xd="matrix",
@@ -1081,7 +1070,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
   {
       type <- match.arg(type)
       link <- switch(type,PH=link.PH,PO=link.PO,probit=link.probit)
-      ## set up the data
+	    ## set up the data
       ## ensure that data is a data frame
       temp.formula <- formula
       if (!is.null(smooth.formula)) rhs(temp.formula) <-rhs(temp.formula) %call+% rhs(smooth.formula)
@@ -1143,10 +1132,12 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     }
     full.formula <- formula
     rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
-    
-    ##
-    full.formu <- formula_full(formula,smooth.formula)
-    
+	  ## 
+	  left <- deparse(substitute(formula))
+	  tf <- terms.formula(smooth.formula, specials = c("s", "te"))
+		terms <- attr(tf, "term.labels")
+		right <- paste0(terms, collapse = "+")
+		fullformula <- as.formula(paste0(left, "+", right), env = parent.frame())
     ## Cox regression
     coxph.call <- mf
     coxph.call[[1L]] <- as.name("coxph")
@@ -1440,8 +1431,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    method = mle2@method,
                    optimizer = "optim", # mle2@optimizer
                    data = data, # mle2@data, which uses as.list()
-                   #formula = mle2@formula,
-                   formula = full.formu,
+                   formula = mle2@formula,
                    xlevels = .getXlevels(mt, mf),
                    ##contrasts = attr(X, "contrasts"),
                    contrasts = NULL, # wrong!
@@ -1455,7 +1445,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    time0Var = time0Var,
                    timeExpr = timeExpr,
                    like = like,
-                   call.formula = formula,
+    	             fullformula = fullformula,
                    delayed=delayed,
                    x = X,
                    xd = XD,
