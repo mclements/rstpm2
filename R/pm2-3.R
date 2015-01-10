@@ -1145,7 +1145,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
     
     ##
-    full.formula <- formula_full(temp.formula,smooth.formula)
+    full.formu <- formula_full(formula,smooth.formula)
     
     ## Cox regression
     coxph.call <- mf
@@ -1441,7 +1441,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    optimizer = "optim", # mle2@optimizer
                    data = data, # mle2@data, which uses as.list()
                    #formula = mle2@formula,
-                   formula = full.formula,
+                   formula = full.formu,
                    xlevels = .getXlevels(mt, mf),
                    ##contrasts = attr(X, "contrasts"),
                    contrasts = NULL, # wrong!
