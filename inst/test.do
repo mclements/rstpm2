@@ -22,6 +22,14 @@ end
 stpm2 hormon, df(3) scale(h)
 dopredictions
 
+* logit model
+stpm2 hormon, df(3) scale(odds)
+dopredictions
+
+* normal model
+stpm2 hormon, df(3) scale(normal)
+dopredictions
+
 * tvc
 stpm2 hormon, df(3) tvc(hormon) dftvc(3) scale(h)
 dopredictions
@@ -55,9 +63,9 @@ restore
 * test speed
 clear all
 set mem 100m
-use brcancer
+webuse brcancer
 stset rectime, f(censrec==1)
-expand 100
+expand 500
 timer clear
 timer on 1
 stpm2 hormon, df(3) scale(h)

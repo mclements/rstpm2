@@ -21,6 +21,85 @@
 refresh
 require(rstpm2)
 data(brcancer)
+
+## Stata estimated coef for hormon
+## PH:     -.3614357
+## PO:     -.474102
+## Probit: -.2823338
+system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
+system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
+##
+system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO")))
+system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO")))
+##
+system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
+system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit"))) # slow
+
+## delayed entry
+## Stata estimated coef for hormon (PH): -1.162504
+data(brcancer)
+brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime*0.5,0))
+## debug(stpm2)
+stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
+      logH.formula=~nsx(log(rectime),df=3,stata=TRUE))
+head(predict(fit,se.fit=TRUE))
+## delayed entry and tvc
+summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
+                     logH.formula=~nsx(rectime,df=3),
+                     tvc.formula=~hormon:nsx(rectime,df=3,stata=TRUE)))
+head(predict(fit,se.fit=TRUE)) 
+pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)
+
+refresh
+require(rstpm2)
+require(ICE)
+data(ICHemophiliac)
+ICHemophiliac2 <- transform(as.data.frame(ICHemophiliac),event=3)
+fit1 <- stpm2(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2)
+estimate <- ickde(ICHemophiliac, m=200, h=0.9)
+plot(estimate, type="l", ylim=c(0,0.20))
+tt <- seq(0,20,length=301)[-1]
+## plot(fit1,newdata=data.frame(x=1),type="density",add=TRUE,line.col="blue")
+lines(tt,predict(fit1,newdata=data.frame(right=tt),type="density"),col="blue")
+
+## reg1 <- survreg(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2)
+## weibullShape <- 1/reg1$scale
+## ## weibullScale <- exp(predict(reg1,type="lp"))
+## weibullScale <- predict(reg1);
+## tt <- seq(0,20,length=301)
+## estimate <- ickde(ICHemophiliac, m=200, h=0.9)
+## plot(estimate, type="l", ylim=c(0,0.15))
+## lines(tt,dweibull(tt,weibullShape,weibullScale),lty=2)
+
+
+## two-dimensional smoothers
+x1 <- x2 <- seq(0,1,length=11)
+dat <- expand.grid(x1=x1,x2=x2)
+dat$y <- rnorm(nrow(dat))
+require(mgcv)
+fit <- gam(y~s(x1,x2),data=dat)
+fit$smooth
+
+
+system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
+system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit",use.rcpp=FALSE)))
+
+system.time(print(fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer, type="PO")))
+system.time(print(fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer, type="PO",use.rcpp=FALSE)))
+
+system.time(print(stpm2Gen(Surv(rectime,censrec==1)~hormon,data=brcancer)))
+system.time(print(stpm2Gen(Surv(rectime,censrec==1)~hormon,data=brcancer, use.rcpp=FALSE)))
+head(predict(fit,se.fit=TRUE))
+head(predict(fit,type="haz",se.fit=TRUE))
+
+brcancer <- brcancer[rep(1:nrow(brcancer),each=500),]
+system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer))) # faster than Stata!
+system.time(print(pfit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
+plot(pfit,newdata=data.frame(hormon=0))
+
+refresh
+require(rstpm2)
+data(brcancer)
 system.time(print(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
                                tvc=list(hormon=3))))
 system.time(print(pfit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer,sp.init=c(0.0001,0.0001),

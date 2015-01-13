@@ -10,11 +10,12 @@ This implements a penalised Royston-Parmar model using generalized
 additive models.
 }
 \usage{
-pstpm2 <- function(formula, data,
-                   logH.args = NULL, logH.formula = NULL,
-                   tvc = NULL, tvc.formula = NULL,
+pstpm2 <- function(formula, data, smooth.formula = NULL,
+                   logH.args = NULL, 
+                   tvc = NULL, 
                    control = list(parscale = 0.1, maxit = 300), init = FALSE,
-                   coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
+                   coxph.strata = NULL, coxph.formula = NULL,
+weights = NULL, robust = FALSE, 
                    bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=switch(criterion,BIC=1,GCV=1.4), sp.init=NULL, trace = 0,
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
@@ -31,22 +32,19 @@ returned by the \code{\link{Surv}} function. [required]
 a data.frame in which to interpret the variables named in
 the \code{formula} argument.
 }
+  \item{smooth.formula}{
+a \code{mgcv::gam} formula for describing the baseline log-cumulative
+hazard function, time.varying effects and smoothed covariate effects
+(default=NULL). The default model is equal to \code{~s(log(time),k=-1)}
+where \code{time} is the time variable.
+}
   \item{logH.args}{
 a list describing the arguments for the \code{s} function for modelling
 the baseline log-cumulative hazard (default=NULL). 
 }
-  \item{logH.formula}{
-a \code{mgcv::gam} formula for describing the baseline log-cumulative hazard function
-(default=NULL). Only one of \code{df}, \code{logH.args} or
-\code{logH.formula} is required. The default model is equal to \code{s(log(time),k=-1)}.
-}
   \item{tvc}{
-a list with the names of the time-varying coefficients.
-}
-  \item{tvc.formula}{
-a formula for describing the time-varying coefficients. If a
-time-varying coefficient is being model, then only one of
-\code{tvc} and \code{tvc.formula} is required.
+a list with the names of the time-varying coefficients
+(e.g. tvc=list(hormon), which is equivalent to smooth.formula=~...+s(log(time),by=hormon)).
 }
 \item{control}{\code{control} argument passed to \code{optim}.}
 \item{init}{\code{init} should either be \code{FALSE}, such that initial
@@ -58,8 +56,6 @@ time-varying coefficient is being model, then only one of
   fitting process. Should be \code{NULL} or a numeric vector.}
 \item{robust}{Boolean used to determine whether to use a robust variance
   estimator.}
-\item{baseoff}{Boolean used to determine whether fully define the model
-using \code{tvc.formula} rather than combining \code{logH.formula} and \code{tvc.formula}}
 \item{bhazard}{variable for the baseline hazard for relative survival}
 \item{timeVar}{variable defining the time variable. By default, this is
 determined from the survival object, however this may be ambiguous if
@@ -138,26 +134,26 @@ plot(fit,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
 plot(fit,newdata=data.frame(hormon=0),type="hazard",add=TRUE,ci=FALSE,line.col="green",lwd=2,
   rug=FALSE)
 
-## tvc
-brcancer <- transform(brcancer, recyear = rectime / 365)
-fit.tvc <- pstpm2(Surv(recyear,censrec==1)~hormon,
+## time-varying hazard ratios
+require(rstpm2)
+data(brcancer)
+fit.tvc <- pstpm2(Surv(rectime,censrec==1)~1,
   data=brcancer,
-  tvc.formula=~s(log(recyear),by=hormon-1),
-  sp.init=c(1,1),
-  coxph.strata=hormon)
-## fit.tvc <- pstpm2(Surv(recyear,censrec==1)~hormon,
-##   data=brcancer,baseoff=TRUE,
-##   tvc.formula=~s(log(recyear),by=factor(hormon)),
-##   sp.init=c(1,1),
-##   coxph.strata=hormon)
+  smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon),
+  coxph.formula=~strata(hormon))
 anova(fit,fit.tvc) # is this valid??
-## fit.tvc2 <- stpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,df=5,tvc=list(hormon=3))
 plot(fit.tvc,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
   rug=FALSE)
 plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard",line.col="red",lwd=2,
-  rug=FALSE,add=TRUE,ci=FALSE)
+  add=TRUE)
 
-
+## Smooth covariate effects
+fit.smoothx <- pstpm2(Surv(rectime,censrec==1)~x1,
+  data=brcancer,
+  smooth.formula=~s(log(rectime))+s(x1))
+ages <- seq(21,80,length=301)
+haz <- predict(fit.smoothx,newdata=data.frame(hormon=1,rectime=365,x1=ages),type="hazard",se.fit=TRUE)
+matplot(ages,haz/haz[150,1],type="l")
 
 ## compare with df=5 from stpm2
 fit.stpm2 <- stpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,df=7)
@@ -169,7 +165,7 @@ plot(fit.stpm2,newdata=data.frame(hormon=1),type="hazard",line.col="orange",lwd=
 ## time-varying coefficient
 ##summary(fit.tvc <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
 ##                     tvc=list(hormon=3)))
-##anova(fit,fit.tvc) # compare with and without tvc
+##anova(fit,fit.tvc) # compare with and without tvc (unclear whether this is valid)
 
 ## some more plots
 ## plot(fit.tvc,newdata=data.frame(hormon=0),type="hr",var="hormon")
