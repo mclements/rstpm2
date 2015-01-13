@@ -514,13 +514,19 @@ namespace rstpm2 {
     Data * data = (Data *) ex;
     vec vbeta(beta,n);
     vbeta = vbeta % data->parscale;
+    vec eta = data->X * vbeta;
+    vec etaD = data->XD * vbeta;
+    vec h = data->h(eta,etaD) + data->bhazard;
+    mat gradh = data->gradh(eta,etaD,data->X,data->XD);
+    mat Xconstraint = data->kappa * rmult(gradh,h%(h<0));
     rowvec vgr(n, fill::zeros);
     for (size_t i=0; i < data->smooth.size(); ++i) {
       SmoothLogH smoothi = data->smooth[i];
       vgr.subvec(smoothi.first_para,smoothi.last_para) += 
 	(data->sp)[i] * (smoothi.S * vbeta.subvec(smoothi.first_para,smoothi.last_para)).t();
     }
-    for (int i = 0; i<n; ++i) gr[i] += vgr[i]*data->parscale[i];
+    rowvec dconstraint = sum(Xconstraint,0);
+    for (int i = 0; i<n; ++i) gr[i] += vgr[i]*data->parscale[i] + dconstraint[i];
   }
 
   template<class Stpm2>

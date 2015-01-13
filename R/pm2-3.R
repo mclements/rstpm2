@@ -1288,14 +1288,15 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
             deriv
         }
     }
-    gradnegllsp <- function(beta,sp) {
+    gradnegllsp <- function(beta,sp,gamma=10) {
         eta <- as.vector(X %*% beta)
         etaD <- as.vector(XD %*% beta)
         h <- link$h(eta,etaD) + bhazard
         H <- link$H(eta,etaD)
         gradh <- link$gradh(eta,etaD,pars)
         gradH <- link$gradH(eta,etaD,pars)
-        g <- colSums(wt*(-gradH + ifelse(event,1/h,0)*gradh)) - dpfun(beta,sp)
+        dconstraint <- gamma*colSums(ifelse(h<0,h,0)*gradh)
+        g <- colSums(wt*(-gradH + ifelse(event,1/h,0)*gradh)) - dpfun(beta,sp) - dconstraint
         if (delayed) {
             eta0 <- as.vector(X0 %*% beta)
             etaD0 <- as.vector(XD0 %*% beta)
