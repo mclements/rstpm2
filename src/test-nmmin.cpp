@@ -164,6 +164,17 @@ namespace rstpm2 {
 	rmult(XD,dnorm01(eta) / pnorm01(-eta));
     }
   };
+  
+  class stpm2AH : public stpm2 {
+  public:
+    stpm2AH(SEXP sexp) : stpm2(sexp) { }
+    vec link(vec S) { return -log(S); }
+    vec ilink(vec x) { return exp(-x); }
+    vec h(vec eta, vec etaD) { return etaD; }
+    vec H(vec eta, vec etaD) { return eta; }
+    mat gradh(vec eta, vec etaD, mat X, mat XD) { return XD; }
+    mat gradH(vec eta, vec etaD, mat X, mat XD) { return X;  }
+  };
 
   struct SmoothLogH {
     int first_para, last_para;
@@ -568,6 +579,9 @@ namespace rstpm2 {
   template<>
   double pfminfn<SmoothLogH,stpm2Probit>(int n, double * beta, void *ex) {
     return pfminfn_SmoothLogH<stpm2Probit>(n, beta, ex); }
+    template<>
+  double pfminfn<SmoothLogH,stpm2AH>(int n, double * beta, void *ex) {
+    return pfminfn_SmoothLogH<stpm2AH>(n, beta, ex); }
 
   template<>
   double pfminfn<SmoothHaz,stpm2>(int n, double * beta, void *ex) {
@@ -591,6 +605,9 @@ namespace rstpm2 {
   template<>
   void pgrfn<SmoothLogH,stpm2Probit>(int n, double * beta, double * gr, void *ex) {
     pgrfn_SmoothLogH<stpm2Probit>(n, beta, gr, ex);}
+    template<>
+  void pgrfn<SmoothLogH,stpm2AH>(int n, double * beta, double * gr, void *ex) {
+    pgrfn_SmoothLogH<stpm2AH>(n, beta, gr, ex); }
 
   template<>
   void pgrfn<SmoothHaz,stpm2>(int n, double * beta, double * gr, void *ex) {
@@ -770,8 +787,10 @@ namespace rstpm2 {
     return optim_pstpm2_first<SmoothLogH,stpm2Probit>(args); }
   RcppExport SEXP optim_pstpm2Haz_first_probit(SEXP args) {
     return optim_pstpm2_first<SmoothHaz,stpm2Probit>(args); }
-
-
+  RcppExport SEXP optim_pstpm2LogH_first_ah(SEXP args) {
+    return optim_pstpm2_first<SmoothLogH,stpm2AH>(args); }
+  
+  
   template<class Smooth, class Stpm2>
   SEXP optim_pstpm2_multivariate(SEXP args) {
 
@@ -832,7 +851,8 @@ namespace rstpm2 {
     return optim_pstpm2_multivariate<SmoothLogH,stpm2Probit>(args); }
   RcppExport SEXP optim_pstpm2Haz_multivariate_probit(SEXP args) {
     return optim_pstpm2_multivariate<SmoothHaz,stpm2Probit>(args); }
-
+  RcppExport SEXP optim_pstpm2LogH_multivariate_ah(SEXP args) { 
+    return optim_pstpm2_multivariate<SmoothLogH,stpm2AH>(args); }
 
   template<class Smooth, class Stpm2>
   SEXP optim_pstpm2_multivariate_nlm(SEXP args) {
@@ -927,6 +947,8 @@ namespace rstpm2 {
     return optim_pstpm2_fixedsp<SmoothLogH,stpm2Probit>(args); }
   RcppExport SEXP optim_pstpm2Haz_fixedsp_probit(SEXP args) {
     return optim_pstpm2_fixedsp<SmoothHaz,stpm2Probit>(args); }
+  RcppExport SEXP optim_pstpm2LogH_fixedsp_ah(SEXP args) {
+    return optim_pstpm2_fixedsp<SmoothLogH,stpm2AH>(args); }
 
   template<class Smooth, class Stpm2>
   SEXP test_pstpm2(SEXP args) { 

@@ -436,7 +436,12 @@ link.probit <-
                      dnorm(eta)/pnorm(-eta)*obj$XD
          },
          gradH=function(eta,etaD,obj) obj$X*dnorm(eta)/pnorm(-eta))
-
+link.AH <- list(link=function(S) -log(S),
+                ilink=function(eta) exp(-eta),
+                h=function(eta,etaD) etaD,
+                H=function(eta,etaD) eta,
+                gradh=function(eta,etaD,obj) obj$XD,
+                gradH=function(eta,etaD,obj) obj$X)
 
 ## general link functions
 setClass("stpm2", representation(xlevels="list",
@@ -1064,12 +1069,12 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    sp=NULL, use.gr = TRUE, use.rcpp = TRUE,
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=NULL, trace = 0,
-                   type=c("PH","PO","probit"),
+                   type=c("PH","PO","probit","AH"),
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
   {
       type <- match.arg(type)
-      link <- switch(type,PH=link.PH,PO=link.PO,probit=link.probit)
+      link <- switch(type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
 	    ## set up the data
       ## ensure that data is a data frame
       temp.formula <- formula
@@ -1348,15 +1353,15 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         ## stop("Initial values not valid and revised sp>1e5")
     } 
     
-    ### Using exterior penalty method for nonlinear constraints: h(t)>=0 or increasing logH(t)
-    ### Some intital values should be outside the feasible region
-    while(all(XD%*%init>=0)){
-      init <- init+0.01
-    }
-    ### Ckeck initial value
-    if(any(XD%*%init<=0)) {
-      cat("Some intital values are exactly outside the feasible region of this problem","\n") 
-    }
+#     ### Using exterior penalty method for nonlinear constraints: h(t)>=0 or increasing logH(t)
+#     ### Some intital values should be outside the feasible region
+#     while(all(XD%*%init>=0)){
+#       init <- init+0.001
+#     }
+#     ### Ckeck initial value
+#     if(any(XD%*%init<=0)) {
+#       cat("Some intital values are exactly outside the feasible region of this problem","\n") 
+#     }
     
     ## MLE
     if (!is.null(control) && "parscale" %in% names(control)) {
@@ -1372,7 +1377,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     }
     rcpp_optim <- function() {
         ## stopifnot(!delayed)
-        suffix <- switch(type,PH="ph",PO="po",probit="probit")
+        suffix <- switch(type,PH="ph",PO="po",probit="probit",AH="ah")
         pen <- if(penalty=="logH") "LogH" else "Haz"
         args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
                      delayed=if (delayed) 1 else 0, X0=X0, XD0=XD0, wt0=wt0, parscale=control$parscale,
