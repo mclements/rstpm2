@@ -145,7 +145,7 @@ plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard",line.col="red",lwd=2,
   add=TRUE)
 
 ## Smooth covariate effects
-fit.smoothx <- pstpm2(Surv(rectime,censrec==1)~x1,
+fit.smoothx <- pstpm2(Surv(rectime,censrec==1)~1,
   data=brcancer,
   smooth.formula=~s(log(rectime))+s(x1))
 ages <- seq(21,80,length=301)

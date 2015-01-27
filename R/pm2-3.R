@@ -1349,13 +1349,13 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     } 
     
     ### Using exterior penalty method for nonlinear constraints: h(t)>=0 or increasing logH(t)
-    ### Some intital values should be outside the feasible region
+    ### Some initial values should be outside the feasible region
     while(all(XD%*%init>=0)){
       init <- init+0.01
     }
-    ### Ckeck initial value
+    ### Check initial value
     if(any(XD%*%init<=0)) {
-      cat("Some intital values are exactly outside the feasible region of this problem","\n") 
+      cat("Some initial values are outside the feasible region of this problem","\n") 
     }
     
     ## MLE
@@ -1575,7 +1575,7 @@ setMethod("predict", "pstpm2",
           if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","meansurvdiff")) {
             ## how to elegantly extract the time variable?
             timeExpr <- 
-              lhs(object@call.formula)[[length(lhs(object@call.formula))-1]]
+              lhs(object@fullformula)[[length(lhs(object@fullformula))-1]]
             time <- eval(timeExpr,newdata)
             ##
           }

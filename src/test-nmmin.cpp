@@ -311,37 +311,37 @@ namespace rstpm2 {
   class BFGS2 : public BFGS {
   public:
     void optim(optimfn fn, optimgr gr, NumericVector init, void * ex,
-	       bool apply_parscale = true, double eps = 1.0e-8) {
+	       bool apply_parscale = true) {
       Data * data = (Data *) ex;
       n = init.size();
       if (apply_parscale) for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
-      BFGS::optim(fn,gr,init,ex,eps);
+      BFGS::optim(fn,gr,init,ex);
       if (apply_parscale) for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
-      hessian = calc_hessian(gr, ex, eps);
+      hessian = calc_hessian(gr, ex);
     }
     void optimWithConstraint(optimfn fn, optimgr gr, NumericVector init, void * ex, constraintfn constraint,
-			     bool apply_parscale = true, double eps = 1.0e-8) {
+			     bool apply_parscale = true) {
       Data * data = (Data *) ex;
       n = init.size();
       if (apply_parscale) for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
       bool satisfied;
       do {
-	BFGS::optim(fn,gr,init,ex,eps);
+	BFGS::optim(fn,gr,init,ex);
 	satisfied = constraint(n,&coef[0],ex);
 	if (!satisfied) data->kappa *= 2.0;   
       } while ((!satisfied)&& data->kappa < 4*1.0e18);      
       if (apply_parscale) for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
-      hessian = calc_hessian(gr, ex, eps);
+      hessian = calc_hessian(gr, ex);
    // Rprintf("kappa=%f\n",data->kappa);
     }
-    NumericMatrix calc_hessian(optimgr gr, void * ex, double eps = 1.0e-8) {
+    NumericMatrix calc_hessian(optimgr gr, void * ex) {
       Data * data = (Data *) ex;
       vec parscale(n);
       for (int i=0; i<n; ++i) {
 	parscale[i] = data->parscale[i];
 	data->parscale[i] = 1.0;
       }
-      NumericMatrix hessian = BFGS::calc_hessian(gr,ex,eps);
+      NumericMatrix hessian = BFGS::calc_hessian(gr,ex);
       for (int i=0; i<n; ++i) data->parscale[i] = parscale[i];
       return hessian;
     }
@@ -1003,7 +1003,7 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
 
     bool satisfied;
     do {
-      nlm.optim(pstpm2_step_multivariate_nlm<Smooth,Stpm2>, (fcn_p) 0, logsp, (void *) &data, false);
+      nlm.optim(pstpm2_step_multivariate_nlm<Smooth,Stpm2>, (fcn_p) 0, logsp, (void *) &data);
       satisfied = true;
       for (int i=0; i < data.sp.size(); ++i)
 	if (logsp[i]< -7.0 || logsp[i] > 7.0) satisfied = false;
