@@ -124,12 +124,63 @@ namespace rstpm2 {
     virtual mat gradh(vec eta, vec etaD, mat X, mat XD) { 
       return rmult(XD, exp(eta)) + rmult(X, etaD % exp(eta));
     }
+    virtual double negll(NumericVector beta);
+    virtual void grad_negll(NumericVector beta);
     NumericVector init;
     mat X, XD, X0, XD0; 
     vec bhazard,wt,wt0,event,parscale;
     double reltol, kappa;
     int delayed, trace;
   };
+
+  double stpm2::negll(NumericVector beta) {
+    int n = init.size();
+    vec vbeta(&beta[0],n);
+    vbeta = vbeta % parscale;
+    vec eta = X * vbeta;
+    vec etaD = XD * vbeta;
+    vec h = this->h(eta,etaD) + bhazard;
+    vec H = this->H(eta,etaD) + bhazard;
+    double constraint = kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
+    vec eps = h*0.0 + 1.0e-16; 
+    h = max(h,eps);
+    double ll = sum(wt % event % log(h)) - sum(wt % H) - constraint;
+    if (delayed == 1) {
+      vec eta0 = X0 * vbeta;
+      vec etaD0 = XD0 * vbeta;
+      mat H0 = this->H(eta0,etaD0);
+      ll += sum(wt0 % H0);
+    }
+    return -ll;  
+  }
+
+  void stpm2::grad_negll(NumericVector beta) {
+    int n = beta.size();
+    vec vbeta = as<vec>(wrap(beta));
+    vbeta = vbeta % parscale;
+    vec eta = X * vbeta;
+    vec etaD = XD * vbeta;
+    vec h = this->h(eta,etaD) + bhazard;
+    // vec H = exp(eta);
+    mat gradH = this->gradH(eta,etaD,X,XD);
+    mat gradh = this->gradh(eta,etaD,X,XD);
+    mat Xgrad = -gradH + rmult(gradh, event / h);
+    mat Xconstraint = - kappa*rmult(gradh,h);
+    vec eps = h*0.0 + 1.0e-16; // hack
+    //Xgrad.rows(h<=eps) = Xconstraint.rows(h<=eps);
+    Xgrad = rmult(Xgrad,wt);
+    rowvec vgr = sum(Xgrad,0);
+    if (delayed == 1) {
+      vec eta0 = X0 * vbeta;
+      vec etaD0 = XD0 * vbeta;
+      mat gradH0 = this->gradH(eta0, etaD0, X0, XD0); 
+      vgr += sum(rmult(gradH0, wt0),0);
+    }
+    for (int i = 0; i<n; ++i) {
+      // gr[i] = -vgr[i]*parscale[i];
+    }
+  }
+
 
   class stpm2PO : public stpm2 {
   public:
@@ -260,36 +311,38 @@ namespace rstpm2 {
   class BFGS2 : public BFGS {
   public:
     void optim(optimfn fn, optimgr gr, NumericVector init, void * ex,
-	       bool apply_parscale = true, double eps = 1.0e-8) {
+	       bool apply_parscale = true) {
       Data * data = (Data *) ex;
       n = init.size();
       if (apply_parscale) for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
-      BFGS::optim(fn,gr,init,ex,eps);
+      BFGS::optim(fn,gr,init,ex);
       if (apply_parscale) for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
-      hessian = calc_hessian(gr, ex, eps);
+      if (hessianp)
+	hessian = calc_hessian(gr, ex);
     }
     void optimWithConstraint(optimfn fn, optimgr gr, NumericVector init, void * ex, constraintfn constraint,
-			     bool apply_parscale = true, double eps = 1.0e-8) {
+			     bool apply_parscale = true) {
       Data * data = (Data *) ex;
       n = init.size();
       if (apply_parscale) for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
       bool satisfied;
       do {
-	BFGS::optim(fn,gr,init,ex,eps);
+	BFGS::optim(fn,gr,init,ex);
 	satisfied = constraint(n,&coef[0],ex);
 	if (!satisfied) data->kappa *= 2.0;
       } while ((!satisfied) && data->kappa < 1.0e5);
       if (apply_parscale) for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
-      hessian = calc_hessian(gr, ex, eps);
+      if (hessianp)
+	hessian = calc_hessian(gr, ex);
     }
-    NumericMatrix calc_hessian(optimgr gr, void * ex, double eps = 1.0e-8) {
+    NumericMatrix calc_hessian(optimgr gr, void * ex) {
       Data * data = (Data *) ex;
       vec parscale(n);
       for (int i=0; i<n; ++i) {
 	parscale[i] = data->parscale[i];
 	data->parscale[i] = 1.0;
       }
-      NumericMatrix hessian = BFGS::calc_hessian(gr,ex,eps);
+      NumericMatrix hessian = BFGS::calc_hessian(gr,ex);
       for (int i=0; i<n; ++i) data->parscale[i] = parscale[i];
       return hessian;
     }
@@ -418,6 +471,101 @@ namespace rstpm2 {
       }
     }
     return wrap(ll);
+  }
+
+  /** 
+      Utility function for calculating a gamma frailty log-likelihood within R code 
+   **/
+  RcppExport SEXP llgammafrailtydelayed(SEXP _theta, SEXP _h, SEXP _H, SEXP _H0, SEXP _d,
+				    SEXP _cluster) {
+    double theta = as<double>(_theta);
+    NumericVector h = as<NumericVector>(_h);
+    NumericVector H = as<NumericVector>(_H);
+    NumericVector H0 = as<NumericVector>(_H0); // assumes that _H0 is zero for data not left truncated
+    IntegerVector d = as<IntegerVector>(_d);
+    IntegerVector cluster = as<IntegerVector>(_cluster);
+    double ll = 0.0;
+    // wragged array indexed by a map of vectors
+    typedef std::vector<int> Index;
+    typedef std::map<int,Index> IndexMap;
+    IndexMap clusters;
+    for (int i=0; i<cluster.size(); ++i) {
+      clusters[cluster[i]].push_back(i);
+    }
+    for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+      int mi=0;
+      double sumH = 0.0, sumHenter = 0.0;
+      for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
+	if (d[*j]==1) {
+	  mi++;
+	  ll += log(h[*j]);
+	}
+	sumH += H[*j];
+	sumHenter += H0[*j];
+      }
+      ll -= (1.0/theta+mi)*log(1.0+theta*sumH);
+      ll += 1.0/theta*log(1.0+theta*sumHenter);
+      if (mi>0) {
+	int k=1;
+	for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
+	  if (d[*j]==1) {
+	    ll += log(1.0+theta*(mi-k));
+	    k++;
+	  }
+	}
+      }
+    }
+    return wrap(ll);
+  }
+
+
+  struct CureModel {
+    int n0, n1, n2;
+    mat Xshape, Xscale, Xcure;
+    vec time, status;
+  };
+
+  double fminfn_cureModel(int n, double * beta, void *ex) {
+    double ll = 0.0;
+    CureModel * data = (CureModel *) ex;
+    vec vbeta(beta,n);
+    vec shape = exp(data->Xshape * vbeta(span(0,data->n0-1)));
+    vec scale = exp(data->Xscale * vbeta(span(data->n0,data->n1-1)));
+    vec cure = 1.0/(1.0+exp(-data->Xcure * vbeta(span(data->n1,data->n2-1))));
+    for (size_t i=0; i < data->time.size(); ++i) {
+      ll += data->status(i)==1.0 ?
+	log(1.0-cure(i)) + R::dweibull(data->time(i),shape(i),scale(i),1) :
+	log(cure(i)+(1.0-cure(i)) * R::pweibull(data->time(i),shape(i),scale(i),0,0));
+    }
+    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
+    return -ll;
+  }
+
+RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
+			  SEXP sXscale, SEXP sXcure, SEXP sbeta) {
+    mat Xshape = as<mat>(sXshape);
+    mat Xscale = as<mat>(sXscale);
+    mat Xcure = as<mat>(sXcure);
+    vec time = as<vec>(stime);
+    vec status = as<vec>(sstatus);
+    NumericVector init = as<NumericVector>(sbeta);
+    int n0=Xshape.n_cols;
+    int n1=n0+Xscale.n_cols;
+    int n2=n1+Xcure.n_cols;
+    CureModel data = {n0,n1,n2,Xshape,Xscale,Xcure,time,status};
+    
+    NelderMead nm;
+    nm.reltol = 1.0e-8;
+    nm.maxit = 1000;
+    nm.optim(& fminfn_cureModel, init, (void *) &data);
+
+    for (int i = 0; i<nm.coef.size(); ++i)
+      init[i] = nm.coef[i]; // clone
+    
+    return List::create(_("Fmin")=nm.Fmin, 
+			_("coef")=wrap(init),
+			_("fail")=nm.fail,
+			_("hessian")=wrap(nm.hessian));
   }
 
 
@@ -776,6 +924,7 @@ namespace rstpm2 {
     NelderMead nm;
     nm.reltol = 1.0e-5;
     nm.maxit = 500;
+    nm.hessianp = false;
     for (int i=0; i<n; ++i) data.init[i] /= data.parscale[i];
 
     NumericVector logsp(data.sp.size());
@@ -840,6 +989,7 @@ namespace rstpm2 {
     nlm.gradtl = 1.0e-4;
     nlm.steptl = 1.0e-4;
     nlm.msg = 9 + 4;
+    nlm.hessianp = false;
     for (int i=0; i<n; ++i) data.init[i] /= data.parscale[i];
 
     NumericVector logsp(data.sp.size());
@@ -848,7 +998,7 @@ namespace rstpm2 {
 
     bool satisfied;
     do {
-      nlm.optim(pstpm2_step_multivariate_nlm<Smooth,Stpm2>, (fcn_p) 0, logsp, (void *) &data, false);
+      nlm.optim(pstpm2_step_multivariate_nlm<Smooth,Stpm2>, (fcn_p) 0, logsp, (void *) &data);
       satisfied = true;
       for (int i=0; i < data.sp.size(); ++i)
 	if (logsp[i]< -7.0 || logsp[i] > 7.0) satisfied = false;

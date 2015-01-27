@@ -135,13 +135,10 @@ plot(fit,newdata=data.frame(hormon=0),type="hazard",add=TRUE,ci=FALSE,line.col="
   rug=FALSE)
 
 ## time-varying hazard ratios
-require(rstpm2)
-data(brcancer)
 fit.tvc <- pstpm2(Surv(rectime,censrec==1)~1,
   data=brcancer,
-  smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon),
+  smooth.formula=~s(log(rectime),by=factor(hormon)),
   coxph.formula=~strata(hormon))
-anova(fit,fit.tvc) # is this valid??
 plot(fit.tvc,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
   rug=FALSE)
 plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard",line.col="red",lwd=2,

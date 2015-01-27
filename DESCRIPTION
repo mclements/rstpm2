@@ -1,7 +1,7 @@
 Package: rstpm2
 Type: Package
 Title: Flexible Parametric Survival Models
-Version: 1.1.2
+Version: 1.1.4
 Date: 2013-06-17
 Depends: methods, bbmle (>= 1.0.3), survival, mgcv
 Imports: splines, stats, graphics, Rcpp (>= 0.10.2), numDeriv
