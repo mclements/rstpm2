@@ -311,38 +311,37 @@ namespace rstpm2 {
   class BFGS2 : public BFGS {
   public:
     void optim(optimfn fn, optimgr gr, NumericVector init, void * ex,
-	       bool apply_parscale = true) {
+	       bool apply_parscale = true, double eps = 1.0e-8) {
       Data * data = (Data *) ex;
       n = init.size();
       if (apply_parscale) for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
-      BFGS::optim(fn,gr,init,ex);
+      BFGS::optim(fn,gr,init,ex,eps);
       if (apply_parscale) for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
-      if (hessianp)
-	hessian = calc_hessian(gr, ex);
+      hessian = calc_hessian(gr, ex, eps);
     }
     void optimWithConstraint(optimfn fn, optimgr gr, NumericVector init, void * ex, constraintfn constraint,
-			     bool apply_parscale = true) {
+			     bool apply_parscale = true, double eps = 1.0e-8) {
       Data * data = (Data *) ex;
       n = init.size();
       if (apply_parscale) for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
       bool satisfied;
       do {
-	BFGS::optim(fn,gr,init,ex);
+	BFGS::optim(fn,gr,init,ex,eps);
 	satisfied = constraint(n,&coef[0],ex);
-	if (!satisfied) data->kappa *= 2.0;
-      } while ((!satisfied) && data->kappa < 1.0e5);
+	if (!satisfied) data->kappa *= 2.0;   
+      } while ((!satisfied)&& data->kappa < 4*1.0e18);      
       if (apply_parscale) for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
-      if (hessianp)
-	hessian = calc_hessian(gr, ex);
+      hessian = calc_hessian(gr, ex, eps);
+   // Rprintf("kappa=%f\n",data->kappa);
     }
-    NumericMatrix calc_hessian(optimgr gr, void * ex) {
+    NumericMatrix calc_hessian(optimgr gr, void * ex, double eps = 1.0e-8) {
       Data * data = (Data *) ex;
       vec parscale(n);
       for (int i=0; i<n; ++i) {
 	parscale[i] = data->parscale[i];
 	data->parscale[i] = 1.0;
       }
-      NumericMatrix hessian = BFGS::calc_hessian(gr,ex);
+      NumericMatrix hessian = BFGS::calc_hessian(gr,ex,eps);
       for (int i=0; i<n; ++i) data->parscale[i] = parscale[i];
       return hessian;
     }
@@ -661,13 +660,19 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
     Data * data = (Data *) ex;
     vec vbeta(beta,n);
     vbeta = vbeta % data->parscale;
+    vec eta = data->X * vbeta;
+    vec etaD = data->XD * vbeta;
+    vec h = data->h(eta,etaD) + data->bhazard;
+    mat gradh = data->gradh(eta,etaD,data->X,data->XD);
+    mat Xconstraint = data->kappa * rmult(gradh,h%(h<0));
     rowvec vgr(n, fill::zeros);
     for (size_t i=0; i < data->smooth.size(); ++i) {
       SmoothLogH smoothi = data->smooth[i];
       vgr.subvec(smoothi.first_para,smoothi.last_para) += 
 	(data->sp)[i] * (smoothi.S * vbeta.subvec(smoothi.first_para,smoothi.last_para)).t();
     }
-    for (int i = 0; i<n; ++i) gr[i] += vgr[i]*data->parscale[i];
+    rowvec dconstraint = sum(Xconstraint,0);
+    for (int i = 0; i<n; ++i) gr[i] += vgr[i]*data->parscale[i] + dconstraint[i];
   }
 
   template<class Stpm2>
@@ -998,7 +1003,7 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
 
     bool satisfied;
     do {
-      nlm.optim(pstpm2_step_multivariate_nlm<Smooth,Stpm2>, (fcn_p) 0, logsp, (void *) &data);
+      nlm.optim(pstpm2_step_multivariate_nlm<Smooth,Stpm2>, (fcn_p) 0, logsp, (void *) &data, false);
       satisfied = true;
       for (int i=0; i < data.sp.size(); ++i)
 	if (logsp[i]< -7.0 || logsp[i] > 7.0) satisfied = false;
