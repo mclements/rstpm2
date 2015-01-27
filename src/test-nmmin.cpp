@@ -316,7 +316,8 @@ namespace rstpm2 {
     vec etaD = data->XD * vbeta;
     vec h = data->h(eta,etaD) + data->bhazard;
     vec H = data->H(eta,etaD) + data->bhazard;
-    double constraint = data->kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
+    double constraint = data->kappa/2.0 * sum(h % h % (h<0)) + 
+      data->kappa/2.0 * sum(H % H % (H<0));
     vec eps = h*0.0 + 1.0e-16; 
     h = max(h,eps);
     double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % H) - constraint;
@@ -441,6 +442,7 @@ namespace rstpm2 {
     vec eta = data->X * vbeta;
     vec etaD = data->XD * vbeta;
     vec h = data->h(eta, etaD) + data->bhazard;
+    vec H = data->H(eta, etaD);
     return all(h>0);
   }
 
@@ -528,8 +530,10 @@ namespace rstpm2 {
     vec eta = data->X * vbeta;
     vec etaD = data->XD * vbeta;
     vec h = data->h(eta,etaD) + data->bhazard;
+    vec H = data->H(eta,etaD);
     mat gradh = data->gradh(eta,etaD,data->X,data->XD);
-    mat Xconstraint = data->kappa * rmult(gradh,h%(h<0));
+    mat gradH = data->gradH(eta,etaD,data->X,data->XD);
+    mat Xconstraint = data->kappa * rmult(gradh,h%(h<0)) + data->kappa * rmult(gradH,H%(H<0));
     rowvec vgr(n, fill::zeros);
     for (size_t i=0; i < data->smooth.size(); ++i) {
       SmoothLogH smoothi = data->smooth[i];
@@ -682,6 +686,15 @@ namespace rstpm2 {
     bfgs.optimWithConstraint(pfminfn<Smooth,Stpm2>, pgrfn<Smooth,Stpm2>, data->init, ex, fminfn_constraint<Data>, false); // do not apply parscale b4/after
 
     NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, ex);
+
+    if (data->trace > 0)  {
+      Rprintf("Debug on trace calculation. Coef:\n");
+      Rprint(bfgs.coef);
+      Rprintf("Hessian0:\n");
+      Rprint(hessian0);
+      Rprintf("Hessian:\n");
+      Rprint(bfgs.hessian);
+    }
 
     double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
     double negll = bfgs.calc_objective(fminfn<Data>,ex);

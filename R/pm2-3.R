@@ -1240,7 +1240,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         etaD <- as.vector(XD %*% beta)
         H <- link$H(eta,etaD) 
         h <- link$h(eta,etaD) + bhazard
-        constraint <- gamma*sum((wt*h)[h<0]^2)
+        constraint <- gamma*sum((wt*h)[h<0]^2) + gamma*sum((wt*H)[H<0]^2)
         h <- pmax(h,1e-16)
         ll <- sum(wt[event]*log(h[event])) - sum(wt*H) - pfun(beta,sp) - constraint
         if (delayed) {
@@ -1405,7 +1405,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         if (!no.sp) sp <- fit$sp
         edf <- fit$edf
     } else {
-      edf <- NA
+      edf <- -1
     }
     negll <- function(beta) negllsp(beta,sp)
     gradnegll <- function(beta) gradnegllsp(beta,sp)
