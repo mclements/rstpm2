@@ -135,13 +135,9 @@ plot(fit,newdata=data.frame(hormon=0),type="hazard",add=TRUE,ci=FALSE,line.col="
   rug=FALSE)
 
 ## time-varying hazard ratios
-require(rstpm2)
-data(brcancer)
 fit.tvc <- pstpm2(Surv(rectime,censrec==1)~1,
   data=brcancer,
-  smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon),
-  coxph.formula=~strata(hormon))
-anova(fit,fit.tvc) # is this valid??
+  smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon))
 plot(fit.tvc,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
   rug=FALSE)
 plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard",line.col="red",lwd=2,
@@ -153,7 +149,7 @@ fit.smoothx <- pstpm2(Surv(rectime,censrec==1)~x1,
   smooth.formula=~s(log(rectime))+s(x1))
 ages <- seq(21,80,length=301)
 haz <- predict(fit.smoothx,newdata=data.frame(hormon=1,rectime=365,x1=ages),type="hazard",se.fit=TRUE)
-matplot(ages,haz/haz[150,1],type="l")
+matplot(ages,haz/haz[150,1],type="l",log="y",ylab="Hazard ratio")
 
 ## compare with df=5 from stpm2
 fit.stpm2 <- stpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,df=7)
@@ -179,16 +175,6 @@ plot(fit.stpm2,newdata=data.frame(hormon=1),type="hazard",line.col="orange",lwd=
 
 ## plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard")
 ## plot(fit.tvc,newdata=data.frame(hormon=1),type="hazard",line.col=2,ci=FALSE,add=TRUE)
-
-## compare number of knots
-hormon0 <- data.frame(hormon=0)
-plot(fit,type="hazard",newdata=hormon0)
-AIC(fit)
-for (df in 4:6) {
-    fit.new <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=df)
-    plot(fit.new,type="hazard",newdata=hormon0,add=TRUE,ci=FALSE,line.col=df)
-    print(AIC(fit.new))
-}
 
 
 }

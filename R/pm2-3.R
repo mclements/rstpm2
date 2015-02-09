@@ -633,7 +633,7 @@ stpm2 <- function(formula, data,
         XD0 <- matrix(XD0,nrow=nrow(X0))
         data0[[timeVar]] <- .timeVar
     }
-    pars <- list(event=event,X=X,XD=XD,wt=wt,bhazard=bhazard,delayed=delayed)
+    pars <- list(event=event,time=time,X=X,XD=XD,wt=wt,bhazard=bhazard,delayed=delayed)
     pars0 <- list(event=event,X=X0,XD=XD0,wt=wt0,bhazard=bhazard,delayed=delayed)
     negll <- function(beta,kappa=1) {
         if (frailty) {
@@ -716,7 +716,7 @@ stpm2 <- function(formula, data,
         parscale <- if (!is.null(control$parscale)) control$parscale else rep(1,length(init))
         names(parscale) <- names(init)
         program <- switch(type,PH="optim_stpm2_ph",PO="optim_stpm2_po",probit="optim_stpm2_probit")
-        .Call(program,list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
+        .Call(program,list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
               delayed=if (delayed) 1 else 0, X0=X0, XD0=XD0, wt0=wt0, parscale=parscale, reltol=reltol,
                                  kappa=1, trace = trace),
               package="rstpm2")
@@ -1379,7 +1379,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         ## stopifnot(!delayed)
         suffix <- switch(type,PH="ph",PO="po",probit="probit",AH="ah")
         pen <- if(penalty=="logH") "LogH" else "Haz"
-        args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),
+        args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
                      delayed=if (delayed) 1 else 0, X0=X0, XD0=XD0, wt0=wt0, parscale=control$parscale,
                      smooth=if(penalty == "logH") gam.obj$smooth else design,
                      sp=sp, reltol_search=reltol$search, reltol=reltol$final, trace=trace,
@@ -1578,10 +1578,7 @@ setMethod("predict", "pstpm2",
             XD0 <- matrix(XD0,nrow=nrow(X0))
           }
           if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","meansurvdiff")) {
-            ## how to elegantly extract the time variable?
-            timeExpr <- 
-              lhs(object@call.formula)[[length(lhs(object@call.formula))-1]]
-            time <- eval(timeExpr,newdata)
+            time <- eval(object@timeExpr,newdata)
             ##
           }
           if (type %in% c("hr","sdiff","hdiff","meansurvdiff")) {

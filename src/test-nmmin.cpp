@@ -102,6 +102,7 @@ namespace rstpm2 {
       bhazard = as<vec>(list["bhazard"]);
       wt = as<vec>(list["wt"]);
       event = as<vec>(list["event"]);
+      time = as<vec>(list["time"]);
       delayed = as<int>(list["delayed"]);
       X0.set_size(1,1); X0.fill(0.0);
       wt0.set_size(1); wt0.fill(0.0);
@@ -126,7 +127,7 @@ namespace rstpm2 {
     }
     NumericVector init;
     mat X, XD, X0, XD0; 
-    vec bhazard,wt,wt0,event,parscale;
+    vec bhazard,wt,wt0,event,time,parscale;
     double reltol, kappa;
     int delayed, trace;
   };
@@ -289,7 +290,7 @@ namespace rstpm2 {
 	BFGS::optim(fn,gr,init,ex,eps);
 	satisfied = constraint(n,&coef[0],ex);
 	if (!satisfied) data->kappa *= 2.0;   
-      } while ((!satisfied)&& data->kappa < 4*1.0e18);      
+      } while ((!satisfied)&& data->kappa < 1.0e1);      
       if (apply_parscale) for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
       hessian = calc_hessian(gr, ex, eps);
    // Rprintf("kappa=%f\n",data->kappa);
@@ -443,7 +444,7 @@ namespace rstpm2 {
     vec etaD = data->XD * vbeta;
     vec h = data->h(eta, etaD) + data->bhazard;
     vec H = data->H(eta, etaD);
-    return all(h>0);
+    return all((h>0) % (H>0));
   }
 
   template<class Data>

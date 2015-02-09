@@ -1,5 +1,4 @@
 \name{stpm2}
-\Rdversion{1.1}
 \alias{stpm2}
 %- Also NEED an '\alias' for EACH other topic documented here.
 \title{
@@ -9,7 +8,7 @@ Flexible parametric survival model.
 This implements the Royston-Parmar model.
 }
 \usage{
-stpm2 <- function(formula, data,
+stpm2(formula, data,
                      df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
                      tvc = NULL, tvc.formula = NULL,
                      control = list(parscale = 0.1, maxit = 300), init = FALSE,
