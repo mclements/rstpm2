@@ -41,6 +41,23 @@ namespace rstpm2 {
     }
   }
 
+  void Rprint(NumericVector v) {
+    for (int i=0; i<v.size(); ++i) 
+      Rprintf("%f ", v(i));
+    Rprintf("\n");
+  }
+
+  void Rprint(vec v) {
+    for (size_t i=0; i<v.size(); ++i) 
+      Rprintf("%f ", v(i));
+    Rprintf("\n");
+  }
+  void Rprint(rowvec v) {
+    for (size_t i=0; i<v.size(); ++i) 
+      Rprintf("%f ", v(i));
+    Rprintf("\n");
+  }
+
   void Rprint(mat m) {
     for (size_t i=0; i<m.n_rows; ++i) {
       for (size_t j=0; j<m.n_cols; ++j) 
@@ -290,7 +307,7 @@ namespace rstpm2 {
 	BFGS::optim(fn,gr,init,ex,eps);
 	satisfied = constraint(n,&coef[0],ex);
 	if (!satisfied) data->kappa *= 2.0;   
-      } while ((!satisfied)&& data->kappa < 1.0e1);      
+      } while ((!satisfied)&& data->kappa < 1.0e3);      
       if (apply_parscale) for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
       hessian = calc_hessian(gr, ex, eps);
    // Rprintf("kappa=%f\n",data->kappa);
@@ -316,11 +333,12 @@ namespace rstpm2 {
     vec eta = data->X * vbeta;
     vec etaD = data->XD * vbeta;
     vec h = data->h(eta,etaD) + data->bhazard;
-    vec H = data->H(eta,etaD) + data->bhazard;
+    vec H = data->H(eta,etaD);
     double constraint = data->kappa/2.0 * sum(h % h % (h<0)) + 
-      data->kappa/2.0 * sum(H % H % (H<0));
+      data->kappa/2.0 * sum((H/data->time) % (H/data->time) % (H<0));
     vec eps = h*0.0 + 1.0e-16; 
     h = max(h,eps);
+    H = max(H,eps);
     double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % H) - constraint;
     if (data->delayed == 1) {
       vec eta0 = data->X0 * vbeta;
@@ -496,17 +514,20 @@ namespace rstpm2 {
   void grfn(int n, double * beta, double * gr, void *ex) {
     Data * data = (Data *) ex;
     vec vbeta(beta,n);
+    // if (data->trace) Rprint(vbeta);
     vbeta = vbeta % data->parscale;
     vec eta = data->X * vbeta;
     vec etaD = data->XD * vbeta;
     vec h = data->h(eta,etaD) + data->bhazard;
-    // vec H = exp(eta);
-    mat gradH = data->gradH(eta,etaD,data->X,data->XD);
-    mat gradh = data->gradh(eta,etaD,data->X,data->XD);
-    mat Xgrad = -gradH + rmult(gradh, data->event / h);
-    mat Xconstraint = - data->kappa*rmult(gradh,h);
-    vec eps = h*0.0 + 1.0e-16; // hack
-    //Xgrad.rows(h<=eps) = Xconstraint.rows(h<=eps);
+    vec H = data->H(eta,etaD);
+    vec one = ones(h.size());
+    mat gradH = data->gradH(eta,etaD,data->X,data->XD); 
+    mat gradh = data->gradh(eta,etaD,data->X,data->XD); 
+    mat Xgrad = -rmult(gradH, one % (H>0)) + rmult(gradh, data->event / h % (h>0));
+    mat Xconstraint = data->kappa * rmult(gradh,h%(h<0)) + 
+      data->kappa * rmult(gradH,H / data->time / data->time % (H<0));
+    rowvec dconstraint = sum(Xconstraint,0);
+    // if (data->trace) Rprint(dconstraint);
     Xgrad = rmult(Xgrad,data->wt);
     rowvec vgr = sum(Xgrad,0);
     if (data->delayed == 1) {
@@ -516,7 +537,7 @@ namespace rstpm2 {
       vgr += sum(rmult(gradH0, data->wt0),0);
     }
     for (int i = 0; i<n; ++i) {
-      gr[i] = -vgr[i]*data->parscale[i];
+      gr[i] = -vgr[i]*data->parscale[i] + dconstraint[i];
     }
   }
 
@@ -534,15 +555,13 @@ namespace rstpm2 {
     vec H = data->H(eta,etaD);
     mat gradh = data->gradh(eta,etaD,data->X,data->XD);
     mat gradH = data->gradH(eta,etaD,data->X,data->XD);
-    mat Xconstraint = data->kappa * rmult(gradh,h%(h<0)) + data->kappa * rmult(gradH,H%(H<0));
     rowvec vgr(n, fill::zeros);
     for (size_t i=0; i < data->smooth.size(); ++i) {
       SmoothLogH smoothi = data->smooth[i];
       vgr.subvec(smoothi.first_para,smoothi.last_para) += 
 	(data->sp)[i] * (smoothi.S * vbeta.subvec(smoothi.first_para,smoothi.last_para)).t();
     }
-    rowvec dconstraint = sum(Xconstraint,0);
-    for (int i = 0; i<n; ++i) gr[i] += vgr[i]*data->parscale[i] + dconstraint[i];
+    for (int i = 0; i<n; ++i) gr[i] += vgr[i]*data->parscale[i];
   }
 
   template<class Stpm2>
@@ -645,6 +664,8 @@ namespace rstpm2 {
     return optim_stpm2<stpm2PO>(args); }
   RcppExport SEXP optim_stpm2_probit(SEXP args) {
     return optim_stpm2<stpm2Probit>(args); }
+  RcppExport SEXP optim_stpm2_ah(SEXP args) {
+    return optim_stpm2<stpm2AH>(args); }
 
 
   RcppExport SEXP optim_stpm2_nlm(SEXP args) {

@@ -473,11 +473,11 @@ stpm2 <- function(formula, data,
                      coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE, 
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE, use.rcpp= TRUE,
                      reltol=1.0e-8, trace = 0,
-                     type=c("PH","PO","probit"),
+                     type=c("PH","PO","probit","AH"),
                      frailty = FALSE, cluster = NULL, logtheta=0,
                      contrasts = NULL, subset = NULL, ...) {
     type <- match.arg(type)
-    link <- switch(type,PH=link.PH,PO=link.PO,probit=link.probit)
+    link <- switch(type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
@@ -715,7 +715,8 @@ stpm2 <- function(formula, data,
     rcpp_stpm2 <- function() {
         parscale <- if (!is.null(control$parscale)) control$parscale else rep(1,length(init))
         names(parscale) <- names(init)
-        program <- switch(type,PH="optim_stpm2_ph",PO="optim_stpm2_po",probit="optim_stpm2_probit")
+        program <- switch(type,PH="optim_stpm2_ph",PO="optim_stpm2_po",probit="optim_stpm2_probit",
+                          AH="optim_stpm2_ah")
         .Call(program,list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
               delayed=if (delayed) 1 else 0, X0=X0, XD0=XD0, wt0=wt0, parscale=parscale, reltol=reltol,
                                  kappa=1, trace = trace),
@@ -728,7 +729,7 @@ stpm2 <- function(formula, data,
         hessian <- fit$hessian
         names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
         mle2 <- mle2(negll, coef, vecpar=TRUE, control=control, gr=gradnegll, ..., eval.only=TRUE)
-        mle2@vcov <- solve(hessian)
+        mle2@vcov <- if (!inherits(vcov <- try(solve(hessian)), "try-error")) vcov else matrix(NA,length(coef), length(coef))
         mle2@details$convergence <- fit$fail # fit$itrmcd
     } else {
         mle2 <- if (use.gr)
@@ -1354,13 +1355,13 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     } 
     
 #     ### Using exterior penalty method for nonlinear constraints: h(t)>=0 or increasing logH(t)
-#     ### Some intital values should be outside the feasible region
+#     ### Some initial values should be outside the feasible region
 #     while(all(XD%*%init>=0)){
 #       init <- init+0.001
 #     }
-#     ### Ckeck initial value
+#     ### Check initial value
 #     if(any(XD%*%init<=0)) {
-#       cat("Some intital values are exactly outside the feasible region of this problem","\n") 
+#       cat("Some initial values are exactly outside the feasible region of this problem","\n") 
 #     }
     
     ## MLE
