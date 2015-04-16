@@ -1137,7 +1137,14 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
       rhs(smooth.formula) <- rhs(smooth.formula) %call+% rhs(tvc.formula)
     }
     full.formula <- formula
-    rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
+    
+    if(type=="AH"){
+      rhs(full.formula) <- rhs(smooth.formula)
+    }
+    else{
+      rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
+    }
+    
 	  ## 
 	  left <- deparse(substitute(formula))
 	  tf <- terms.formula(smooth.formula, specials = c("s", "te"))
@@ -1229,13 +1236,19 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         if (!is.null(sp.init)) sp <- sp.init
     }
     ## penalty function
-    pfun <- function(beta,sp)
-      sum(sapply(1:length(gam.obj$smooth),
-                 function(i) {
-                   smoother <- gam.obj$smooth[[i]]
-                   betai <- beta[smoother$first.para:smoother$last.para]
-                   sp[i]/2 * betai %*% smoother$S[[1]] %*% betai
-                 }))
+    pfun <- function(beta,sp){
+      if(type=="AH"){
+        return(0)
+      }
+      else{
+        sum(sapply(1:length(gam.obj$smooth),
+                   function(i) {
+                     smoother <- gam.obj$smooth[[i]]
+                     betai <- beta[smoother$first.para:smoother$last.para]
+                     sp[i]/2 * betai %*% smoother$S[[1]] %*% betai
+                   }))
+    }
+      
     negllsp <- function(beta,sp,gamma=10) {
         eta <- as.vector(X %*% beta)
         etaD <- as.vector(XD %*% beta)
@@ -1243,7 +1256,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         h <- link$h(eta,etaD) + bhazard
         constraint <- gamma*sum((wt*h)[h<0]^2) + gamma*sum((wt*H)[H<0]^2)
         h <- pmax(h,1e-16)
-        ll <- sum(wt[event]*log(h[event])) - sum(wt*H) - pfun(beta,sp) - constraint
+        ll <- sum(wt[event]*log(h[event])) - sum(wt*H)  - constraint
+#         ll <- sum(wt[event]*log(h[event])) - sum(wt*H) - pfun(beta,sp) - constraint
         if (delayed) {
             eta0 <- as.vector(X0 %*% beta)
             etaD0 <- as.vector(XD0 %*% beta)
@@ -1253,14 +1267,19 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         return(-ll)
     }
     dpfun <- function(beta,sp) {
-      deriv <- beta*0
-      for (i in 1:length(gam.obj$smooth))
+      if(type=="AH"){
+        return(0)
+      }
+      else{
+        deriv <- beta*0
+        for (i in 1:length(gam.obj$smooth))
         {
           smoother <- gam.obj$smooth[[i]]
           ind <- smoother$first.para:smoother$last.para
           deriv[ind] <- sp[i] * smoother$S[[1]] %*% beta[ind]
         }
-      return(deriv)
+        return(deriv)
+      }
     }
     if (penalty == "h") {
         ## a current limitation is that the hazard penalty needs to extract the variable names from the smoother objects (e.g. log(time) will not work)
@@ -1302,7 +1321,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         gradh <- link$gradh(eta,etaD,pars)
         gradH <- link$gradH(eta,etaD,pars)
         dconstraint <- gamma*colSums(ifelse(h<0,h,0)*gradh)
-        g <- colSums(wt*(-gradH + ifelse(event,1/h,0)*gradh)) - dpfun(beta,sp) - dconstraint
+#         g <- colSums(wt*(-gradH + ifelse(event,1/h,0)*gradh)) - dpfun(beta,sp) - dconstraint
+        g <- colSums(wt*(-gradH + ifelse(event,1/h,0)*gradh)) - dconstraint
         if (delayed) {
             eta0 <- as.vector(X0 %*% beta)
             etaD0 <- as.vector(XD0 %*% beta)
