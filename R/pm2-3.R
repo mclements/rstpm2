@@ -1256,8 +1256,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         h <- link$h(eta,etaD) + bhazard
         constraint <- gamma*sum((wt*h)[h<0]^2) + gamma*sum((wt*H)[H<0]^2)
         h <- pmax(h,1e-16)
-        ll <- sum(wt[event]*log(h[event])) - sum(wt*H)  - constraint
-#         ll <- sum(wt[event]*log(h[event])) - sum(wt*H) - pfun(beta,sp) - constraint
+        ll <- sum(wt[event]*log(h[event])) - sum(wt*H) - pfun(beta,sp) - constraint
         if (delayed) {
             eta0 <- as.vector(X0 %*% beta)
             etaD0 <- as.vector(XD0 %*% beta)
