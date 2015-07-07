@@ -1137,15 +1137,13 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
       rhs(smooth.formula) <- rhs(smooth.formula) %call+% rhs(tvc.formula)
     }
     full.formula <- formula
-    
     if(type=="AH"){
       rhs(full.formula) <- rhs(smooth.formula)
     }
     else{
       rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
     }
-    
-	  ## 
+      ## 
 	  left <- deparse(substitute(formula))
 	  tf <- terms.formula(smooth.formula, specials = c("s", "te"))
 		terms <- attr(tf, "term.labels")
@@ -1248,7 +1246,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                      sp[i]/2 * betai %*% smoother$S[[1]] %*% betai
                    }))
     }
-      
+  }
     negllsp <- function(beta,sp,gamma=10) {
         eta <- as.vector(X %*% beta)
         etaD <- as.vector(XD %*% beta)
@@ -1351,8 +1349,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         H <- link$H(eta,etaD)
         ll <- sum(wt[event]*log(h[event])) - sum(wt*H)
         if (delayed) {
-            eta0 <- as.vector(X0 %*% bet)
-            etaD0 <- as.vector(XD0 %*% bet)
+            eta0 <- as.vector(X0 %*% beta)
+            etaD0 <- as.vector(XD0 %*% beta)
             ll <- ll + sum(wt0*link$H(eta0,etaD0))
         }
         return(ll)
@@ -1371,8 +1369,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         init <- coef(gam.obj)
         if (all(gam.obj$sp > 1e5)) break
         ## stop("Initial values not valid and revised sp>1e5")
-    } 
-    
+    }
 #     ### Using exterior penalty method for nonlinear constraints: h(t)>=0 or increasing logH(t)
 #     ### Some initial values should be outside the feasible region
 #     while(all(XD%*%init>=0)){
@@ -1382,7 +1379,6 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
 #     if(any(XD%*%init<=0)) {
 #       cat("Some initial values are exactly outside the feasible region of this problem","\n") 
 #     }
-    
     ## MLE
     if (!is.null(control) && "parscale" %in% names(control)) {
       if (length(control$parscale)==1)
@@ -1484,7 +1480,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     if (robust) # kludge
         out@vcov <- sandwich.stpm2(out)
     return(out)
-  }
+}  
 
 ########GCV##############
 ##require(numDeriv)

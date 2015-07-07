@@ -15,6 +15,16 @@
 
 \maketitle
 
+\section{Mean survival}
+
+This has a useful interpretation for causal inference.
+
+$E_Z(S(t|Z,X=1))-E_Z(S(t|Z,X=0))$
+
+\begin{verbatim}
+fit <- rstpm()
+predict(fit,type="meansurvdiff",newdata=data)
+\end{verbatim}
 
 \section{Cure models}
 

@@ -10,14 +10,17 @@ This implements a penalised Royston-Parmar model using generalized
 additive models.
 }
 \usage{
-pstpm2 <- function(formula, data, smooth.formula = NULL,
+pstpm2(formula, data, smooth.formula = NULL,
                    logH.args = NULL, 
                    tvc = NULL, 
-                   control = list(parscale = 0.1, maxit = 300), init = FALSE,
+                   control = list(parscale = 0.1, maxit = 300), init = NULL,
                    coxph.strata = NULL, coxph.formula = NULL,
-weights = NULL, robust = FALSE, 
-                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
-                   alpha=switch(criterion,BIC=1,GCV=1.4), sp.init=NULL, trace = 0,
+                   weights = NULL, robust = FALSE, 
+                   bhazard = NULL, timeVar = "", time0Var = "",
+                   sp=NULL, use.gr = TRUE, use.rcpp = TRUE,
+                   criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
+                   alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=NULL, trace = 0,
+                   type=c("PH","PO","probit","AH"),
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
 }

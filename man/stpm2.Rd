@@ -11,9 +11,12 @@ This implements the Royston-Parmar model.
 stpm2(formula, data,
                      df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
                      tvc = NULL, tvc.formula = NULL,
-                     control = list(parscale = 0.1, maxit = 300), init = FALSE,
-                     coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE,
-                     bhazard = NULL, timeVar = NULL, use.gr = TRUE,
+                     control = list(parscale = 0.1, maxit = 300), init = NULL,
+                     coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE, 
+                     bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE, use.rcpp= TRUE,
+                     reltol=1.0e-8, trace = 0,
+                     type=c("PH","PO","probit","AH"),
+                     frailty = FALSE, cluster = NULL, logtheta=0,
                      contrasts = NULL, subset = NULL, ...)
 }
 %- maybe also 'usage' for other objects documented here.
@@ -55,7 +58,7 @@ time-varying coefficient is being model, then only one of
 }
   \item{bhazard}{
 a vector for the background hazard for relative survival estimation. At
-present, this does not use \code{data}. At present, this is required for
+present, this does not use \code{data} and it is required for
 all individuals - although it is only used at the event times.
 }
 \item{control}{\code{control} argument passed to \code{optim}.}
@@ -70,7 +73,6 @@ all individuals - although it is only used at the event times.
   estimator.}
 \item{baseoff}{Boolean used to determine whether fully define the model
 using \code{tvc.formula} rather than combining \code{logH.formula} and \code{tvc.formula}}
-\item{bhazard}{variable for the baseline hazard for relative survival}
 \item{timeVar}{variable defining the time variable. By default, this is
 determined from the survival object, however this may be ambiguous if
 two variables define the time}

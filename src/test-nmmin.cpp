@@ -521,11 +521,12 @@ namespace rstpm2 {
     vec h = data->h(eta,etaD) + data->bhazard;
     vec H = data->H(eta,etaD);
     vec one = ones(h.size());
+    vec eps = h*0.0 + 1.0e-16; 
     mat gradH = data->gradH(eta,etaD,data->X,data->XD); 
     mat gradh = data->gradh(eta,etaD,data->X,data->XD); 
-    mat Xgrad = -rmult(gradH, one % (H>0)) + rmult(gradh, data->event / h % (h>0));
-    mat Xconstraint = data->kappa * rmult(gradh,h%(h<0)) + 
-      data->kappa * rmult(gradH,H / data->time / data->time % (H<0));
+    mat Xgrad = -rmult(gradH, one % (H>eps)) + rmult(gradh, data->event / h % (h>eps));
+    mat Xconstraint = data->kappa * rmult(gradh,h%(h<eps)) + 
+      data->kappa * rmult(gradH,H / data->time / data->time % (H<eps));
     rowvec dconstraint = sum(Xconstraint,0);
     // if (data->trace) Rprint(dconstraint);
     Xgrad = rmult(Xgrad,data->wt);
