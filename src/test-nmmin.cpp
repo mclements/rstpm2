@@ -41,6 +41,23 @@ namespace rstpm2 {
     }
   }
 
+  void Rprint(NumericVector v) {
+    for (int i=0; i<v.size(); ++i) 
+      Rprintf("%f ", v(i));
+    Rprintf("\n");
+  }
+
+  void Rprint(vec v) {
+    for (size_t i=0; i<v.size(); ++i) 
+      Rprintf("%f ", v(i));
+    Rprintf("\n");
+  }
+  void Rprint(rowvec v) {
+    for (size_t i=0; i<v.size(); ++i) 
+      Rprintf("%f ", v(i));
+    Rprintf("\n");
+  }
+
   void Rprint(mat m) {
     for (size_t i=0; i<m.n_rows; ++i) {
       for (size_t j=0; j<m.n_cols; ++j) 
@@ -102,6 +119,7 @@ namespace rstpm2 {
       bhazard = as<vec>(list["bhazard"]);
       wt = as<vec>(list["wt"]);
       event = as<vec>(list["event"]);
+      time = as<vec>(list["time"]);
       delayed = as<int>(list["delayed"]);
       X0.set_size(1,1); X0.fill(0.0);
       wt0.set_size(1); wt0.fill(0.0);
@@ -124,63 +142,12 @@ namespace rstpm2 {
     virtual mat gradh(vec eta, vec etaD, mat X, mat XD) { 
       return rmult(XD, exp(eta)) + rmult(X, etaD % exp(eta));
     }
-    virtual double negll(NumericVector beta);
-    virtual void grad_negll(NumericVector beta);
     NumericVector init;
     mat X, XD, X0, XD0; 
-    vec bhazard,wt,wt0,event,parscale;
+    vec bhazard,wt,wt0,event,time,parscale;
     double reltol, kappa;
     int delayed, trace;
   };
-
-  double stpm2::negll(NumericVector beta) {
-    int n = init.size();
-    vec vbeta(&beta[0],n);
-    vbeta = vbeta % parscale;
-    vec eta = X * vbeta;
-    vec etaD = XD * vbeta;
-    vec h = this->h(eta,etaD) + bhazard;
-    vec H = this->H(eta,etaD) + bhazard;
-    double constraint = kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
-    vec eps = h*0.0 + 1.0e-16; 
-    h = max(h,eps);
-    double ll = sum(wt % event % log(h)) - sum(wt % H) - constraint;
-    if (delayed == 1) {
-      vec eta0 = X0 * vbeta;
-      vec etaD0 = XD0 * vbeta;
-      mat H0 = this->H(eta0,etaD0);
-      ll += sum(wt0 % H0);
-    }
-    return -ll;  
-  }
-
-  void stpm2::grad_negll(NumericVector beta) {
-    int n = beta.size();
-    vec vbeta = as<vec>(wrap(beta));
-    vbeta = vbeta % parscale;
-    vec eta = X * vbeta;
-    vec etaD = XD * vbeta;
-    vec h = this->h(eta,etaD) + bhazard;
-    // vec H = exp(eta);
-    mat gradH = this->gradH(eta,etaD,X,XD);
-    mat gradh = this->gradh(eta,etaD,X,XD);
-    mat Xgrad = -gradH + rmult(gradh, event / h);
-    mat Xconstraint = - kappa*rmult(gradh,h);
-    vec eps = h*0.0 + 1.0e-16; // hack
-    //Xgrad.rows(h<=eps) = Xconstraint.rows(h<=eps);
-    Xgrad = rmult(Xgrad,wt);
-    rowvec vgr = sum(Xgrad,0);
-    if (delayed == 1) {
-      vec eta0 = X0 * vbeta;
-      vec etaD0 = XD0 * vbeta;
-      mat gradH0 = this->gradH(eta0, etaD0, X0, XD0); 
-      vgr += sum(rmult(gradH0, wt0),0);
-    }
-    for (int i = 0; i<n; ++i) {
-      // gr[i] = -vgr[i]*parscale[i];
-    }
-  }
-
 
   class stpm2PO : public stpm2 {
   public:
@@ -214,6 +181,17 @@ namespace rstpm2 {
 	rmult(X, dnorm01(eta) % dnorm01(eta) / pnorm01(-eta) / pnorm01(-eta) % etaD) +
 	rmult(XD,dnorm01(eta) / pnorm01(-eta));
     }
+  };
+  
+  class stpm2AH : public stpm2 {
+  public:
+    stpm2AH(SEXP sexp) : stpm2(sexp) { }
+    vec link(vec S) { return -log(S); }
+    vec ilink(vec x) { return exp(-x); }
+    vec h(vec eta, vec etaD) { return etaD; }
+    vec H(vec eta, vec etaD) { return eta; }
+    mat gradh(vec eta, vec etaD, mat X, mat XD) { return XD; }
+    mat gradH(vec eta, vec etaD, mat X, mat XD) { return X;  }
   };
 
   struct SmoothLogH {
@@ -311,37 +289,37 @@ namespace rstpm2 {
   class BFGS2 : public BFGS {
   public:
     void optim(optimfn fn, optimgr gr, NumericVector init, void * ex,
-	       bool apply_parscale = true) {
+	       bool apply_parscale = true, double eps = 1.0e-8) {
       Data * data = (Data *) ex;
       n = init.size();
       if (apply_parscale) for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
-      BFGS::optim(fn,gr,init,ex);
+      BFGS::optim(fn,gr,init,ex,eps);
       if (apply_parscale) for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
-      hessian = calc_hessian(gr, ex);
+      hessian = calc_hessian(gr, ex, eps);
     }
     void optimWithConstraint(optimfn fn, optimgr gr, NumericVector init, void * ex, constraintfn constraint,
-			     bool apply_parscale = true) {
+			     bool apply_parscale = true, double eps = 1.0e-8) {
       Data * data = (Data *) ex;
       n = init.size();
       if (apply_parscale) for (int i = 0; i<n; ++i) init[i] /= data->parscale[i];
       bool satisfied;
       do {
-	BFGS::optim(fn,gr,init,ex);
+	BFGS::optim(fn,gr,init,ex,eps);
 	satisfied = constraint(n,&coef[0],ex);
 	if (!satisfied) data->kappa *= 2.0;   
-      } while ((!satisfied)&& data->kappa < 4*1.0e18);      
+      } while ((!satisfied)&& data->kappa < 1.0e3);      
       if (apply_parscale) for (int i = 0; i<n; ++i) coef[i] *= data->parscale[i];
-      hessian = calc_hessian(gr, ex);
+      hessian = calc_hessian(gr, ex, eps);
    // Rprintf("kappa=%f\n",data->kappa);
     }
-    NumericMatrix calc_hessian(optimgr gr, void * ex) {
+    NumericMatrix calc_hessian(optimgr gr, void * ex, double eps = 1.0e-8) {
       Data * data = (Data *) ex;
       vec parscale(n);
       for (int i=0; i<n; ++i) {
 	parscale[i] = data->parscale[i];
 	data->parscale[i] = 1.0;
       }
-      NumericMatrix hessian = BFGS::calc_hessian(gr,ex);
+      NumericMatrix hessian = BFGS::calc_hessian(gr,ex,eps);
       for (int i=0; i<n; ++i) data->parscale[i] = parscale[i];
       return hessian;
     }
@@ -355,10 +333,12 @@ namespace rstpm2 {
     vec eta = data->X * vbeta;
     vec etaD = data->XD * vbeta;
     vec h = data->h(eta,etaD) + data->bhazard;
-    vec H = data->H(eta,etaD) + data->bhazard;
-    double constraint = data->kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
+    vec H = data->H(eta,etaD);
+    double constraint = data->kappa/2.0 * sum(h % h % (h<0)) + 
+      data->kappa/2.0 * sum((H/data->time) % (H/data->time) % (H<0));
     vec eps = h*0.0 + 1.0e-16; 
     h = max(h,eps);
+    H = max(H,eps);
     double ll = sum(data->wt % data->event % log(h)) - sum(data->wt % H) - constraint;
     if (data->delayed == 1) {
       vec eta0 = data->X0 * vbeta;
@@ -472,101 +452,6 @@ namespace rstpm2 {
     return wrap(ll);
   }
 
-  /** 
-      Utility function for calculating a gamma frailty log-likelihood within R code 
-   **/
-  RcppExport SEXP llgammafrailtydelayed(SEXP _theta, SEXP _h, SEXP _H, SEXP _H0, SEXP _d,
-				    SEXP _cluster) {
-    double theta = as<double>(_theta);
-    NumericVector h = as<NumericVector>(_h);
-    NumericVector H = as<NumericVector>(_H);
-    NumericVector H0 = as<NumericVector>(_H0); // assumes that _H0 is zero for data not left truncated
-    IntegerVector d = as<IntegerVector>(_d);
-    IntegerVector cluster = as<IntegerVector>(_cluster);
-    double ll = 0.0;
-    // wragged array indexed by a map of vectors
-    typedef std::vector<int> Index;
-    typedef std::map<int,Index> IndexMap;
-    IndexMap clusters;
-    for (int i=0; i<cluster.size(); ++i) {
-      clusters[cluster[i]].push_back(i);
-    }
-    for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
-      int mi=0;
-      double sumH = 0.0, sumHenter = 0.0;
-      for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
-	if (d[*j]==1) {
-	  mi++;
-	  ll += log(h[*j]);
-	}
-	sumH += H[*j];
-	sumHenter += H0[*j];
-      }
-      ll -= (1.0/theta+mi)*log(1.0+theta*sumH);
-      ll += 1.0/theta*log(1.0+theta*sumHenter);
-      if (mi>0) {
-	int k=1;
-	for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
-	  if (d[*j]==1) {
-	    ll += log(1.0+theta*(mi-k));
-	    k++;
-	  }
-	}
-      }
-    }
-    return wrap(ll);
-  }
-
-
-  struct CureModel {
-    int n0, n1, n2;
-    mat Xshape, Xscale, Xcure;
-    vec time, status;
-  };
-
-  double fminfn_cureModel(int n, double * beta, void *ex) {
-    double ll = 0.0;
-    CureModel * data = (CureModel *) ex;
-    vec vbeta(beta,n);
-    vec shape = exp(data->Xshape * vbeta(span(0,data->n0-1)));
-    vec scale = exp(data->Xscale * vbeta(span(data->n0,data->n1-1)));
-    vec cure = 1.0/(1.0+exp(-data->Xcure * vbeta(span(data->n1,data->n2-1))));
-    for (size_t i=0; i < data->time.size(); ++i) {
-      ll += data->status(i)==1.0 ?
-	log(1.0-cure(i)) + R::dweibull(data->time(i),shape(i),scale(i),1) :
-	log(cure(i)+(1.0-cure(i)) * R::pweibull(data->time(i),shape(i),scale(i),0,0));
-    }
-    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
-    return -ll;
-  }
-
-RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
-			  SEXP sXscale, SEXP sXcure, SEXP sbeta) {
-    mat Xshape = as<mat>(sXshape);
-    mat Xscale = as<mat>(sXscale);
-    mat Xcure = as<mat>(sXcure);
-    vec time = as<vec>(stime);
-    vec status = as<vec>(sstatus);
-    NumericVector init = as<NumericVector>(sbeta);
-    int n0=Xshape.n_cols;
-    int n1=n0+Xscale.n_cols;
-    int n2=n1+Xcure.n_cols;
-    CureModel data = {n0,n1,n2,Xshape,Xscale,Xcure,time,status};
-    
-    NelderMead nm;
-    nm.reltol = 1.0e-8;
-    nm.maxit = 1000;
-    nm.optim(& fminfn_cureModel, init, (void *) &data);
-
-    for (int i = 0; i<nm.coef.size(); ++i)
-      init[i] = nm.coef[i]; // clone
-    
-    return List::create(_("Fmin")=nm.Fmin, 
-			_("coef")=wrap(init),
-			_("fail")=nm.fail,
-			_("hessian")=wrap(nm.hessian));
-  }
-
 
   template<class Data>
   bool fminfn_constraint(int n, double * beta, void *ex) {
@@ -576,7 +461,8 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
     vec eta = data->X * vbeta;
     vec etaD = data->XD * vbeta;
     vec h = data->h(eta, etaD) + data->bhazard;
-    return all(h>0);
+    vec H = data->H(eta, etaD);
+    return all((h>0) % (H>0));
   }
 
   template<class Data>
@@ -628,17 +514,21 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
   void grfn(int n, double * beta, double * gr, void *ex) {
     Data * data = (Data *) ex;
     vec vbeta(beta,n);
+    // if (data->trace) Rprint(vbeta);
     vbeta = vbeta % data->parscale;
     vec eta = data->X * vbeta;
     vec etaD = data->XD * vbeta;
     vec h = data->h(eta,etaD) + data->bhazard;
-    // vec H = exp(eta);
-    mat gradH = data->gradH(eta,etaD,data->X,data->XD);
-    mat gradh = data->gradh(eta,etaD,data->X,data->XD);
-    mat Xgrad = -gradH + rmult(gradh, data->event / h);
-    mat Xconstraint = - data->kappa*rmult(gradh,h);
-    vec eps = h*0.0 + 1.0e-16; // hack
-    //Xgrad.rows(h<=eps) = Xconstraint.rows(h<=eps);
+    vec H = data->H(eta,etaD);
+    vec one = ones(h.size());
+    vec eps = h*0.0 + 1.0e-16; 
+    mat gradH = data->gradH(eta,etaD,data->X,data->XD); 
+    mat gradh = data->gradh(eta,etaD,data->X,data->XD); 
+    mat Xgrad = -rmult(gradH, one % (H>eps)) + rmult(gradh, data->event / h % (h>eps));
+    mat Xconstraint = data->kappa * rmult(gradh,h%(h<eps)) + 
+      data->kappa * rmult(gradH,H / data->time / data->time % (H<eps));
+    rowvec dconstraint = sum(Xconstraint,0);
+    // if (data->trace) Rprint(dconstraint);
     Xgrad = rmult(Xgrad,data->wt);
     rowvec vgr = sum(Xgrad,0);
     if (data->delayed == 1) {
@@ -648,7 +538,7 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
       vgr += sum(rmult(gradH0, data->wt0),0);
     }
     for (int i = 0; i<n; ++i) {
-      gr[i] = -vgr[i]*data->parscale[i];
+      gr[i] = -vgr[i]*data->parscale[i] + dconstraint[i];
     }
   }
 
@@ -663,16 +553,16 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
     vec eta = data->X * vbeta;
     vec etaD = data->XD * vbeta;
     vec h = data->h(eta,etaD) + data->bhazard;
+    vec H = data->H(eta,etaD);
     mat gradh = data->gradh(eta,etaD,data->X,data->XD);
-    mat Xconstraint = data->kappa * rmult(gradh,h%(h<0));
+    mat gradH = data->gradH(eta,etaD,data->X,data->XD);
     rowvec vgr(n, fill::zeros);
     for (size_t i=0; i < data->smooth.size(); ++i) {
       SmoothLogH smoothi = data->smooth[i];
       vgr.subvec(smoothi.first_para,smoothi.last_para) += 
 	(data->sp)[i] * (smoothi.S * vbeta.subvec(smoothi.first_para,smoothi.last_para)).t();
     }
-    rowvec dconstraint = sum(Xconstraint,0);
-    for (int i = 0; i<n; ++i) gr[i] += vgr[i]*data->parscale[i] + dconstraint[i];
+    for (int i = 0; i<n; ++i) gr[i] += vgr[i]*data->parscale[i];
   }
 
   template<class Stpm2>
@@ -714,6 +604,9 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
   template<>
   double pfminfn<SmoothLogH,stpm2Probit>(int n, double * beta, void *ex) {
     return pfminfn_SmoothLogH<stpm2Probit>(n, beta, ex); }
+    template<>
+  double pfminfn<SmoothLogH,stpm2AH>(int n, double * beta, void *ex) {
+    return pfminfn_SmoothLogH<stpm2AH>(n, beta, ex); }
 
   template<>
   double pfminfn<SmoothHaz,stpm2>(int n, double * beta, void *ex) {
@@ -737,6 +630,9 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
   template<>
   void pgrfn<SmoothLogH,stpm2Probit>(int n, double * beta, double * gr, void *ex) {
     pgrfn_SmoothLogH<stpm2Probit>(n, beta, gr, ex);}
+    template<>
+  void pgrfn<SmoothLogH,stpm2AH>(int n, double * beta, double * gr, void *ex) {
+    pgrfn_SmoothLogH<stpm2AH>(n, beta, gr, ex); }
 
   template<>
   void pgrfn<SmoothHaz,stpm2>(int n, double * beta, double * gr, void *ex) {
@@ -769,6 +665,8 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
     return optim_stpm2<stpm2PO>(args); }
   RcppExport SEXP optim_stpm2_probit(SEXP args) {
     return optim_stpm2<stpm2Probit>(args); }
+  RcppExport SEXP optim_stpm2_ah(SEXP args) {
+    return optim_stpm2<stpm2AH>(args); }
 
 
   RcppExport SEXP optim_stpm2_nlm(SEXP args) {
@@ -811,6 +709,15 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
     bfgs.optimWithConstraint(pfminfn<Smooth,Stpm2>, pgrfn<Smooth,Stpm2>, data->init, ex, fminfn_constraint<Data>, false); // do not apply parscale b4/after
 
     NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, ex);
+
+    if (data->trace > 0)  {
+      Rprintf("Debug on trace calculation. Coef:\n");
+      Rprint(bfgs.coef);
+      Rprintf("Hessian0:\n");
+      Rprint(hessian0);
+      Rprintf("Hessian:\n");
+      Rprint(bfgs.hessian);
+    }
 
     double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
     double negll = bfgs.calc_objective(fminfn<Data>,ex);
@@ -916,8 +823,10 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
     return optim_pstpm2_first<SmoothLogH,stpm2Probit>(args); }
   RcppExport SEXP optim_pstpm2Haz_first_probit(SEXP args) {
     return optim_pstpm2_first<SmoothHaz,stpm2Probit>(args); }
-
-
+  RcppExport SEXP optim_pstpm2LogH_first_ah(SEXP args) {
+    return optim_pstpm2_first<SmoothLogH,stpm2AH>(args); }
+  
+  
   template<class Smooth, class Stpm2>
   SEXP optim_pstpm2_multivariate(SEXP args) {
 
@@ -929,7 +838,6 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
     NelderMead nm;
     nm.reltol = 1.0e-5;
     nm.maxit = 500;
-    nm.hessianp = false;
     for (int i=0; i<n; ++i) data.init[i] /= data.parscale[i];
 
     NumericVector logsp(data.sp.size());
@@ -979,7 +887,8 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
     return optim_pstpm2_multivariate<SmoothLogH,stpm2Probit>(args); }
   RcppExport SEXP optim_pstpm2Haz_multivariate_probit(SEXP args) {
     return optim_pstpm2_multivariate<SmoothHaz,stpm2Probit>(args); }
-
+  RcppExport SEXP optim_pstpm2LogH_multivariate_ah(SEXP args) { 
+    return optim_pstpm2_multivariate<SmoothLogH,stpm2AH>(args); }
 
   template<class Smooth, class Stpm2>
   SEXP optim_pstpm2_multivariate_nlm(SEXP args) {
@@ -994,7 +903,6 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
     nlm.gradtl = 1.0e-4;
     nlm.steptl = 1.0e-4;
     nlm.msg = 9 + 4;
-    nlm.hessianp = false;
     for (int i=0; i<n; ++i) data.init[i] /= data.parscale[i];
 
     NumericVector logsp(data.sp.size());
@@ -1003,7 +911,7 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
 
     bool satisfied;
     do {
-      nlm.optim(pstpm2_step_multivariate_nlm<Smooth,Stpm2>, (fcn_p) 0, logsp, (void *) &data);
+      nlm.optim(pstpm2_step_multivariate_nlm<Smooth,Stpm2>, (fcn_p) 0, logsp, (void *) &data, false);
       satisfied = true;
       for (int i=0; i < data.sp.size(); ++i)
 	if (logsp[i]< -7.0 || logsp[i] > 7.0) satisfied = false;
@@ -1075,6 +983,8 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
     return optim_pstpm2_fixedsp<SmoothLogH,stpm2Probit>(args); }
   RcppExport SEXP optim_pstpm2Haz_fixedsp_probit(SEXP args) {
     return optim_pstpm2_fixedsp<SmoothHaz,stpm2Probit>(args); }
+  RcppExport SEXP optim_pstpm2LogH_fixedsp_ah(SEXP args) {
+    return optim_pstpm2_fixedsp<SmoothLogH,stpm2AH>(args); }
 
   template<class Smooth, class Stpm2>
   SEXP test_pstpm2(SEXP args) { 

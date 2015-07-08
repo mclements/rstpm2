@@ -3,10 +3,12 @@
 \alias{numDeltaMethod}
 %- Also NEED an '\alias' for EACH other topic documented here.
 \title{
-%%  ~~function to do ... ~~
+  Calculate numerical delta method for non-linear predictions.
 }
 \description{
-%%  ~~ A concise (1-5 lines) description of what the function does. ~~
+  Given a regression object and an independent prediction function (as a
+  function of the coefficients), calculate the point estimate and
+  standard errors 
 }
 \usage{
 numDeltaMethod(object, fun, ...)
@@ -14,39 +16,37 @@ numDeltaMethod(object, fun, ...)
 %- maybe also 'usage' for other objects documented here.
 \arguments{
   \item{object}{
-%%     ~~Describe \code{object} here~~
+    A regression object with methods \code{coef} and \code{vcov}.
 }
   \item{fun}{
-%%     ~~Describe \code{fun} here~~
+    An independent prediction function with signature
+    \code{function(coef, ...)}.
 }
   \item{\dots}{
-%%     ~~Describe \code{\dots} here~~
+    Other arguments passed to \code{fun}.
 }
 }
 \details{
-%%  ~~ If necessary, more details than the description above ~~
+  A more user-friendly interface is provided by \code{predictnl}.
 }
 \value{
-%%  ~Describe the value returned
-%%  If it is a LIST, use
-%%  \item{comp1 }{Description of 'comp1'}
-%%  \item{comp2 }{Description of 'comp2'}
-%% ...
+  \item{Estimate}{Point estimates}
+  \item{SE}{Standard errors}
 }
-\references{
-%% ~put references to the literature/web site here ~
-}
-\author{
-%%  ~~who you are~~
-}
-\note{
-%%  ~~further notes~~
-}
+%% \references{
+%% %% ~put references to the literature/web site here ~
+%% }
+%% \author{
+%% %%  ~~who you are~~
+%% }
+%% \note{
+%% %%  ~~further notes~~
+%% }
 
 %% ~Make other sections like Warning with \section{Warning }{....} ~
 
 \seealso{
-%% ~~objects to See Also as \code{\link{help}}, ~~~
+  See Also \code{\link{predictnl}}.
 }
 \examples{
 ##---- Should be DIRECTLY executable !! ----
@@ -60,11 +60,11 @@ function (object, fun, ...)
     est <- fun(coef, ...)
     Sigma <- vcov(object)
     gd <- grad(fun, coef, ...)
-    se.est <- as.vector(sqrt(diag(t(gd) \%*\% Sigma \%*\% gd)))
+    se.est <- as.vector(sqrt(colSums(gd * (Sigma \%*\% gd))))
     data.frame(Estimate = est, SE = se.est)
   }
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-\keyword{ ~kwd1 }
-\keyword{ ~kwd2 }% __ONLY ONE__ keyword per line
+%% \keyword{ ~kwd1 }
+%% \keyword{ ~kwd2 }% __ONLY ONE__ keyword per line

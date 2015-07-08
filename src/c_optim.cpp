@@ -21,60 +21,18 @@ namespace rstpm2 {
   // 	   int *fncount, int maxit)
 
   NelderMead::NelderMead(int trace, int maxit, 
-			 double abstol, double reltol, 
-			 double alpha, double beta, double gamma,
-			 double epshess, bool hessianp) : 
+	       double abstol,
+	       double reltol, 
+	       double alpha, double beta, double gamma) : 
       trace(trace), maxit(maxit), abstol(abstol), reltol(reltol), 
-      alpha(alpha), beta(beta), gamma(gamma), epshess(epshess), hessianp(hessianp) { 
+      alpha(alpha), beta(beta), gamma(gamma) { 
     }
   void NelderMead::optim(optimfn fn, NumericVector init, void * ex) {
-    n = init.size();
-    coef = clone(init);
-    nmmin(n, &init[0], &coef[0], &Fmin, fn,
+      n = init.size();
+      nmmin(n, &init[0], &coef[0], &Fmin, fn,
 	    &fail, abstol, reltol, ex,
 	    alpha, beta, gamma, trace,
 	    &fncount, maxit);
-      if (hessianp)
-	hessian = calc_hessian(fn, ex);
-    }
-  NumericMatrix NelderMead::calc_hessian(optimfn fn, void * ex) {
-      int n = coef.size();
-      NumericMatrix hess(n,n);
-      double tmpi,tmpj,f1,f0,fm1,hi,hj,fij,fimj,fmij,fmimj;
-      f0 = fn(n,&coef[0],ex);
-      for(int i=0; i<n; ++i) {
-	tmpi = coef[i];
-	hi = epshess*(1.0+abs(tmpi));
-	coef[i] = tmpi + hi;
-	f1=fn(n, &coef[0], ex);
-	coef[i] = tmpi - hi;
-	fm1=fn(n, &coef[0], ex);
-	// hess(i,i) = (-f2 +16.0*f1 - 30.0*f0 + 16.0*fm1 -fm2)/(12.0*hi*hi);
-	hess(i,i) = (f1 - 2.0*f0 + fm1)/(hi*hi);
-	coef[i] = tmpi;
-	for (int j=i; j<n; ++j) {
-	  if (i != j) {
-	    tmpj = coef[j];
-	    hj = epshess*(1.0+abs(tmpj));
-	    coef[i] = tmpi + hi;
-	    coef[j] = tmpj + hj;
-	    fij=fn(n, &coef[0], ex);
-	    coef[i] = tmpi + hi;
-	    coef[j] = tmpj - hj;
-	    fimj=fn(n, &coef[0], ex);
-	    coef[i] = tmpi - hi;
-	    coef[j] = tmpj + hj;
-	    fmij=fn(n, &coef[0], ex);
-	    coef[i] = tmpi - hi;
-	    coef[j] = tmpj - hj;
-	    fmimj=fn(n, &coef[0], ex);
-	    hess(j,i) = hess(i,j) = (fij-fimj-fmij+fmimj)/(4.0*hi*hj);
-	    coef[i] = tmpi;
-	    coef[j] = tmpj;
-	  }
-	}
-      }
-      return wrap(hess);
     }
 
   // void
@@ -84,16 +42,15 @@ namespace rstpm2 {
   //       int *fncount, int *grcount, int *fail)
   BFGS::BFGS(int trace, int maxit, 
 	 double abstol,
-	     double reltol, int report, double epshess, bool hessianp) : 
-    trace(trace), maxit(maxit), report(report), abstol(abstol), reltol(reltol), epshess(epshess), hessianp(hessianp) { }
-  void BFGS::optim(optimfn fn, optimgr gr, NumericVector init, void * ex) {
+	 double reltol, int report) : 
+      trace(trace), maxit(maxit), report(report), abstol(abstol), reltol(reltol) { }
+  void BFGS::optim(optimfn fn, optimgr gr, NumericVector init, void * ex, double eps) {
       n = init.size();
       int mask[n]; for (int i=0; i<n; ++i) mask[i] = 1;
       vmmin(n, &init[0], &Fmin, fn, gr, maxit, trace, mask, abstol, reltol, report,
 	    ex, &fncount, &grcount, &fail);
       coef = clone(init);
-      if (hessianp)
-	hessian = calc_hessian(gr, ex);
+      hessian = calc_hessian(gr, ex, eps);
     }
   double BFGS::calc_objective(optimfn fn, NumericVector coef, void * ex) {
       return fn(coef.size(), &coef[0], ex);
@@ -101,7 +58,7 @@ namespace rstpm2 {
   double BFGS::calc_objective(optimfn fn, void * ex) {
       return fn(coef.size(), &coef[0], ex);
     }
-  NumericMatrix BFGS::calc_hessian(optimgr gr, void * ex) {
+  NumericMatrix BFGS::calc_hessian(optimgr gr, void * ex, double eps) {
       int n = coef.size();
       NumericVector df1(clone(coef));
       NumericVector df2(clone(coef));
@@ -109,12 +66,12 @@ namespace rstpm2 {
       double tmp;
       for(int i=0; i<n; ++i) {
 	tmp = coef[i];
-	coef[i] += epshess;
+	coef[i] += eps;
 	gr(n, &coef[0], &df1[0], ex);
-	coef[i] = tmp - epshess;
+	coef[i] = tmp - eps;
 	gr(n, &coef[0], &df2[0], ex);
 	for (int j=0; j<n; ++j)
-	  hess(i,j) = (df1[j] - df2[j]) / (2*epshess);
+	  hess(i,j) = (df1[j] - df2[j]) / (2*eps);
 	coef[i] = tmp;
       }
       // now symmetrize
@@ -142,17 +99,17 @@ namespace rstpm2 {
 	   int iagflg,
 	   int iahflg,
 	   double dlt,
-	   double gradtl, // cf. epshess
+	   double gradtl,
 	   double stepmx,
 	   double steptl,
 	   int itrmcd,
-	   int itncnt,
-	   bool hessianp
+	   int itncnt
 	   ) : fscale(fscale), method(method), iexp(iexp), msg(msg),
 	       ndigit(ndigit), itnlim(itnlim), iagflg(iagflg), 
 	       iahflg(iahflg), dlt(dlt), gradtl(gradtl), stepmx(stepmx),
-	       steptl(steptl), itrmcd(itrmcd), itncnt(itncnt), hessianp(hessianp) { }
-  void Nlm::optim(fcn_p fcn, fcn_p d1fcn, NumericVector init, void * state) {
+	       steptl(steptl), itrmcd(itrmcd), itncnt(itncnt) { }
+  void Nlm::optim(fcn_p fcn, fcn_p d1fcn, NumericVector init, void * state,
+		  bool hessianp) {
       int n;
       n = init.size();
       double typsize[n], norm, fpls, gpls[n], a[n*n], wrk[n*8];
@@ -174,7 +131,7 @@ namespace rstpm2 {
 	     wrk, &itncnt);
       coef = clone(xpls);
       if (hessianp)
-	hessian = calc_hessian(d1fcn, state);
+	hessian = calc_hessian(d1fcn, state, gradtl);
     }
   double Nlm::calc_objective(fcn_p fn, NumericVector coef, void * ex) {
     double f;
@@ -186,7 +143,7 @@ namespace rstpm2 {
     fn(coef.size(), &coef[0], &f, ex);
     return f;
   }
-  NumericMatrix Nlm::calc_hessian(fcn_p gr, void * ex) {
+  NumericMatrix Nlm::calc_hessian(fcn_p gr, void * ex, double eps) {
       int n = coef.size();
       NumericVector df1(clone(coef));
       NumericVector df2(clone(coef));
@@ -194,12 +151,12 @@ namespace rstpm2 {
       double tmp;
       for(int i=0; i<n; ++i) {
 	tmp = coef[i];
-	coef[i] += gradtl;
+	coef[i] += eps;
 	gr(n, &coef[0], &df1[0], ex);
-	coef[i] = tmp - gradtl;
+	coef[i] = tmp - eps;
 	gr(n, &coef[0], &df2[0], ex);
 	for (int j=i; j<n; ++j)
-	  hess(j,i) = hess(i,j) = (df1[j] - df2[j]) / (2*gradtl);
+	  hess(j,i) = hess(i,j) = (df1[j] - df2[j]) / (2*eps);
 	coef[i] = tmp;
       }
       return wrap(hess);
@@ -318,4 +275,4 @@ double Brent_fmin(double ax, double bx, double (*f)(double, void *),
 
   // .Call("optim_stpm2",init,X,XD,rep(bhazard,nrow(X)),wt,ifelse(event,1,0),package="rstpm2")
 
-} // namespace rstpm2
+} // anonymous namespace

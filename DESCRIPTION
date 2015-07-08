@@ -1,13 +1,18 @@
 Package: rstpm2
 Type: Package
 Title: Flexible Parametric Survival Models
-Version: 1.1.4
+Authors@R: c(person("Mark", "Clements", role = c("aut", "cre"),
+		     email = "mark.clements@ki.se"),
+	      person("Xing-Rong", "Liu", role = "aut",
+		     email = "xingrong.liu@ki.se"),
+	      person("Paul", "Lambert", role = "ctb", email="pl4@LEICESTER.AC.UK"))
+Version: 1.1.2
 Date: 2013-06-17
-Depends: methods, bbmle (>= 1.0.3), survival, mgcv
+Depends: R (>= 2.10), methods, bbmle (>= 1.0.3), survival, mgcv
 Imports: splines, stats, graphics, Rcpp (>= 0.10.2), numDeriv
 Suggests: RUnit, gaussquad
 LinkingTo: Rcpp,RcppArmadillo
-Author: Mark Clements, Xingrong Liu (with guidance from Paul Lambert). 
+Author: Mark Clements [aut, cre], Xing-Rong Liu [aut], Paul Lambert [ctb]. 
 Maintainer: Mark Clements <mark.clements@ki.se>
 Description: R implementation of Stata's stpm2 function (flexible parametric survival model), with an extension to semi-parametric survival models.
 License: GPL-2 | GPL-3

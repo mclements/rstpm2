@@ -27,7 +27,7 @@ cox.tvc <- function(obj,var=NULL,method="logt") {
     fit <- mle2(start=beta,
                  minuslogl = minuslogl,
                  gr = gr,
-                 method="BFGS", hessian=TRUE)
+                 method="BFGS")
     fit@data <- list(object=obj,k=k,var=var)
     ## return the mle2 object
     as(fit,"tvcCoxph")

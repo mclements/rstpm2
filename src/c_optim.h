@@ -18,66 +18,30 @@ namespace rstpm2 {
   double max(double a, double b);
   double bound(double x, double lower, double upper);
 
-  /**
-     Adapt a function object (functor) for NelderMead and BFGS
-  **/
-  template<class T>
-    double adapt_functor(int n, double * beta, void * par) {
-    T * model = (T *) par;
-    Rcpp::NumericVector x(beta,n);
-    return model->operator()(x);
-  }
-  /**
-     Adapt an negll function for NelderMead and BFGS
-  **/
-  template<class T>
-    double adapt_negll(int n, double * beta, void * par) {
-    T * model = (T *) par;
-    Rcpp::NumericVector x(beta,n);
-    return model->negll(x);
-  }
-  /**
-     Adapt a grad_negll function for BFGS
-  **/
-  template<class T>
-    void adapt_grad_negll(int n, double * beta, double * grad, void * par) {
-    T * model = (T *) par;
-    Rcpp::NumericVector x(beta,n);
-    //grad = model->grad_negll(x);
-  }
-
   class NelderMead {
   public:
     NelderMead(int trace = 0, int maxit = 500, 
 	       double abstol = - INFINITY,
 	       double reltol = 1.0e-8, 
-	       double alpha = 1.0, double beta = 0.5, double gamma = 2.0, 
-	       double epshess = 6.055454e-06, bool hessianp = true);
-    virtual void optim(optimfn fn, Rcpp::NumericVector init, void * ex);
-    template<class T>
-      void optim(Rcpp::NumericVector init, T object) {
-      optim(&adapt_functor<T>,init,(void *) &object);
-    }
-    virtual Rcpp::NumericMatrix calc_hessian(optimfn fn, void * ex);
+	       double alpha = 1.0, double beta = 0.5, double gamma = 2.0);
+    void optim(optimfn fn, Rcpp::NumericVector init, void * ex);
     int n, trace, maxit, fail, fncount;
-    double abstol, reltol, alpha, beta, gamma, Fmin, epshess;
-    bool hessianp;
+    double abstol, reltol, alpha, beta, gamma, Fmin;
     Rcpp::NumericVector coef;
-    Rcpp::NumericMatrix hessian;
   };
 
   class BFGS {
   public:
     BFGS(int trace = 0, int maxit = 100, 
 	 double abstol = - INFINITY,
-	 double reltol = 1.0e-8, int report = 10, double epshess = 1.0e-8, bool hessianp = true);
-    virtual void optim(optimfn fn, optimgr gr, Rcpp::NumericVector init, void * ex);
+	 double reltol = 1.0e-8, int report = 10);
+    virtual void optim(optimfn fn, optimgr gr, Rcpp::NumericVector init, void * ex,
+	       double eps = 1.0e-8);
     virtual double calc_objective(optimfn fn, Rcpp::NumericVector coef, void * ex);
     virtual double calc_objective(optimfn fn, void * ex);
-    virtual Rcpp::NumericMatrix calc_hessian(optimgr gr, void * ex);
+    virtual Rcpp::NumericMatrix calc_hessian(optimgr gr, void * ex, double eps = 1.0e-8);
     int n, trace, maxit, report, fncount, grcount, fail;
-    double abstol, reltol, Fmin, epshess;
-    bool hessianp;
+    double abstol, reltol, Fmin;
     Rcpp::NumericVector coef;
     Rcpp::NumericMatrix hessian;
   };
@@ -97,13 +61,13 @@ namespace rstpm2 {
 	double stepmx = 0.0,    // set to -1.0 to get nlm()'s behaviour
 	double steptl = 1.0e-6,  // nlm()
 	int itrmcd = 0, 
-	int itncnt = 0,
-	bool hessianp = true
+	int itncnt = 0
 	);
-    void optim(fcn_p fcn, fcn_p d1fcn, Rcpp::NumericVector init, void * state); // assumes iahflg=0
+    void optim(fcn_p fcn, fcn_p d1fcn, Rcpp::NumericVector init, void * state,
+	       bool hessianp = true); // assumes iahflg=0
     double calc_objective(fcn_p fn, Rcpp::NumericVector coef, void * ex);
     double calc_objective(fcn_p fn, void * ex);
-    Rcpp::NumericMatrix calc_hessian(fcn_p gr, void * ex);
+    Rcpp::NumericMatrix calc_hessian(fcn_p gr, void * ex, double eps = 1.0e-8);
     void set_print_level(int);
     double fscale;
     int method;
@@ -119,7 +83,6 @@ namespace rstpm2 {
     double steptl;
     int itrmcd;
     int itncnt;
-    bool hessianp;
     Rcpp::NumericVector coef;
     Rcpp::NumericMatrix hessian;
   };
@@ -127,25 +90,8 @@ namespace rstpm2 {
 
   typedef double (*Brent_fminfn)(double, void *);
 
-  double Brent_fmin(double ax, double bx, double (*f)(double, void *),
-		    void *info, double tol);
-  
-  /** 
-      Adapt a function object (functor) to work with Brent_fmin()
-  **/
-  template<class T, class X>
-    double Brent_fmin_functor(X x, void * par) {
-    T * model = (T *) par;
-    return model->operator()(x);
-  }
-
-  /** 
-      Use Brent_fmin with a function object (functor)
-  **/
-  template<class T>
-    double BrentFmin(double a, double b, T obj, double eps = 1.0e-8) {
-    return Brent_fmin(a,b,&Brent_fmin_functor<T,double>,(void *) &obj,eps);
-  }
+double Brent_fmin(double ax, double bx, double (*f)(double, void *),
+		  void *info, double tol);
 
 } // anonymous rstpm2
 
