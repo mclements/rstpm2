@@ -3,10 +3,10 @@
 \alias{grad}
 %- Also NEED an '\alias' for EACH other topic documented here.
 \title{gradient function (internal function)
-%%  ~~function to do ... ~~
+  %%  ~~function to do ... ~~
 }
 \description{
-  Numerical gradient for a function at a given value
+  Numerical gradient for a function at a given value (internal).
 }
 \usage{
 grad(func, x, ...)

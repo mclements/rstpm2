@@ -98,21 +98,21 @@ A \code{pstpm2-class} object.
 %%  \item{comp2 }{Description of 'comp2'}
 %% ...
 }
-\references{
-%% ~put references to the literature/web site here ~
-}
+%% \references{
+%% %% ~put references to the literature/web site here ~
+%% }
 \author{
-%%  ~~who you are~~
+  Mark Clements, Xing-Rong Liu.
 }
-\note{
-%%  ~~further notes~~
-}
+%% \note{
+%% %%  ~~further notes~~
+%% }
 
 %% ~Make other sections like Warning with \section{Warning }{....} ~
 
-\seealso{
-%% ~~objects to See Also as \code{\link{help}}, ~~~
-}
+%% \seealso{
+%% %% ~~objects to See Also as \code{\link{help}}, ~~~
+%% }
 \examples{
 data(brcancer)
 ## standard Kaplan-Meier curves by hormon

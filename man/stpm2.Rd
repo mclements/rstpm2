@@ -105,21 +105,21 @@ An \code{stpm2-class} object.
 %%  \item{comp2 }{Description of 'comp2'}
 %% ...
 }
-\references{
-%% ~put references to the literature/web site here ~
-}
-\author{
-%%  ~~who you are~~
-}
-\note{
-%%  ~~further notes~~
-}
+%% \references{
+%% %% ~put references to the literature/web site here ~
+%% }
+%% \author{
+%% %%  ~~who you are~~
+%% }
+%% \note{
+%% %%  ~~further notes~~
+%% }
 
-%% ~Make other sections like Warning with \section{Warning }{....} ~
+%% %% ~Make other sections like Warning with \section{Warning }{....} ~
 
-\seealso{
-%% ~~objects to See Also as \code{\link{help}}, ~~~
-}
+%% \seealso{
+%% %% ~~objects to See Also as \code{\link{help}}, ~~~
+%% }
 \examples{
 data(brcancer)
 summary(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3))

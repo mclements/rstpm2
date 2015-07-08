@@ -32,7 +32,7 @@ cox.tvc(obj, var=NULL, method="logt")
 ## As per the example for cox.zph:
 fit <- coxph(Surv(futime, fustat) ~ age + ecog.ps,  
              data=ovarian) 
-temp <- cox.tvc(fit, "age") 
+temp <- rstpm2:::cox.tvc(fit, "age") 
 print(temp)                  # display the results 
 plot(temp)                   # plot curves 
 }

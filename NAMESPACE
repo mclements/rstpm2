@@ -1,10 +1,7 @@
-##exportPattern("^[[:alpha:]]+")
 useDynLib(rstpm2)
-export(stpm2,stpm2Old,pstpm2,incrVar,
-       nsx,makepredictcall.nsx,predict.nsx,
-       nsxDeriv,makepredictcall.nsxDeriv,predict.nsxDeriv,
-       predictnl,predictnl.default,
-       cox.tvc
+export(stpm2,pstpm2,incrVar,
+       nsx,
+       predictnl,predictnl.default
        )
 exportMethods(
               "plot",
@@ -12,17 +9,17 @@ exportMethods(
               "predictnl"
 )
 exportClasses(
-    "listOrNULL",
-    "mle2",
     "stpm2",
-    "pstpm2",
-    "tvcCoxph"
+    "pstpm2" #,"tvcCoxph"
 )
 importFrom(graphics,plot)
 import(splines)
-importFrom(stats,quantile,lm)
+importFrom(stats, quantile, lm, as.formula, coef, makepredictcall, na.fail, predict)
 importFrom(survival,survfit,coxph,Surv)
 import(bbmle)
 import(mgcv)
 importFrom(Rcpp,sourceCpp)
 import(methods)
+
+S3method(makepredictcall, nsx)
+S3method(predict, nsx)

@@ -2,7 +2,8 @@
 \docType{methods}
 \alias{predict-methods}
 \alias{predict,stpm2-method}
-\title{ Predicted values for an stpm2 fit}
+\alias{predict,pstpm2-method}
+\title{ Predicted values for an stpm2 or pstpm2 fit}
 \description{
   Given an \code{stpm2} fit and an optional list of new data, return predictions
 }
@@ -17,9 +18,13 @@
                type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv", "meansurvdiff"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
+    \S4method{predict}{pstpm2}(object, newdata=NULL,
+               type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv", "meansurvdiff"),
+               grid=FALSE,seqLength=300,
+               se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
 }
 \arguments{
-  \item{object}{an \code{stpm2} object}
+  \item{object}{an \code{stpm2} or \code{pstpm2} object}
   \item{newdata}{optional list of new data (required if type in
                ("hr","sdiff","hdiff")). For type in
                ("hr","sdiff","hdiff"), this defines the unexposed
@@ -31,11 +36,13 @@
       \item{"surv"}{survival probabilities}
       \item{"cumhaz"}{cumulative hazard}
       \item{"hazard"}{hazard}
+      \item{"density"}{density}
       \item{"hr"}{hazard ratio}
       \item{"sdiff"}{survival difference}
       \item{"hdiff"}{hazard difference}
       \item{"loghazard"}{log hazards}
-      \item{"link"}{X beta}
+      \item{"meansurv"}{mean survival}
+      \item{"meansurvdiff"}{mean survival difference}
     }
   }
   \item{grid}{whether to merge newdata with a regular sequence of event

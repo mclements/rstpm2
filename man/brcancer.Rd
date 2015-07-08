@@ -26,7 +26,6 @@ See \url{http://www.stata-press.com/data/r11/brcancer.dta}.
     \item{\code{x4a}}{tumour grade>=2}
     \item{\code{x4b}}{tumour grade==3}
     \item{\code{x5e}}{exp(-0.12*x5)}
-    \item{\code{rate0}}{10^(-5+x1/100)}
   }
 }
 %% \details{
