@@ -1,20 +1,57 @@
-% setwd("/home/marcle/src/R/rstpm2/vignettes"); Sweave("Introduction.Rnw");system("pdflatex Introduction.tex")
-\documentclass[a4paper]{article}
+%\VignetteIndexEntry{Introduction to the rstpm2 Package}
+%\VignetteDepends{rstpm2}
+%\VignetteKeyword{survival, spline}
+%\VignettePackage{rstpm2}
+%!\SweaveUTF8
 
-\usepackage{Sweave}
+\documentclass[nojss]{jss}
+
+\usepackage{amsmath,amsfonts,enumitem}
 \usepackage[utf8]{inputenc}
-\usepackage{hyperref}
-\usepackage{fancyvrb}
 
+\title{Introduction to the \pkg{rstpm2} package}
 
-\title{Introduction to \texttt{rstpm2}}
-\author{Mark~Clements}
+\author{Mark~Clements\\Karolinska Institutet}
+
+\Plainauthor{Mark~Clements}
+
+\Plaintitle{Introduction to the rstpm2 package}
+
+\Abstract{
+  
+  This vignette outlines the methods and provides some examples for
+  link-based survival models as implemented in the \proglang{R}
+  \pkg{rstpm2} package.
+
+}
+
+\Keywords{survival, splines}
+
+\Plainkeywords{survival, splines}
+
+\Address{Mark~Clements\\
+  Department of Medical Epidemiology and Biostatistics\\
+  Karolinska Institutet\\
+  Email: \email{mark.clements@ki.se}
+  }
 
 \begin{document}
-\SweaveOpts{concordance=TRUE}
 
-\maketitle
+\section{Theory}
 
+Currently, the best description of the theory is in draft paper by Liu, Pawitan and Clements. 
+
+
+\section{Mean survival}
+
+This has a useful interpretation for causal inference.
+
+$E_Z(S(t|Z,X=1))-E_Z(S(t|Z,X=0))$
+
+\begin{verbatim}
+fit <- rstpm()
+predict(fit,type="meansurvdiff",newdata=data)
+\end{verbatim}
 
 \section{Cure models}
 
@@ -25,7 +62,7 @@ for cure models with Stata's stpm2 (see
 Initially, we merge the patient data with the all cause mortality rates.
 
 <<echo=FALSE,results=hide>>=
-options(width=80)
+options(width=80,useFancyQuotes="UTF-8")
 @ 
 <<>>=
 require(rstpm2)

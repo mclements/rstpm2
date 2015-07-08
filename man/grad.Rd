@@ -3,10 +3,10 @@
 \alias{grad}
 %- Also NEED an '\alias' for EACH other topic documented here.
 \title{gradient function (internal function)
-%%  ~~function to do ... ~~
+  %%  ~~function to do ... ~~
 }
 \description{
-  Numerical gradient for a function at a given value
+  Numerical gradient for a function at a given value (internal).
 }
 \usage{
 grad(func, x, ...)
@@ -31,24 +31,23 @@ grad(func, x, ...)
   A vector if func(x) has length 1, otherwise a matrix with rows for x
   and columns for func(x).
 }
-\references{
-%% ~put references to the literature/web site here ~
-}
+%% \references{
+%% %% ~put references to the literature/web site here ~
+%% }
 \author{
   Mark Clements.
 }
-\note{
-%%  ~~further notes~~
-}
+%% \note{
+%% %%  ~~further notes~~
+%% }
 
 %% ~Make other sections like Warning with \section{Warning }{....} ~
 
 \seealso{
   numDelta()
 }
-\examples{
-
-}
+%% \examples{
+%% }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
 \keyword{ ~kwd1 }

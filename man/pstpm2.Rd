@@ -10,14 +10,17 @@ This implements a penalised Royston-Parmar model using generalized
 additive models.
 }
 \usage{
-pstpm2 <- function(formula, data, smooth.formula = NULL,
+pstpm2(formula, data, smooth.formula = NULL,
                    logH.args = NULL, 
                    tvc = NULL, 
-                   control = list(parscale = 0.1, maxit = 300), init = FALSE,
+                   control = list(parscale = 0.1, maxit = 300), init = NULL,
                    coxph.strata = NULL, coxph.formula = NULL,
-weights = NULL, robust = FALSE, 
-                   bhazard = NULL, timeVar = NULL, sp=NULL, use.gr = TRUE, use.rcpp = TRUE, criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
-                   alpha=switch(criterion,BIC=1,GCV=1.4), sp.init=NULL, trace = 0,
+                   weights = NULL, robust = FALSE, 
+                   bhazard = NULL, timeVar = "", time0Var = "",
+                   sp=NULL, use.gr = TRUE, use.rcpp = TRUE,
+                   criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
+                   alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=NULL, trace = 0,
+                   type=c("PH","PO","probit","AH"),
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...)
 }
@@ -95,21 +98,21 @@ A \code{pstpm2-class} object.
 %%  \item{comp2 }{Description of 'comp2'}
 %% ...
 }
-\references{
-%% ~put references to the literature/web site here ~
-}
+%% \references{
+%% %% ~put references to the literature/web site here ~
+%% }
 \author{
-%%  ~~who you are~~
+  Mark Clements, Xing-Rong Liu.
 }
-\note{
-%%  ~~further notes~~
-}
+%% \note{
+%% %%  ~~further notes~~
+%% }
 
 %% ~Make other sections like Warning with \section{Warning }{....} ~
 
-\seealso{
-%% ~~objects to See Also as \code{\link{help}}, ~~~
-}
+%% \seealso{
+%% %% ~~objects to See Also as \code{\link{help}}, ~~~
+%% }
 \examples{
 data(brcancer)
 ## standard Kaplan-Meier curves by hormon
@@ -137,8 +140,7 @@ plot(fit,newdata=data.frame(hormon=0),type="hazard",add=TRUE,ci=FALSE,line.col="
 ## time-varying hazard ratios
 fit.tvc <- pstpm2(Surv(rectime,censrec==1)~1,
   data=brcancer,
-  smooth.formula=~s(log(rectime),by=factor(hormon)),
-  coxph.formula=~strata(hormon))
+  smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon))
 plot(fit.tvc,newdata=data.frame(hormon=1),type="hazard",line.col="blue",lwd=2,
   rug=FALSE)
 plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard",line.col="red",lwd=2,
@@ -150,7 +152,7 @@ fit.smoothx <- pstpm2(Surv(rectime,censrec==1)~1,
   smooth.formula=~s(log(rectime))+s(x1))
 ages <- seq(21,80,length=301)
 haz <- predict(fit.smoothx,newdata=data.frame(hormon=1,rectime=365,x1=ages),type="hazard",se.fit=TRUE)
-matplot(ages,haz/haz[150,1],type="l")
+matplot(ages,haz/haz[150,1],type="l",log="y",ylab="Hazard ratio")
 
 ## compare with df=5 from stpm2
 fit.stpm2 <- stpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,df=7)
@@ -176,16 +178,6 @@ plot(fit.stpm2,newdata=data.frame(hormon=1),type="hazard",line.col="orange",lwd=
 
 ## plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard")
 ## plot(fit.tvc,newdata=data.frame(hormon=1),type="hazard",line.col=2,ci=FALSE,add=TRUE)
-
-## compare number of knots
-hormon0 <- data.frame(hormon=0)
-plot(fit,type="hazard",newdata=hormon0)
-AIC(fit)
-for (df in 4:6) {
-    fit.new <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=df)
-    plot(fit.new,type="hazard",newdata=hormon0,add=TRUE,ci=FALSE,line.col=df)
-    print(AIC(fit.new))
-}
 
 
 }
