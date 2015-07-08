@@ -1273,8 +1273,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         gradh <- link$gradh(eta,etaD,pars)
         gradH <- link$gradH(eta,etaD,pars)
         dconstraint <- gamma*colSums(ifelse(h<0,h,0)*gradh)
-#         g <- colSums(wt*(-gradH + ifelse(event,1/h,0)*gradh)) - dpfun(beta,sp) - dconstraint
-        g <- colSums(wt*(-gradH + ifelse(event,1/h,0)*gradh)) - dconstraint
+        g <- colSums(wt*(-gradH + ifelse(event,1/h,0)*gradh)) - dpfun(beta,sp) - dconstraint
+ #      g <- colSums(wt*(-gradH + ifelse(event,1/h,0)*gradh)) - dconstraint  ## for regression spline
         if (delayed) {
             eta0 <- as.vector(X0 %*% beta)
             etaD0 <- as.vector(XD0 %*% beta)
