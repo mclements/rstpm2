@@ -24,7 +24,7 @@ namespace rstpm2 {
   template<class T>
     double adapt_functor(int n, double * beta, void * par) {
     T * model = (T *) par;
-    Rcpp::NumericVector x(beta,n);
+    Rcpp::NumericVector x(beta,beta+n);
     return model->operator()(x);
   }
   /**
@@ -33,7 +33,7 @@ namespace rstpm2 {
   template<class T>
     double adapt_negll(int n, double * beta, void * par) {
     T * model = (T *) par;
-    Rcpp::NumericVector x(beta,n);
+    Rcpp::NumericVector x(beta,beta+n);
     return model->negll(x);
   }
   /**
@@ -42,7 +42,7 @@ namespace rstpm2 {
   template<class T>
     void adapt_grad_negll(int n, double * beta, double * grad, void * par) {
     T * model = (T *) par;
-    Rcpp::NumericVector x(beta,n);
+    Rcpp::NumericVector x(beta,beta+n);
     //grad = model->grad_negll(x);
   }
 
