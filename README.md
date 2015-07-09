@@ -1,5 +1,4 @@
-rstpm2: An R package for link-based survival models
-===================================================
+### rstpm2: An R package for link-based survival models ###
 
  
 
