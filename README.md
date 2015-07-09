@@ -24,7 +24,14 @@ The implementation speed for the parametric models are similar to that for Stata
 Some examples
 -------------
 
-<!-- require(rstpm2); data(brcancer); fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3); jpeg(filename="~/src/R/rstpm2/inst/fig1-README.md.jpg"); plot(fit,newdata=data.frame(hormon=0),type="hazard"); dev.off() -->
+<!--
+require(rstpm2)
+data(brcancer)
+fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3) jpeg(filename="~/src/R/rstpm2/inst/fig1-README.md.jpg") plot(fit,newdata=data.frame(hormon=0),type="hazard")
+dev.off()
+-->
+
+The default for the parametric model is to use the Royston Parmar model, which uses a natural spline for the transformed baseline for log(time) with a log-log link. 
 
 ```
 require(rstpm2)
@@ -35,3 +42,19 @@ plot(fit,newdata=data.frame(hormon=0),type="hazard")
 
 <!--img src="inst/fig1-README.md.jpg" alt="(Hazard plot)" style="width:304px;height:228px;"-->
 <img src="inst/fig1-README.md.jpg" alt="(Hazard plot)">
+
+The default for the penalised model is similar, using a thin-plate spline for the transformed baseline for log(time) with a log-log link. 
+
+<!--
+fit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)
+jpeg(filename="~/src/R/rstpm2/inst/fig2-README.md.jpg")
+plot(fit,newdata=data.frame(hormon=0),type="hazard")
+dev.off()
+-->
+
+```
+fit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)
+plot(fit,newdata=data.frame(hormon=0),type="hazard")
+```
+
+<img src="inst/fig2-README.md.jpg" alt="(Hazard plot 2)">
