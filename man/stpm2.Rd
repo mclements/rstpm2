@@ -80,7 +80,20 @@ two variables define the time}
 \item{contrasts}{an optional list. See the \code{contrasts.arg}
     of \code{\link{model.matrix.default}}.
 }
-\item{subset}{an optional vector specifying a subset of observations to be used in the fitting process.}
+\item{subset}{an optional vector specifying a subset of observations to
+  be used in the fitting process.}
+\item{cure}{logical for whether to estimate a cure model.}
+\item{time0Var}{string variable to determine the entry variable; useful
+  for when more than one data variable is used in the entry time.}
+\item{type}{type of link function.}
+\item{use.rcpp}{logical for whether to use C++/Rcpp for estimation}
+\item{reltol}{relative tolerance for the model convergence}
+\item{trace}{logical for whether to provide trace information}
+\item{frailty}{logical for whether to fit a shared frailty model (experimental)}
+\item{cluster}{string for the data variable that determines the cluster
+  for the frailty (experimental)}
+\item{logtheta}{initial value for log-theta used in the gamma shared frailty
+  model (experimental)}
 \item{\dots}{
   additional arguments to be passed to the \code{\link{mle2}} .
 }

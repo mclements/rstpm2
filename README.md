@@ -1,24 +1,36 @@
 rstpm2: An R package for link-based survival models
 ===================================================
 
+ 
 
 Introduction
 -----------
 
-This package provides link-based survival models that extend the Royston-Parmar models. This implementation provides much of the functionality of `stpm2` in Stata, including:
-1. Multiple links (log-log, probit, logit)
-2. Left truncation and right censoring (with experimental support for interval censoring for the parametric models)
-3. Relative survival
-4. Cure models (where we introduce the `nsx` smoother, which extends the `ns` smoother)
-5. Predictions for survival, hazards, survival differences, hazard differences, mean survival, etc.
+ 
 
-The principle extensions are:
-1. Both parametric models and semi-parametric (penalised) models
-2. The parametric models can use any regression smoothers
-3. The penalised models can use any regression smoothers for the unpenalised components and any `mgcv` smoothers for the penalised components
-4. The smoothers for time can use any transformation of time, including no transformation or log(time)
+This package provides link-based survival models that extend the Royston-Parmar models, a family of flexible parametric models. There are two main classes included in this package:
 
-The implementation speed for the parametric models are similar to that for Stata's `stpm2`. Moreover, the penalised models are fast compared with models on the log-hazard scale (e.g. `BayesX`, `gss`), particularly for many distinct covariates.
+ 
+
+A. The class `stpm2` is an R version of `stpm2` in Stata with some extensions, including:
+
+1. Multiple links (log-log, -probit, -logit);
+
+2. Left truncation and right censoring (with experimental support for interval censoring);
+
+3. Relative survival;
+
+4. Cure models (where we introduce the `nsx` smoother, which extends the `ns` smoother);
+
+5. Predictions for survival, hazards, survival differences, hazard differences, mean survival, etc;
+
+6. Functional forms can be represented in regression splines or other parametric forms;
+
+7. The smoothers for time can use any transformation of time, including no transformation or log(time).
+
+ 
+
+B. Another class `pstpm2` is the implementation of the penalised models and corresponding penalized likelihood estimation methods. The main aim is to represent another way to deal with non-proportional hazards and  adjust for potential continuous confounders in functional forms, not limited to proportional hazards and linear effect forms for all covariates. Functional forms can be represented in penalized regression splines (all `mgcv` smoothers ) or other parametric forms.
 
 
 Some examples

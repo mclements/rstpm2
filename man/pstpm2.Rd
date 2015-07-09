@@ -80,6 +80,11 @@ two variables define the time}
     of \code{\link{model.matrix.default}}.
 }
 \item{subset}{an optional vector specifying a subset of observations to be used in the fitting process.}
+\item{coxph.formula}{additional formula used to improve the fitting of
+  initial values [optional and rarely used].}
+\item{time0Var}{string variable to determine the entry variable; useful
+  for when more than one data variable is used in the entry time.}
+\item{type}{type of link function.}
 \item{\dots}{
   additional arguments to be passed to the \code{\link{mle2}} .
 }
