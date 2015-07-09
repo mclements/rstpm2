@@ -1,6 +1,6 @@
 Package: rstpm2
 Type: Package
-Title: Flexible Parametric Survival Models
+Title: Flexible Link-based Survival Models
 Authors@R: c(person("Mark", "Clements", role = c("aut", "cre"),
 		     email = "mark.clements@ki.se"),
 	      person("Xing-Rong", "Liu", role = "aut",
@@ -14,6 +14,6 @@ Suggests: RUnit, gaussquad
 LinkingTo: Rcpp,RcppArmadillo
 Author: Mark Clements [aut, cre], Xing-Rong Liu [aut], Paul Lambert [ctb]
 Maintainer: Mark Clements <mark.clements@ki.se>
-Description: R implementation of Stata's stpm2 function (flexible parametric survival model), with an extension to semi-parametric survival models.
+Description: R implementation of Stata's stpm2 function (flexible link-based survival models), with extensions to different smoothers and penalised models.
 License: GPL-2 | GPL-3
 LazyLoad: yes
