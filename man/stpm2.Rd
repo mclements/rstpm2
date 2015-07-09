@@ -142,7 +142,7 @@ summary(fit.tvc <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3,
 anova(fit,fit.tvc) # compare with and without tvc
 
 ## some more plots
-plot(fit.tvc,newdata=data.frame(hormon=0),type="hr",var="hormon")
+plot(fit.tvc,newdata=data.frame(hormon=0),type="hr",var="hormon", ylim=c(0,2))
                                         # no lines method: use add=TRUE
 plot(fit.tvc,newdata=data.frame(hormon=1),type="hr",var="hormon",
      add=TRUE,ci=FALSE,line.col=2)
