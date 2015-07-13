@@ -88,8 +88,8 @@ namespace rstpm2 {
     trace(trace), maxit(maxit), report(report), abstol(abstol), reltol(reltol), epshess(epshess), hessianp(hessianp) { }
   void BFGS::optim(optimfn fn, optimgr gr, NumericVector init, void * ex) {
       n = init.size();
-      int mask[n]; for (int i=0; i<n; ++i) mask[i] = 1;
-      vmmin(n, &init[0], &Fmin, fn, gr, maxit, trace, mask, abstol, reltol, report,
+      std::vector<int> mask(n,1); 
+      vmmin(n, &init[0], &Fmin, fn, gr, maxit, trace, &mask[0], abstol, reltol, report,
 	    ex, &fncount, &grcount, &fail);
       coef = clone(init);
       if (hessianp)
@@ -155,9 +155,9 @@ namespace rstpm2 {
   void Nlm::optim(fcn_p fcn, fcn_p d1fcn, NumericVector init, void * state) {
       int n;
       n = init.size();
-      double typsize[n], norm, fpls, gpls[n], a[n*n], wrk[n*8];
+      std::vector<double> typsize(n,1.0), gpls(n,0.0), a(n*n,0.0), wrk(n*8,0.0);
+      double norm, fpls;
       NumericVector xpls(n);
-      for (int i=0; i<n; ++i) typsize[i] = 1.0;
       // stepmax calculations
       if (stepmx == -1.0) {
 	norm = 0.0;
@@ -167,11 +167,11 @@ namespace rstpm2 {
 	stepmx = norm < 1.0 ? 1000.0 : norm*1000.0;
       }
       // call the optimizer
-      optif9(n, n, &init[0], fcn, d1fcn, (d2fcn_p) 0, state, typsize, fscale, method, 
+      optif9(n, n, &init[0], fcn, d1fcn, (d2fcn_p) 0, state, &typsize[0], fscale, method, 
 	     iexp, &msg, ndigit, itnlim, iagflg, iahflg,
 	     dlt, gradtl, stepmx, steptl,
-	     &xpls[0], &fpls, gpls, &itrmcd, a,
-	     wrk, &itncnt);
+	     &xpls[0], &fpls, &gpls[0], &itrmcd, &a[0],
+	     &wrk[0], &itncnt);
       coef = clone(xpls);
       if (hessianp)
 	hessian = calc_hessian(d1fcn, state);

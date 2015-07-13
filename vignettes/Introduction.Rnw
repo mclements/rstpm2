@@ -63,9 +63,9 @@ Initially, we merge the patient data with the all cause mortality rates.
 
 <<echo=FALSE,results=hide>>=
 options(width=80,useFancyQuotes="UTF-8")
+require(rstpm2); require(survival)
 @ 
 <<>>=
-require(rstpm2)
 data(popmort)
 data(colon)
 popmort2 <- transform(popmort,exitage=age,exityear=year,age=NULL,year=NULL)
@@ -83,8 +83,8 @@ colon2 <- merge(colon2,popmort2)
 For comparisons, we fit the relative survival model without and with cure. 
 <<results=hide>>=
 fit0 <- stpm2(Surv(tm,status %in% 2:3)~I(year8594=="Diagnosed 85-94"),
-                     data=colon2,
-                     bhazard=colon2$rate, df=5)
+              data=colon2,
+              bhazard=colon2$rate, df=5)
 @ 
 <<>>=
 summary(fit <- stpm2(Surv(tm,status %in% 2:3)~I(year8594=="Diagnosed 85-94"),
