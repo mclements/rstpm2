@@ -111,7 +111,7 @@ two variables define the time}
   
 }
 \value{
-An \code{stpm2-class} object. 
+An \code{stpm2-class} object that inherits from \code{mle2-class}. 
   %%  ~Describe the value returned
 %%  If it is a LIST, use
 %%  \item{comp1 }{Description of 'comp1'}

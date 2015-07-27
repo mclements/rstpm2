@@ -241,8 +241,14 @@ numDeltaMethod <- function(object,fun,...) {
   se.est <- as.vector(sqrt(colSums(gd* (Sigma %*% gd))))
   data.frame(Estimate = est, SE = se.est)
 }
+"coef<-" <- function (x, value) 
+  UseMethod("coef<-")
 predictnl <- function (object, ...) 
   UseMethod("predictnl")
+"coef<-.default" <- function(x,value) {
+    x$coefficients <- value
+    x
+}
 predictnl.default <- function(object,fun,newdata=NULL,...)
   {
     ## link=c(I,log,sqrt),invlink=NULL
@@ -706,7 +712,7 @@ stpm2 <- function(formula, data,
                optimizer = "optim",
                xlevels = .getXlevels(mt, mf),
                ##contrasts = attr(X, "contrasts"),
-               contrasts = NULL, # wrong!
+               contrasts = contrasts,
                logli = logli,
                ##weights = weights,
                Call = Call,
