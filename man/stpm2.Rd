@@ -8,16 +8,16 @@ Flexible parametric survival model.
 This implements the Royston-Parmar model.
 }
 \usage{
-stpm2(formula, data,
-                     df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
-                     tvc = NULL, tvc.formula = NULL,
-                     control = list(parscale = 0.1, maxit = 300), init = NULL,
-                     coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE, 
-                     bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE, use.rcpp= TRUE,
-                     reltol=1.0e-8, trace = 0,
-                     type=c("PH","PO","probit","AH"),
-                     frailty = FALSE, cluster = NULL, logtheta=0,
-                     contrasts = NULL, subset = NULL, ...)
+stpm2(formula, data, df = 3, cure = FALSE, logH.args = NULL,
+      logH.formula = NULL, tvc = NULL, tvc.formula =
+      NULL, control = list(parscale = 0.1, maxit = 300),
+      init = NULL, coxph.strata = NULL, weights = NULL,
+      robust = FALSE, baseoff = FALSE, bhazard = NULL,
+      timeVar = "", time0Var = "", use.gr = TRUE,
+      use.rcpp= TRUE, reltol=1.0e-8, trace = 0,
+      type=c("PH","PO","probit","AH"), frailty = FALSE,
+      cluster = NULL, logtheta=0, contrasts = NULL,
+      subset = NULL, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -111,7 +111,7 @@ two variables define the time}
   
 }
 \value{
-An \code{stpm2-class} object. 
+An \code{stpm2-class} object that inherits from \code{mle2-class}. 
   %%  ~Describe the value returned
 %%  If it is a LIST, use
 %%  \item{comp1 }{Description of 'comp1'}

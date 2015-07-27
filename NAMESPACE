@@ -1,25 +1,21 @@
 useDynLib(rstpm2)
-export(stpm2,pstpm2,incrVar,
-       nsx,
-       predictnl,predictnl.default
-       )
-exportMethods(
-              "plot",
-              "predict",
-              "predictnl"
-)
-exportClasses(
-    "stpm2",
-    "pstpm2" #,"tvcCoxph"
-)
-importFrom(graphics,plot)
-import(splines)
-importFrom(stats, quantile, lm, as.formula, coef, makepredictcall, na.fail, predict)
-importFrom(survival,survfit,coxph,Surv)
-import(bbmle)
-import(mgcv)
-importFrom(Rcpp,sourceCpp)
-import(methods)
 
+export(stpm2,pstpm2,incrVar,nsx,predictnl,"coef<-")
+exportClasses(stpm2,pstpm2) # tvcCoxph
 S3method(makepredictcall, nsx)
 S3method(predict, nsx)
+## All methods for imported generics:
+exportMethods(plot,predict,predictnl,coef,confint,summary,update,anova,vcov,formula,anova,
+              AIC,AICc,qAICc,simulate)
+
+importFrom(graphics,plot,lines,matplot,par,polygon)
+## importFrom(splines,bs,ns,spline.des,splineDesign)
+importFrom(stats, quantile, lm, as.formula, coef, makepredictcall, na.fail, predict,
+           contrasts,delete.response, get_all_vars, model.extract, model.frame, 
+           model.matrix, model.weights, na.pass, optimHess, pweibull, 
+           terms, terms.formula, .checkMFClasses, .getXlevels)
+importFrom(mgcv,gam,s)
+importFrom(Rcpp,sourceCpp)
+import(bbmle,methods,survival,splines)
+
+

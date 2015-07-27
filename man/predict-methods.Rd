@@ -15,11 +15,13 @@
 \usage{
 
     \S4method{predict}{stpm2}(object, newdata=NULL,
-               type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv", "meansurvdiff"),
+               type=c("surv","cumhaz","hazard","density","hr","sdiff",
+                      "hdiff","loghazard","link","meansurv", "meansurvdiff"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
     \S4method{predict}{pstpm2}(object, newdata=NULL,
-               type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv", "meansurvdiff"),
+               type=c("surv","cumhaz","hazard","density","hr","sdiff",
+                      "hdiff","loghazard","link","meansurv", "meansurvdiff"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
 }

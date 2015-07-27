@@ -11,18 +11,20 @@ additive models.
 }
 \usage{
 pstpm2(formula, data, smooth.formula = NULL,
-                   logH.args = NULL, 
-                   tvc = NULL, 
-                   control = list(parscale = 0.1, maxit = 300), init = NULL,
-                   coxph.strata = NULL, coxph.formula = NULL,
-                   weights = NULL, robust = FALSE, 
-                   bhazard = NULL, timeVar = "", time0Var = "",
-                   sp=NULL, use.gr = TRUE, use.rcpp = TRUE,
-                   criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
-                   alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=NULL, trace = 0,
-                   type=c("PH","PO","probit","AH"),
-                   reltol = list(search = 1.0e-6, final = 1.0e-8),
-                   contrasts = NULL, subset = NULL, ...)
+       logH.args = NULL, 
+       tvc = NULL, 
+       control = list(parscale = 0.1, maxit = 300), init = NULL,
+       coxph.strata = NULL, coxph.formula = NULL,
+       weights = NULL, robust = FALSE, 
+       bhazard = NULL, timeVar = "", time0Var = "",
+       sp=NULL, use.gr = TRUE, use.rcpp = TRUE,
+       criterion=c("GCV","BIC"), penalty = c("logH","h"),
+       smoother.parameters = NULL,
+       alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1,
+       sp.init=NULL, trace = 0,
+       type=c("PH","PO","probit","AH"),
+       reltol = list(search = 1.0e-6, final = 1.0e-8),
+       contrasts = NULL, subset = NULL, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -119,6 +121,7 @@ A \code{pstpm2-class} object.
 %% %% ~~objects to See Also as \code{\link{help}}, ~~~
 %% }
 \examples{
+\dontrun{
 data(brcancer)
 ## standard Kaplan-Meier curves by hormon
 plot(survfit(Surv(rectime/365,censrec==1)~1,data=brcancer,subset=hormon==1),
@@ -129,7 +132,7 @@ lines(survfit(Surv(rectime/365,censrec==1)~1,data=brcancer,subset=hormon==0),col
 legend("topright", legend=c("Hormonal therapy","No hormonal therapy"),lty=1,col=1:2,bty="n")
 
 ## now fit a penalised stpm2 model
-fit <- pstpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,trace=1)
+fit <- pstpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer)
 ## no S4 generic lines() method: instead, use plot(..., add=TRUE)
 plot(fit,newdata=data.frame(hormon=1),type="surv",add=TRUE,ci=FALSE,line.col="blue",lwd=2,
   rug=FALSE)
@@ -156,7 +159,8 @@ fit.smoothx <- pstpm2(Surv(rectime,censrec==1)~1,
   data=brcancer,
   smooth.formula=~s(log(rectime))+s(x1))
 ages <- seq(21,80,length=301)
-haz <- predict(fit.smoothx,newdata=data.frame(hormon=1,rectime=365,x1=ages),type="hazard",se.fit=TRUE)
+haz <- predict(fit.smoothx,newdata=data.frame(hormon=1,rectime=365,x1=ages),
+               type="hazard",se.fit=TRUE)
 matplot(ages,haz/haz[150,1],type="l",log="y",ylab="Hazard ratio")
 
 ## compare with df=5 from stpm2
@@ -184,7 +188,7 @@ plot(fit.stpm2,newdata=data.frame(hormon=1),type="hazard",line.col="orange",lwd=
 ## plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard")
 ## plot(fit.tvc,newdata=data.frame(hormon=1),type="hazard",line.col=2,ci=FALSE,add=TRUE)
 
-
+}
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.

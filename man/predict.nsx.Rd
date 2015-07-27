@@ -26,7 +26,6 @@
   \code{\link{nsx}}.
 }
 \examples{
-require(stats)
 basis <- nsx(women$height, df = 5)
 newX <- seq(58, 72, length.out = 51)
 # evaluate the basis at the new data

@@ -33,9 +33,11 @@ Colon cancer.
 
   }
 }
-%% \details{
-%% %%  ~~ If necessary, more details than the __description__ above ~~
-%% }
+\details{
+  Caution: there is a \code{colon} dataset in the \code{survival}
+  package. We recommend using \code{data(colon,package="rstpm2")} to
+  ensure the correct dataset is used.
+}
 %% \source{
 %% %%  ~~ reference to a publication or URL from which the data were obtained ~~
 %% }
@@ -43,7 +45,7 @@ Colon cancer.
 %% %%  ~~ possibly secondary sources and usages ~~
 %% }
 \examples{
-data(colon)
+data(colon,package="rstpm2") # avoids name conflict with survival::colon
 ## maybe str(colon) ; ...
 }
 \keyword{datasets}
