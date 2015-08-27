@@ -5,15 +5,12 @@
 
 namespace rstpm2 {
 
+  // import namespaces
   using namespace Rcpp;
   using namespace arma;
-
   // typedefs
-
   typedef bool constraintfn(int, double *, void *);
-
   // Hadamard element-wise multiplication for the _columns_ of a matrix with a vector
-
   mat rmult(mat m, vec v) {
     mat out(m);
     out.each_col() %= v;
@@ -22,17 +19,14 @@ namespace rstpm2 {
   mat lmult(vec v, mat m) {
     return rmult(m,v);
   }
-
   // element-wise multiplication and division for NumericVector and arma::vec
-
   NumericVector ew_mult(NumericVector nv, vec v) {
     return as<NumericVector>(wrap(as<vec>(wrap(nv)) % v));
   }
-
   NumericVector ew_div(NumericVector nv, vec v) {
     return as<NumericVector>(wrap(as<vec>(wrap(nv)) / v));
   }
-
+  // print utilities
   void Rprint(NumericMatrix m) {
     for (int i=0; i<m.nrow(); ++i) {
       for (int j=0; j<m.ncol(); ++j) 
@@ -40,13 +34,11 @@ namespace rstpm2 {
       Rprintf("\n");
     }
   }
-
   void Rprint(NumericVector v) {
     for (int i=0; i<v.size(); ++i) 
       Rprintf("%f ", v(i));
     Rprintf("\n");
   }
-
   void Rprint(vec v) {
     for (size_t i=0; i<v.size(); ++i) 
       Rprintf("%f ", v(i));
@@ -57,7 +49,6 @@ namespace rstpm2 {
       Rprintf("%f ", v(i));
     Rprintf("\n");
   }
-
   void Rprint(mat m) {
     for (size_t i=0; i<m.n_rows; ++i) {
       for (size_t j=0; j<m.n_cols; ++j) 
@@ -65,37 +56,32 @@ namespace rstpm2 {
       Rprintf("\n");
     }
   }
-
+  // vectorised functions
   vec pnorm01(vec x) {
     vec out(x.size());
     for (size_t i=0; i<x.size(); ++i)
       out(i) = R::pnorm(x(i),0.0,1.0,1,0);
     return out;
-    //return as<vec>(wrap(pnorm(as<NumericVector>(wrap<vec>(x)),0.0,1.0)));
   }
-
   vec qnorm01(vec x) {
     vec out(x.size());
     for (size_t i=0; i<x.size(); ++i)
       out(i) = R::qnorm(x(i),0.0,1.0,1,0);
     return out;
   }
-
   vec dnorm01(vec x) {
     vec out(x.size());
     for (size_t i=0; i<x.size(); ++i)
       out(i) = R::dnorm(x(i),0.0,1.0,0);
     return out;
   }
-
   vec logit(vec p) {
     return log(p/(1-p));
   }
-
   vec expit(vec x) {
     return 1/(1+exp(-x));
   }
-
+  // utility for fast ragged sums
   RcppExport SEXP tapplySum(SEXP s_y, SEXP s_group) {
     NumericVector y(s_y);
     NumericVector group(s_group);
@@ -105,30 +91,6 @@ namespace rstpm2 {
 	out[*igroup] += *iy;
     }
     return wrap(out);
-  }
-
-
-  // object used to call class methods in the BFGS C optimiser
-  // void * stpm2Object;
-  // wrappers to call the stpm2Object class methods
-  template<class T>
-  double optimfunction(int n, double * beta, void * obj) {
-    T * objT = static_cast<T*>(obj);
-    NumericVector nvbeta(beta,beta+n);
-    return objT->objective(nvbeta);
-  }
-  template<class T>
-  void optimgradient(int n, double * beta, double * grad, void * obj_ptr) {
-    T * obj = static_cast<T*>(obj_ptr);
-    NumericVector nvbeta(beta,beta+n);
-    vec gr = obj->gradient(nvbeta);
-    grad = &gr[0];
-  }
-  template<class T>
-  void optimfn_nlm(int n, double * beta, double * f, void * obj) {
-    T * objT = static_cast<T*>(obj);
-    NumericVector nvbeta(beta,n);
-    *f = objT->objective(nvbeta);
   }
 
   // Various link objects
@@ -183,11 +145,36 @@ namespace rstpm2 {
     mat gradH(vec eta, vec etaD, mat X, mat XD) { return X;  }
   };
 
+  // wrappers to call class methods from C
+  template<class T>
+  double optimfunction(int n, double * beta, void * obj_ptr) {
+    T * obj = static_cast<T*>(obj_ptr);
+    NumericVector nvbeta(beta,beta+n);
+    for (int i=0; i<n; ++i) nvbeta[i] *= obj->parscale[i];
+    return obj->objective(nvbeta);
+  }
+  template<class T>
+  void optimgradient(int n, double * beta, double * grad, void * obj_ptr) {
+    T * obj = static_cast<T*>(obj_ptr);
+    NumericVector nvbeta(beta,beta+n);
+    for (int i=0; i<n; ++i) nvbeta[i] *= obj->parscale[i];
+    vec gr = obj->gradient(nvbeta);
+    grad = &gr[0];
+  }
+  template<class T>
+  void optimfunction_nlm(int n, double * beta, double * f, void * obj_ptr) {
+    T * obj = static_cast<T*>(obj_ptr);
+    NumericVector nvbeta(beta,beta+n);
+    for (int i=0; i<n; ++i) nvbeta[i] *= obj->parscale[i];
+    *f = obj->objective(nvbeta);
+  }
+
+  // Main class for Stpm2 (fully parametric)
   template<class Link = LogLogLink>
   class Stpm2 : public Link {
   public:
     typedef Stpm2<Link> This;
-    Stpm2(SEXP sexp) {
+    Stpm2(SEXP sexp) : bfgs() {
       List list = as<List>(sexp);
       init = as<NumericVector>(list["init"]);
       X = as<mat>(list["X"]); 
@@ -205,15 +192,14 @@ namespace rstpm2 {
 	wt0 = as<vec>(list["wt0"]); // optional
       }
       parscale = as<vec>(list["parscale"]);
-      reltol = as<double>(list["reltol"]);
       kappa = as<double>(list["kappa"]);
       trace = as<int>(list["trace"]);
+      bfgs.reltol = as<double>(list["reltol"]);
       n = init.size();
     }
     // negative log-likelihood
     double objective(NumericVector beta) {
-      vec vbeta(&beta[0],n);
-      vbeta = vbeta % parscale;
+      vec vbeta = as<vec>(wrap(beta));
       vec eta = X * vbeta;
       vec etaD = XD * vbeta;
       vec h = Link::h(eta,etaD) + bhazard;
@@ -228,12 +214,13 @@ namespace rstpm2 {
 	mat H0 = Link::H(eta0,etaD0);
 	ll += sum(wt0 % H0);
       }
-      return -ll;  
+      return -ll;  // negative log-likelihood
     }
     // gradient of the negative log-likelihood
-    rowvec gradient(NumericVector beta) {
+    vec gradient(NumericVector beta) {
+      vec gr;
       vec vbeta = as<vec>(wrap(beta));
-      vbeta = vbeta % parscale;
+      gr.resize(vbeta.size());
       vec eta = X * vbeta;
       vec etaD = XD * vbeta;
       vec h = Link::h(eta,etaD) + bhazard;
@@ -243,9 +230,8 @@ namespace rstpm2 {
       mat Xgrad = -gradH + rmult(gradh, event / h);
       mat Xconstraint = - kappa*rmult(gradh,h);
       vec eps = h*0.0 + 1.0e-16; // hack
-      //Xgrad.rows(h<=eps) = Xconstraint.rows(h<=eps);
       Xgrad = rmult(Xgrad,wt);
-      rowvec vgr = sum(Xgrad,0);
+      rowvec vgr = sum(Xgrad,0); // transpose?
       if (delayed == 1) {
 	vec eta0 = X0 * vbeta;
 	vec etaD0 = XD0 * vbeta;
@@ -253,9 +239,9 @@ namespace rstpm2 {
 	vgr += sum(rmult(gradH0, wt0),0);
       }
       for (int i = 0; i<n; ++i) {
-	// gr[i] = -vgr[i]*parscale[i];
+	gr[i] = -vgr[i];
       }
-      return vgr;
+      return gr;
     }
     bool constraint(NumericVector beta) {
       vec vbeta = as<vec>(wrap(beta));
@@ -267,31 +253,44 @@ namespace rstpm2 {
       return all((h>0) % (H>0));
     }
     void optim(NumericVector init, bool apply_parscale = true) {
-      if (apply_parscale) for (int i = 0; i<n; ++i) init[i] /= parscale[i];
+      for (int i = 0; i<n; ++i) init[i] /= parscale[i];
+      bfgs.hessianp = false;
       bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, this);
-      for (int i = 0; i<n; ++i) coef[i] *= bfgs.coef[i] * (apply_parscale ? parscale[i] : 1.0);
-      bfgs.calc_hessian(&optimgradient<Stpm2<Link> >, this);
-      hessian = bfgs.hessian;
+      for (int i = 0; i<n; ++i) {
+	bfgs.coef[i] *= parscale[i];
+	for (int j=i; j<n; ++j) {
+	  bfgs.hessian(i,j) *= parscale[i]*parscale[j];
+	  if (i<j) 
+	    bfgs.hessian(j,i) *= parscale[i]*parscale[j];
+	}
+      }
+      hessian = as<mat>(wrap(bfgs.hessian));
     }
     void optimWithConstraint(NumericVector init, bool apply_parscale = true) {
-      if (apply_parscale) for (int i = 0; i<n; ++i) init[i] /= parscale[i];
+      for (int i = 0; i<n; ++i) init[i] /= parscale[i];
       bool satisfied;
+      bfgs.hessianp = false;
       do {
 	bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, this);
 	satisfied = constraint(bfgs.coef);
 	if (!satisfied) kappa *= 2.0;   
-      } while ((!satisfied) && kappa < 1.0e3);      
+      } while ((!satisfied) && kappa < 1.0e3);
+      bfgs.hessian = bfgs.calc_hessian(&optimgradient<This>, this);
+      Rprint(bfgs.hessian);
       for (int i = 0; i<n; ++i) {
-	coef[i] *= bfgs.coef[i] * (apply_parscale ? parscale[i] : 1.0);
-	bfgs.coef[i] = coef[i]; // to ensure that the Hessian is correctly calculated
+	bfgs.coef[i] *= parscale[i];
+	for (int j=i; j<n; ++j) {
+	  bfgs.hessian(i,j) *= parscale[i]*parscale[j];
+	  if (i<j) 
+	    bfgs.hessian(j,i) *= parscale[i]*parscale[j];
+	}
       }
-      bfgs.calc_hessian(&optimgradient<Stpm2<Link> >, this);
       hessian = as<mat>(wrap(bfgs.hessian));
     }
-    NumericVector init, coef;
+    NumericVector init;
     mat X, XD, X0, XD0, hessian; 
     vec bhazard,wt,wt0,event,time,parscale;
-    double reltol, kappa;
+    double kappa;
     int delayed, trace, n;
     BFGS bfgs;
   };
@@ -301,7 +300,7 @@ namespace rstpm2 {
     Stpm2 model(args);
     model.optimWithConstraint(model.init);
     return List::create(_("fail")=model.bfgs.fail, 
-			_("coef")=wrap(model.coef),
+			_("coef")=wrap(model.bfgs.coef),
 			_("hessian")=wrap(model.hessian));
   }
   RcppExport SEXP optim_stpm2_ph(SEXP args) {
@@ -332,7 +331,8 @@ namespace rstpm2 {
   // 			_("hessian")=wrap(nlm.hessian));
   // }
 
-  // penalised smoothers (currently _not_ sub-classes of Pstpm2)
+  // penalised smoothers 
+  // _Not_ sub-classes of Pstpm2, hence the longer function signatures
   class SmoothLogH {
   public:
     struct Smoother {
@@ -467,7 +467,6 @@ namespace rstpm2 {
       reltol_search = as<double>(list["reltol_search"]);
       alpha = as<double>(list["alpha"]);
       criterion = as<int>(list["criterion"]);
-      parscale = as<vec>(list["parscale"]);
     }
     double objective(NumericVector beta) {
       return this->objective(beta) - Smooth::penalty(beta,parscale,sp);

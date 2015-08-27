@@ -674,7 +674,7 @@ stpm2 <- function(formula, data,
     }
     parnames(negll) <- parnames(gradnegll) <- names(init)
     rcpp_stpm2 <- function() {
-        parscale <- if (!is.null(control$parscale)) control$parscale else rep(1,length(init))
+        parscale <- rep(if (is.null(control$parscale)) 1 else control$parscale,length=length(init))
         names(parscale) <- names(init)
         program <- switch(type,PH="optim_stpm2_ph",PO="optim_stpm2_po",probit="optim_stpm2_probit",
                           AH="optim_stpm2_ah")

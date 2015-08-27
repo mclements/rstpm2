@@ -28,22 +28,22 @@ namespace rstpm2 {
     return model->operator()(x);
   }
   /**
-     Adapt an negll function for NelderMead and BFGS
+     Adapt an objective function for NelderMead and BFGS
   **/
   template<class T>
-    double adapt_negll(int n, double * beta, void * par) {
+    double adapt_objective(int n, double * beta, void * par) {
     T * model = (T *) par;
     Rcpp::NumericVector x(beta,beta+n);
-    return model->negll(x);
+    return model->objective(x);
   }
   /**
-     Adapt a grad_negll function for BFGS
+     Adapt a gradient function for BFGS
   **/
   template<class T>
-    void adapt_grad_negll(int n, double * beta, double * grad, void * par) {
+    void adapt_gradient(int n, double * beta, double * grad, void * par) {
     T * model = (T *) par;
     Rcpp::NumericVector x(beta,beta+n);
-    //grad = model->grad_negll(x);
+    grad = model->gradient(x);
   }
 
   class NelderMead {
@@ -56,7 +56,7 @@ namespace rstpm2 {
     virtual void optim(optimfn fn, Rcpp::NumericVector init, void * ex);
     template<class T>
       void optim(Rcpp::NumericVector init, T object) {
-      optim(&adapt_functor<T>,init,(void *) &object);
+      optim(&adapt_objective<T>,init,(void *) &object);
     }
     virtual Rcpp::NumericMatrix calc_hessian(optimfn fn, void * ex);
     int n, trace, maxit, fail, fncount;
