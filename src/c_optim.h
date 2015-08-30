@@ -78,7 +78,7 @@ namespace rstpm2 {
     int n, trace, maxit, report, fncount, grcount, fail;
     double abstol, reltol, Fmin, epshess;
     bool hessianp;
-    Rcpp::NumericVector coef;
+    Rcpp::NumericVector coef, parscale;
     Rcpp::NumericMatrix hessian;
   };
 

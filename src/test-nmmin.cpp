@@ -147,23 +147,24 @@ namespace rstpm2 {
 
   // wrappers to call class methods from C
   template<class T>
-  double optimfunction(int n, double * beta, void * obj_ptr) {
-    T * obj = static_cast<T*>(obj_ptr);
+  double optimfunction(int n, double * beta, void * void_obj) {
+    T * obj = static_cast<T*>(void_obj);
     NumericVector nvbeta(beta,beta+n);
     for (int i=0; i<n; ++i) nvbeta[i] *= obj->parscale[i];
     return obj->objective(nvbeta);
   }
   template<class T>
-  void optimgradient(int n, double * beta, double * grad, void * obj_ptr) {
-    T * obj = static_cast<T*>(obj_ptr);
+  void optimgradient(int n, double * beta, double * grad, void * void_obj) {
+    T * obj = static_cast<T*>(void_obj);
     NumericVector nvbeta(beta,beta+n);
     for (int i=0; i<n; ++i) nvbeta[i] *= obj->parscale[i];
     vec gr = obj->gradient(nvbeta);
+    Rprint(gr);
     grad = &gr[0];
   }
   template<class T>
-  void optimfunction_nlm(int n, double * beta, double * f, void * obj_ptr) {
-    T * obj = static_cast<T*>(obj_ptr);
+  void optimfunction_nlm(int n, double * beta, double * f, void * void_obj) {
+    T * obj = static_cast<T*>(void_obj);
     NumericVector nvbeta(beta,beta+n);
     for (int i=0; i<n; ++i) nvbeta[i] *= obj->parscale[i];
     *f = obj->objective(nvbeta);
@@ -218,9 +219,8 @@ namespace rstpm2 {
     }
     // gradient of the negative log-likelihood
     vec gradient(NumericVector beta) {
-      vec gr;
       vec vbeta = as<vec>(wrap(beta));
-      gr.resize(vbeta.size());
+      vec gr = vbeta * 1.0; // shortcut to get the size
       vec eta = X * vbeta;
       vec etaD = XD * vbeta;
       vec h = Link::h(eta,etaD) + bhazard;
@@ -241,21 +241,20 @@ namespace rstpm2 {
       for (int i = 0; i<n; ++i) {
 	gr[i] = -vgr[i];
       }
+      Rprint(gr);
       return gr;
     }
     bool constraint(NumericVector beta) {
-      vec vbeta = as<vec>(wrap(beta));
-      vbeta = vbeta % parscale;
+      vec vbeta = as<vec>(wrap(beta)) % parscale;
       vec eta = X * vbeta;
       vec etaD = XD * vbeta;
       vec h = Link::h(eta, etaD) + bhazard;
       vec H = Link::H(eta, etaD);
       return all((h>0) % (H>0));
     }
-    void optim(NumericVector init, bool apply_parscale = true) {
+    void optim(NumericVector init) {
       for (int i = 0; i<n; ++i) init[i] /= parscale[i];
-      bfgs.hessianp = false;
-      bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, this);
+      bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
       for (int i = 0; i<n; ++i) {
 	bfgs.coef[i] *= parscale[i];
 	for (int j=i; j<n; ++j) {
@@ -264,18 +263,19 @@ namespace rstpm2 {
 	    bfgs.hessian(j,i) *= parscale[i]*parscale[j];
 	}
       }
-      hessian = as<mat>(wrap(bfgs.hessian));
     }
-    void optimWithConstraint(NumericVector init, bool apply_parscale = true) {
+    void optimWithConstraint(NumericVector init) {
       for (int i = 0; i<n; ++i) init[i] /= parscale[i];
       bool satisfied;
       bfgs.hessianp = false;
+      Rprintf("Optimize:\n");
       do {
-	bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, this);
+	bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
 	satisfied = constraint(bfgs.coef);
 	if (!satisfied) kappa *= 2.0;   
       } while ((!satisfied) && kappa < 1.0e3);
-      bfgs.hessian = bfgs.calc_hessian(&optimgradient<This>, this);
+      Rprintf("Calculate Hessian:\n");
+      bfgs.hessian = bfgs.calc_hessian(&optimgradient<This>, (void *) this);
       Rprint(bfgs.hessian);
       for (int i = 0; i<n; ++i) {
 	bfgs.coef[i] *= parscale[i];
@@ -285,10 +285,9 @@ namespace rstpm2 {
 	    bfgs.hessian(j,i) *= parscale[i]*parscale[j];
 	}
       }
-      hessian = as<mat>(wrap(bfgs.hessian));
     }
     NumericVector init;
-    mat X, XD, X0, XD0, hessian; 
+    mat X, XD, X0, XD0; 
     vec bhazard,wt,wt0,event,time,parscale;
     double kappa;
     int delayed, trace, n;
@@ -301,7 +300,7 @@ namespace rstpm2 {
     model.optimWithConstraint(model.init);
     return List::create(_("fail")=model.bfgs.fail, 
 			_("coef")=wrap(model.bfgs.coef),
-			_("hessian")=wrap(model.hessian));
+			_("hessian")=wrap(model.bfgs.hessian));
   }
   RcppExport SEXP optim_stpm2_ph(SEXP args) {
     return optim_stpm2<Stpm2<LogLogLink> >(args); }
@@ -476,7 +475,7 @@ namespace rstpm2 {
     }
     double first_step(double logsp) {
       sp[0] = exp(logsp);
-      this->optimWithConstraint(this->init, false); // do not apply parscale b4/after
+      this->optimWithConstraint(this->init); // do not apply parscale b4/after?
       NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, (void *) this);
       if (this->trace > 0)  {
 	Rprintf("Debug on trace calculation. Coef:\n");
@@ -503,7 +502,7 @@ namespace rstpm2 {
 	for (int i = 0; i < sp.size(); ++i)
 	  Rprintf("sp[%i]=%f\t",i,sp[i]);
       }
-      this->optimWithConstraint(this->init, false); // do not apply parscale b4/after
+      this->optimWithConstraint(this->init); // do not apply parscale b4/after?
       NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, (void *) this);
       double edf = arma::trace(solve(as<mat>(this->bfgs.hessian),as<mat>(hessian0)));
       double negll = this->bfgs.calc_objective(&optimfunction<Stpm2Type>, (void *) this);

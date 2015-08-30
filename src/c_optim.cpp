@@ -15,6 +15,20 @@ namespace rstpm2 {
   double max(double a, double b) { return a < b ? b : a; }
   double bound(double x, double lower, double upper) { return x < lower ? lower : (x > upper ? upper : x); }
 
+  // print utilities
+  void Rprint_(NumericMatrix m) {
+    for (int i=0; i<m.nrow(); ++i) {
+      for (int j=0; j<m.ncol(); ++j) 
+	Rprintf("%f ", m(i,j));
+      Rprintf("\n");
+    }
+  }
+  void Rprint_(NumericVector v) {
+    for (int i=0; i<v.size(); ++i) 
+      Rprintf("%f ", v(i));
+    Rprintf("\n");
+  }
+
   // void nmmin(int n, double *Bvec, double *X, double *Fmin, optimfn fminfn,
   // 	   int *fail, double abstol, double intol, void *ex,
   // 	   double alpha, double bet, double gamm, int trace,
@@ -87,14 +101,14 @@ namespace rstpm2 {
 	     double reltol, int report, double epshess, bool hessianp) : 
     trace(trace), maxit(maxit), report(report), abstol(abstol), reltol(reltol), epshess(epshess), hessianp(hessianp) { }
   void BFGS::optim(optimfn fn, optimgr gr, NumericVector init, void * ex) {
-      n = init.size();
-      std::vector<int> mask(n,1); 
-      vmmin(n, &init[0], &Fmin, fn, gr, maxit, trace, &mask[0], abstol, reltol, report,
-	    ex, &fncount, &grcount, &fail);
-      coef = clone(init);
-      if (hessianp)
-	hessian = calc_hessian(gr, ex);
-    }
+    n = init.size();
+    std::vector<int> mask(n,1); 
+    vmmin(n, &init[0], &Fmin, fn, gr, maxit, trace, &mask[0], abstol, reltol, report,
+	  ex, &fncount, &grcount, &fail);
+    coef = clone(init);
+    if (hessianp)
+      hessian = calc_hessian(gr, ex);
+  }
   double BFGS::calc_objective(optimfn fn, NumericVector coef, void * ex) {
       return fn(coef.size(), &coef[0], ex);
     }
@@ -109,7 +123,7 @@ namespace rstpm2 {
       double tmp;
       for(int i=0; i<n; ++i) {
 	tmp = coef[i];
-	coef[i] += epshess;
+	coef[i] = tmp + epshess;
 	gr(n, &coef[0], &df1[0], ex);
 	coef[i] = tmp - epshess;
 	gr(n, &coef[0], &df2[0], ex);
@@ -122,7 +136,7 @@ namespace rstpm2 {
 	for(int j=i; j<n; ++j) 
 	  if (i != j)
 	    hess(i,j) = hess(j,i) = (hess(i,j) + hess(j,i)) / 2.0;
-      return wrap(hess);
+      return hess; // wrap()?
     }
 
 
