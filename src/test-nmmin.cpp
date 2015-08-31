@@ -397,6 +397,7 @@ namespace rstpm2 {
       mat H0 = data->H(eta0,etaD0);
       ll += sum(data->wt0 % H0);
     }
+    if (data->trace) Rprintf("ll=%g\n",ll);
     return -ll;  
   }
 
@@ -660,7 +661,7 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
   void grfn(int n, double * beta, double * gr, void *ex) {
     Data * data = (Data *) ex;
     vec vbeta(beta,n);
-    // if (data->trace) Rprint(vbeta);
+    if (data->trace) Rprint(vbeta);
     vbeta = vbeta % data->parscale;
     vec eta = data->X * vbeta;
     vec etaD = data->XD * vbeta;
@@ -798,6 +799,7 @@ RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
 
     BFGS2<Stpm2> bfgs;
     bfgs.reltol = data.reltol;
+    bfgs.trace = data.trace;
     bfgs.optimWithConstraint(fminfn<Stpm2>, grfn<Stpm2>, data.init, (void *) &data, fminfn_constraint<Stpm2>);
 
     return List::create(_("fail")=bfgs.fail,
