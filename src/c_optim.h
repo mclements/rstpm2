@@ -72,13 +72,14 @@ namespace rstpm2 {
 	 double abstol = - INFINITY,
 	 double reltol = 1.0e-8, int report = 10, double epshess = 1.0e-8, bool hessianp = true);
     virtual void optim(optimfn fn, optimgr gr, Rcpp::NumericVector init, void * ex);
+    virtual void optim(int n, optimfn fn, optimgr gr, double * init, void * ex);
     virtual double calc_objective(optimfn fn, Rcpp::NumericVector coef, void * ex);
     virtual double calc_objective(optimfn fn, void * ex);
     virtual Rcpp::NumericMatrix calc_hessian(optimgr gr, void * ex);
     int n, trace, maxit, report, fncount, grcount, fail;
     double abstol, reltol, Fmin, epshess;
     bool hessianp;
-    Rcpp::NumericVector coef, parscale;
+    Rcpp::NumericVector coef;
     Rcpp::NumericMatrix hessian;
   };
 

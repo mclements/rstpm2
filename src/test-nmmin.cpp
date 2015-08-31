@@ -149,25 +149,25 @@ namespace rstpm2 {
   template<class T>
   double optimfunction(int n, double * beta, void * void_obj) {
     T * obj = static_cast<T*>(void_obj);
-    NumericVector nvbeta(beta,beta+n);
-    for (int i=0; i<n; ++i) nvbeta[i] *= obj->parscale[i];
-    return obj->objective(nvbeta);
+    vec coef(beta,n);
+    Rprintf("coef="); Rprint(coef);
+    double value = obj->objective(coef % obj->parscale);
+    Rprintf("objective=%16.10g\n",value); 
+    return value;
   }
   template<class T>
   void optimgradient(int n, double * beta, double * grad, void * void_obj) {
     T * obj = static_cast<T*>(void_obj);
-    NumericVector nvbeta(beta,beta+n);
-    for (int i=0; i<n; ++i) nvbeta[i] *= obj->parscale[i];
-    vec gr = obj->gradient(nvbeta);
-    Rprint(gr);
-    grad = &gr[0];
+    vec coef(beta,n);
+    vec gr = obj->gradient(coef % obj->parscale);
+    Rprintf("grad="); Rprint(gr);
+    grad = gr.memptr();
   }
   template<class T>
   void optimfunction_nlm(int n, double * beta, double * f, void * void_obj) {
     T * obj = static_cast<T*>(void_obj);
-    NumericVector nvbeta(beta,beta+n);
-    for (int i=0; i<n; ++i) nvbeta[i] *= obj->parscale[i];
-    *f = obj->objective(nvbeta);
+    vec coef(beta,n);
+    *f = obj->objective(coef % obj->parscale);
   }
 
   // Main class for Stpm2 (fully parametric)
@@ -199,10 +199,9 @@ namespace rstpm2 {
       n = init.size();
     }
     // negative log-likelihood
-    double objective(NumericVector beta) {
-      vec vbeta = as<vec>(wrap(beta));
-      vec eta = X * vbeta;
-      vec etaD = XD * vbeta;
+    double objective(vec beta) {
+      vec eta = X * beta;
+      vec etaD = XD * beta;
       vec h = Link::h(eta,etaD) + bhazard;
       vec H = Link::H(eta,etaD) + bhazard;
       double constraint = kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
@@ -210,42 +209,43 @@ namespace rstpm2 {
       h = max(h,eps);
       double ll = sum(wt % event % log(h)) - sum(wt % H) - constraint;
       if (delayed == 1) {
-	vec eta0 = X0 * vbeta;
-	vec etaD0 = XD0 * vbeta;
+	vec eta0 = X0 * beta;
+	vec etaD0 = XD0 * beta;
 	mat H0 = Link::H(eta0,etaD0);
 	ll += sum(wt0 % H0);
       }
       return -ll;  // negative log-likelihood
     }
     // gradient of the negative log-likelihood
-    vec gradient(NumericVector beta) {
-      vec vbeta = as<vec>(wrap(beta));
-      vec gr = vbeta * 1.0; // shortcut to get the size
-      vec eta = X * vbeta;
-      vec etaD = XD * vbeta;
+    vec gradient(vec beta) {
+      vec eta = X * beta;
+      vec etaD = XD * beta;
       vec h = Link::h(eta,etaD) + bhazard;
-      // vec H = exp(eta);
+      vec H = exp(eta);
+      vec one = ones(h.size());
+      vec eps = h*0.0 + 1.0e-16; // hack
       mat gradH = Link::gradH(eta,etaD,X,XD);
       mat gradh = Link::gradh(eta,etaD,X,XD);
-      mat Xgrad = -gradH + rmult(gradh, event / h);
-      mat Xconstraint = - kappa*rmult(gradh,h);
-      vec eps = h*0.0 + 1.0e-16; // hack
+      mat Xgrad = -rmult(gradH, one % (H>eps)) + rmult(gradh, event / h % (h>eps));
+      mat Xconstraint = kappa * rmult(gradh,h%(h<eps)) +
+	kappa * rmult(gradH,H / time / time % (H<eps));
+      rowvec dconstraint = sum(Xconstraint,0);
       Xgrad = rmult(Xgrad,wt);
-      rowvec vgr = sum(Xgrad,0); // transpose?
+      rowvec vgr = sum(Xgrad,0);
       if (delayed == 1) {
-	vec eta0 = X0 * vbeta;
-	vec etaD0 = XD0 * vbeta;
+	vec eta0 = X0 * beta;
+	vec etaD0 = XD0 * beta;
 	mat gradH0 = Link::gradH(eta0, etaD0, X0, XD0); 
 	vgr += sum(rmult(gradH0, wt0),0);
       }
+      vec gr(n);
       for (int i = 0; i<n; ++i) {
-	gr[i] = -vgr[i];
+	gr[i] = -vgr[i]*parscale[i] + dconstraint[i];
       }
-      Rprint(gr);
       return gr;
     }
-    bool constraint(NumericVector beta) {
-      vec vbeta = as<vec>(wrap(beta)) % parscale;
+    bool constraint(vec beta) {
+      vec vbeta = beta % parscale;
       vec eta = X * vbeta;
       vec etaD = XD * vbeta;
       vec h = Link::h(eta, etaD) + bhazard;
@@ -254,6 +254,7 @@ namespace rstpm2 {
     }
     void optim(NumericVector init) {
       for (int i = 0; i<n; ++i) init[i] /= parscale[i];
+      bfgs.hessianp = true;
       bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
       for (int i = 0; i<n; ++i) {
 	bfgs.coef[i] *= parscale[i];
@@ -268,13 +269,13 @@ namespace rstpm2 {
       for (int i = 0; i<n; ++i) init[i] /= parscale[i];
       bool satisfied;
       bfgs.hessianp = false;
-      Rprintf("Optimize:\n");
+      bfgs.trace=3; // debug
       do {
-	bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
-	satisfied = constraint(bfgs.coef);
+	bfgs.optim(n, &optimfunction<This>, &optimgradient<This>, &init[0], (void *) this);
+	vec vcoef(&bfgs.coef[0],n);
+	satisfied = constraint(vcoef);
 	if (!satisfied) kappa *= 2.0;   
       } while ((!satisfied) && kappa < 1.0e3);
-      Rprintf("Calculate Hessian:\n");
       bfgs.hessian = bfgs.calc_hessian(&optimgradient<This>, (void *) this);
       Rprint(bfgs.hessian);
       for (int i = 0; i<n; ++i) {
@@ -446,7 +447,7 @@ namespace rstpm2 {
   template<class T>
   double pstpm2_multivariate_step(int n, double * logsp_ptr, void * model_ptr) {
     T * model = static_cast<T *>(model_ptr);
-    NumericVector logsp(logsp_ptr,logsp_ptr+n);
+    vec logsp(logsp_ptr,n);
     return model->multivariate_step(logsp);
   }    
   template<class T>
@@ -467,10 +468,10 @@ namespace rstpm2 {
       alpha = as<double>(list["alpha"]);
       criterion = as<int>(list["criterion"]);
     }
-    double objective(NumericVector beta) {
+    double objective(vec beta) {
       return this->objective(beta) - Smooth::penalty(beta,parscale,sp);
     }
-    vec gradient(NumericVector beta) {
+    vec gradient(vec beta) {
       return this->gradient(beta) - Smooth::penalty_gradient(beta,parscale,sp);
     }
     double first_step(double logsp) {
@@ -494,7 +495,7 @@ namespace rstpm2 {
 	Rprintf("sp=%f\tedf=%f\tnegll=%f\tgcv=%f\tbic=%f\talpha=%f\n",sp[0],edf,negll,gcv,bic,alpha);
       return criterion==1 ? gcv : bic;
     }
-    double multivariate_step(NumericVector logsp) {
+    double multivariate_step(vec logsp) {
       double lsp = -9.0, usp = 9.0;
       for (int i=0; i < sp.size(); ++i)
 	sp[i] = exp(bound(logsp[i],lsp,usp));

@@ -109,6 +109,15 @@ namespace rstpm2 {
     if (hessianp)
       hessian = calc_hessian(gr, ex);
   }
+  void BFGS::optim(int n, optimfn fn, optimgr gr, double *initptr, void * ex) {
+    std::vector<int> mask(n,1); 
+    vmmin(n, initptr, &Fmin, fn, gr, maxit, trace, &mask[0], abstol, reltol, report,
+	  ex, &fncount, &grcount, &fail);
+    coef = NumericVector(n);
+    for (int i=0; i<n; ++i) coef[i] = initptr[i];
+    if (hessianp)
+      hessian = calc_hessian(gr, ex);
+  }
   double BFGS::calc_objective(optimfn fn, NumericVector coef, void * ex) {
       return fn(coef.size(), &coef[0], ex);
     }
@@ -117,8 +126,8 @@ namespace rstpm2 {
     }
   NumericMatrix BFGS::calc_hessian(optimgr gr, void * ex) {
       int n = coef.size();
-      NumericVector df1(clone(coef));
-      NumericVector df2(clone(coef));
+      NumericVector df1(n);
+      NumericVector df2(n);
       NumericMatrix hess(n,n);
       double tmp;
       for(int i=0; i<n; ++i) {
@@ -136,7 +145,7 @@ namespace rstpm2 {
 	for(int j=i; j<n; ++j) 
 	  if (i != j)
 	    hess(i,j) = hess(j,i) = (hess(i,j) + hess(j,i)) / 2.0;
-      return hess; // wrap()?
+      return wrap(hess); // wrap()?
     }
 
 
