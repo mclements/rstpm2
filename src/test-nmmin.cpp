@@ -167,11 +167,42 @@ namespace rstpm2 {
     *f = obj->objective(coef % obj->parscale);
   }
 
+  class BFGS2 : public BFGS {
+  public:
+  NumericMatrix calc_hessian(optimgr gr, vec parscale, void * ex) {
+      int n = coef.size();
+      NumericVector df1(n);
+      NumericVector df2(n);
+      NumericMatrix hess(n,n);
+      double tmp;
+      for(int i=0; i<n; ++i) {
+	tmp = coef[i];
+	coef[i] = tmp + epshess/parscale[i];
+	gr(n, &coef[0], &df1[0], ex);
+	coef[i] = tmp - epshess/parscale[i];
+	gr(n, &coef[0], &df2[0], ex);
+	for (int j=0; j<n; ++j)
+	  hess(i,j) = (df1[j] - df2[j]) / (2*epshess);
+	coef[i] = tmp;
+      }
+      // now symmetrize
+      for(int i=0; i<n; ++i) 
+	for(int j=i; j<n; ++j) 
+	  if (i != j)
+	    hess(i,j) = hess(j,i) = (hess(i,j) + hess(j,i)) / 2.0;
+      return wrap(hess); // wrap()?
+    }
+  };
+
   // Main class for Stpm2 (fully parametric)
   template<class Link = LogLogLink>
   class Stpm2 : public Link {
   public:
     typedef Stpm2<Link> This;
+    using Link::h;
+    using Link::H;
+    using Link::gradh;
+    using Link::gradH;
     Stpm2(SEXP sexp) : bfgs() {
       List list = as<List>(sexp);
       init = as<NumericVector>(list["init"]);
@@ -258,11 +289,11 @@ namespace rstpm2 {
       for (int i = 0; i<n; ++i) {
 	bfgs.coef[i] *= parscale[i];
 	init[i] *= parscale[i];
-	for (int j=i; j<n; ++j) {
-	  bfgs.hessian(i,j) *= parscale[i]*parscale[j];
-	  if (i<j) 
-	    bfgs.hessian(j,i) *= parscale[i]*parscale[j];
-	}
+      // 	for (int j=i; j<n; ++j) {
+      // 	  bfgs.hessian(i,j) *= parscale[i]*parscale[j];
+      // 	  if (i<j) 
+      // 	    bfgs.hessian(j,i) *= parscale[i]*parscale[j];
+      // 	}
       }
     }
     void optim(NumericVector init) {
@@ -278,14 +309,14 @@ namespace rstpm2 {
 	satisfied = constraint(vcoef % parscale);
 	if (!satisfied) kappa *= 2.0;   
       } while ((!satisfied) && kappa < 1.0e3);
-      bfgs.hessian = bfgs.calc_hessian(&optimgradient<This>, (void *) this);
+      bfgs.hessian = bfgs.calc_hessian(&optimgradient<This>, parscale, (void *) this);
     }
     NumericVector init;
     mat X, XD, X0, XD0; 
     vec bhazard,wt,wt0,event,time,parscale;
     double kappa;
     int delayed, n;
-    BFGS bfgs;
+    BFGS2 bfgs;
   };
 
   template<class Stpm2>
@@ -462,16 +493,16 @@ namespace rstpm2 {
       criterion = as<int>(list["criterion"]);
     }
     double objective(vec beta) {
-      return this->objective(beta) - Smooth::penalty(beta,sp);
+      return Stpm2Type::objective(beta) - Smooth::penalty(beta,sp);
     }
     vec gradient(vec beta) {
-      return this->gradient(beta) - Smooth::penalty_gradient(beta,sp);
+      return Stpm2Type::gradient(beta) - Smooth::penalty_gradient(beta,sp);
     }
     double first_step(double logsp) {
       sp[0] = exp(logsp);
       this->pre_process();
       this->optimWithConstraint(this->init); // do not apply parscale b4/after?
-      NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, (void *) this);
+      NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, parscale, (void *) this);
       if (this->bfgs.trace > 0)  {
 	Rprintf("Debug on trace calculation. Coef:\n");
 	Rprint(this->bfgs.coef);
@@ -500,7 +531,7 @@ namespace rstpm2 {
 	  Rprintf("sp[%i]=%f\t",i,sp[i]);
       }
       this->optimWithConstraint(this->init);
-      NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, (void *) this);
+      NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, parscale, (void *) this);
       double edf = arma::trace(solve(as<mat>(this->bfgs.hessian),as<mat>(hessian0)));
       double negll = this->bfgs.calc_objective(&optimfunction<Stpm2Type>, (void *) this);
       double gcv =  negll + alpha*edf;
@@ -527,7 +558,7 @@ namespace rstpm2 {
     SEXP optim_fixed() { 
       this->pre_process();
       this->optimWithConstraint(this->init);
-      NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, (void *) this);
+      NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, parscale, (void *) this);
       double edf = trace(solve(as<mat>(this->bfgs.hessian),as<mat>(hessian0)));
       this->post_process();
       return List::create(_("sp")=wrap(sp),
@@ -649,7 +680,7 @@ namespace rstpm2 {
 
   //   bfgs.optimWithConstraint(pfminfn<Smooth,Stpm2>, pgrfn<Smooth,Stpm2>, data.init, (void *) &data, fminfn_constraint<Data>);
 
-  //   NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, (void *) &data);
+  //   NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, parscale, (void *) &data);
   //   double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
 
   //   return List::create(_("sp")=wrap(data.sp),
