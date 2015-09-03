@@ -430,7 +430,7 @@ setClass("stpm2", representation(xlevels="list",
 stpm2 <- function(formula, data,
                      df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
                      tvc = NULL, tvc.formula = NULL,
-                     control = list(parscale = 0.1, maxit = 300), init = NULL,
+                     control = list(parscale = 1, maxit = 300), init = NULL,
                      coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE, 
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE, use.rcpp= TRUE,
                      reltol=1.0e-8, trace = 0,
@@ -678,9 +678,12 @@ stpm2 <- function(formula, data,
         names(parscale) <- names(init)
         program <- switch(type,PH="optim_stpm2_ph",PO="optim_stpm2_po",probit="optim_stpm2_probit",
                           AH="optim_stpm2_ah")
+        if (frailty)
+            program <- switch(type,PH="optim_stpm2_frailty_ph",PO="optim_stpm2_frailty_po",probit="optim_stpm2_frailty_probit",
+                              AH="optim_stpm2_frailty_ah")
         .Call(program,list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
               delayed=if (delayed) 1 else 0, X0=X0, XD0=XD0, wt0=wt0, parscale=parscale, reltol=reltol,
-                                 kappa=1, trace = trace),
+                                 kappa=1, trace = trace, cluster=cluster),
               package="rstpm2")
     }
     ## MLE

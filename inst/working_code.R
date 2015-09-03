@@ -18,6 +18,23 @@
 ##   require(bbmle)
 ## }
 
+require(abind)
+X <- matrix(seq(0,1,length=5*10),nrow=10)
+beta <- seq(0,1,length=5)
+H <- exp(as.vector(X %*% beta))
+dHdbeta <- X * H # row=indiv, col=beta
+
+d2Hdbeta2 <- aperm(abind(lapply(1:ncol(X), function(k) X[,k] * X * H),along=3),c(2,3,1))
+abind(lapply(1:nrow(X), function(i) (X[i,] %*% t(X[i,])) * H[i]),along=3) -
+    aperm(abind(lapply(1:ncol(X), function(k) X[,k] * X * H),along=3),c(2,3,1))
+
+numder <- function(f,x,eps=1e-8) (f(x+eps)-f(x-eps))/2/eps
+expit <- function(x) 1/(1+exp(-x))
+numder(expit,2)
+expit(2)*expit(-2)
+numder(dnorm,2)
+-dnorm(2)*2
+
 refresh
 require(rstpm2)
 data(brcancer)

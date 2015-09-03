@@ -75,10 +75,17 @@ namespace rstpm2 {
       out(i) = R::dnorm(x(i),0.0,1.0,0);
     return out;
   }
+  // we could use templates for the following...
   vec logit(vec p) {
     return log(p/(1-p));
   }
   vec expit(vec x) {
+    return 1/(1+exp(-x));
+  }
+  double logit(double p) {
+    return log(p/(1-p));
+  }
+  double expit(double x) {
     return 1/(1+exp(-x));
   }
   // utility for fast ragged sums
@@ -104,20 +111,58 @@ namespace rstpm2 {
     mat gradh(vec eta, vec etaD, mat X, mat XD) { 
       return rmult(XD, exp(eta)) + rmult(X, etaD % exp(eta));
     }
+    cube hessianH(vec beta, mat X, mat XD) { 
+      cube c(beta.size(), beta.size(), X.n_rows);
+      for (size_t i=0; i<X.n_rows; ++i) 
+	c.slice(i) = X.row(i).t()*X.row(i)*exp(dot(X.row(i),beta)); 
+      return c;
+    }
+    cube hessianh(vec beta, mat X, mat XD) {
+      cube c(beta.size(), beta.size(), X.n_rows);
+      for (size_t i=0; i<X.n_rows; ++i) {
+	rowvec Xi = X.row(i);
+	rowvec XDi = XD.row(i);
+	c.slice(i) = (XDi.t()*Xi + Xi.t()*XDi + dot(XDi,beta)*Xi.t()*Xi)*exp(dot(Xi,beta));
+      }
+      return c;
+    }
   };
+  // Useful relationship: d/dx expit(x)=expit(x)*expit(-x) 
   class LogitLink {
   public:
     vec link(vec S) { return -logit(S); }
     vec ilink(vec x) { return expit(-x); }
-    vec h(vec eta, vec etaD) { return etaD % exp(eta) % expit(-eta); }
-    vec H(vec eta, vec etaD) { return log(1+exp(eta)); }
+    // vec h(vec eta, vec etaD) { return etaD % exp(eta) % expit(-eta); }
+    vec h(vec eta, vec etaD) { return etaD % expit(eta); }
+    vec H(vec eta, vec etaD) { return -log(expit(-eta)); }
     mat gradH(vec eta, vec etaD, mat X, mat XD) { 
-      return rmult(X,exp(eta) % expit(-eta));
+      return rmult(X,expit(eta));
     }
     mat gradh(vec eta, vec etaD, mat X, mat XD) { 
-      return rmult(X, etaD % exp(eta) % expit(-eta)) - 
-	rmult(X, exp(2*eta) % etaD % expit(-eta) % expit(-eta)) +
-	rmult(XD, exp(eta) % expit(-eta));
+      // return rmult(X, etaD % exp(eta) % expit(-eta)) - 
+      // 	rmult(X, exp(2*eta) % etaD % expit(-eta) % expit(-eta)) +
+      // 	rmult(XD, exp(eta) % expit(-eta));
+      return rmult(XD, expit(eta)) + 
+	rmult(X, expit(eta) % expit(-eta) % etaD);
+    }
+    cube hessianH(vec beta, mat X, mat XD) { 
+      cube c(beta.size(), beta.size(), X.n_rows);
+      for (size_t i=0; i<X.n_rows; ++i) {
+	colvec Xi = X.row(i);
+	double Xibeta = dot(Xi,beta);
+	c.slice(i) = Xi.t()*Xi*expit(Xibeta)*expit(-Xibeta); 
+      }
+      return c;
+    }
+    cube hessianh(vec beta, mat X, mat XD) { 
+      cube c(beta.size(), beta.size(), X.n_rows);
+      for (size_t i=0; i<X.n_rows; ++i) {
+	colvec Xi = X.row(i);
+	colvec XDi = XD.row(i);
+	double Xibeta = dot(Xi,beta);
+	c.slice(i) = XDi.t()*Xi*expit(Xibeta) + Xi.t()*XDi*expit(-Xibeta)*expit(Xibeta); 
+      }
+      return c;
     }
   };
   class ProbitLink {
@@ -125,9 +170,9 @@ namespace rstpm2 {
     vec link(vec S) { return -qnorm01(S); }
     vec ilink(vec eta) { return pnorm01(-eta); }
     vec H(vec eta, vec etaD) { return -log(pnorm01(-eta)); }
-    vec h(vec eta, vec etaD) { return etaD % dnorm01(eta) / pnorm01(-eta); }
+    vec h(vec eta, vec etaD) { return etaD % dnorm01(-eta) / pnorm01(-eta); }
     mat gradH(vec eta, vec etaD, mat X, mat XD) { 
-      return rmult(X, dnorm01(eta) / pnorm01(-eta));
+      return rmult(X, dnorm01(-eta) / pnorm01(-eta));
     }
     mat gradh(vec eta, vec etaD, mat X, mat XD) { 
       return rmult(X, -eta % dnorm01(eta) % etaD / pnorm01(-eta)) +
@@ -191,6 +236,49 @@ namespace rstpm2 {
 	  if (i != j)
 	    hess(i,j) = hess(j,i) = (hess(i,j) + hess(j,i)) / 2.0;
       return wrap(hess); // wrap()?
+    }
+  };
+
+  class NelderMead2 : public NelderMead {
+  public:
+    NumericMatrix calc_hessian(optimfn fn, vec parscale, void * ex) {
+      int n = coef.size();
+      NumericMatrix hess(n,n);
+      double tmpi,tmpj,f1,f0,fm1,hi,hj,fij,fimj,fmij,fmimj;
+      f0 = fn(n,&coef[0],ex);
+      for(int i=0; i<n; ++i) {
+	tmpi = coef[i];
+	hi = epshess*(1.0+abs(tmpi))/parscale[i];
+	coef[i] = tmpi + hi;
+	f1=fn(n, &coef[0], ex);
+	coef[i] = tmpi - hi;
+	fm1=fn(n, &coef[0], ex);
+	// hess(i,i) = (-f2 +16.0*f1 - 30.0*f0 + 16.0*fm1 -fm2)/(12.0*hi*hi);
+	hess(i,i) = (f1 - 2.0*f0 + fm1)/(hi*hi);
+	coef[i] = tmpi;
+	for (int j=i; j<n; ++j) {
+	  if (i != j) {
+	    tmpj = coef[j];
+	    hj = epshess*(1.0+abs(tmpj))/parscale[i];
+	    coef[i] = tmpi + hi;
+	    coef[j] = tmpj + hj;
+	    fij=fn(n, &coef[0], ex);
+	    coef[i] = tmpi + hi;
+	    coef[j] = tmpj - hj;
+	    fimj=fn(n, &coef[0], ex);
+	    coef[i] = tmpi - hi;
+	    coef[j] = tmpj + hj;
+	    fmij=fn(n, &coef[0], ex);
+	    coef[i] = tmpi - hi;
+	    coef[j] = tmpj - hj;
+	    fmimj=fn(n, &coef[0], ex);
+	    hess(j,i) = hess(i,j) = (fij-fimj-fmij+fmimj)/(4.0*hi*hj);
+	    coef[i] = tmpi;
+	    coef[j] = tmpj;
+	  }
+	}
+      }
+      return wrap(hess);
     }
   };
 
@@ -259,7 +347,7 @@ namespace rstpm2 {
       mat gradh = Link::gradh(eta,etaD,X,XD);
       mat Xgrad = -rmult(gradH, one % (H>eps)) + rmult(gradh, event / h % (h>eps));
       mat Xconstraint = kappa * rmult(gradh,h%(h<eps)) +
-	kappa * rmult(gradH,H / time / time % (H<eps));
+	kappa * rmult(gradH,H % (H<eps));
       rowvec dconstraint = sum(Xconstraint,0);
       Xgrad = rmult(Xgrad,wt);
       rowvec vgr = sum(Xgrad,0);
@@ -267,6 +355,9 @@ namespace rstpm2 {
 	vec eta0 = X0 * beta;
 	vec etaD0 = XD0 * beta;
 	mat gradH0 = Link::gradH(eta0, etaD0, X0, XD0); 
+	vec H0 = Link::H(eta0, etaD0); 
+	mat Xconstraint0 = kappa * rmult(gradH0, H0 % (H<eps));
+	dconstraint += sum(Xconstraint0,0);
 	vgr += sum(rmult(gradH0, wt0),0);
       }
       vec gr(n);
@@ -280,7 +371,14 @@ namespace rstpm2 {
       vec etaD = XD * beta;
       vec h = Link::h(eta, etaD) + bhazard;
       vec H = Link::H(eta, etaD);
-      return all((h>0) % (H>0));
+      bool condition = all((h>0) % (H>0));
+      if (delayed == 1) {
+	vec eta0 = X0 * beta;
+	vec etaD0 = XD0 * beta;
+	vec H0 = Link::H(eta0, etaD0);
+	condition = condition && all(H0>0);
+      }
+      return condition;
     }
     void pre_process() {
       for (int i = 0; i<n; ++i) init[i] /= parscale[i];
@@ -289,18 +387,13 @@ namespace rstpm2 {
       for (int i = 0; i<n; ++i) {
 	bfgs.coef[i] *= parscale[i];
 	init[i] *= parscale[i];
-      // 	for (int j=i; j<n; ++j) {
-      // 	  bfgs.hessian(i,j) *= parscale[i]*parscale[j];
-      // 	  if (i<j) 
-      // 	    bfgs.hessian(j,i) *= parscale[i]*parscale[j];
-      // 	}
       }
     }
     void optim(NumericVector init) {
       bfgs.hessianp = true;
       bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
     }
-    void optimWithConstraint(NumericVector init) {
+    void optimWithConstraintWithGradient(NumericVector init) {
       bool satisfied;
       bfgs.hessianp = false;
       do {
@@ -310,6 +403,20 @@ namespace rstpm2 {
 	if (!satisfied) kappa *= 2.0;   
       } while ((!satisfied) && kappa < 1.0e3);
       bfgs.hessian = bfgs.calc_hessian(&optimgradient<This>, parscale, (void *) this);
+    }
+    void optimWithConstraint(NumericVector init) {
+      bool satisfied;
+      NelderMead2 nm;
+      nm.hessianp = false;
+      do {
+	nm.optim(&optimfunction<This>, init, (void *) this);
+	vec vcoef(&nm.coef[0],n);
+	satisfied = constraint(vcoef % parscale);
+	if (!satisfied) kappa *= 2.0;   
+      } while ((!satisfied) && kappa < 1.0e3);
+      nm.hessian = nm.calc_hessian(&optimfunction<This>, parscale, (void *) this);
+      bfgs.coef = nm.coef;
+      bfgs.hessian = nm.hessian;
     }
     NumericVector init;
     mat X, XD, X0, XD0; 
@@ -603,7 +710,6 @@ namespace rstpm2 {
     double alpha, reltol_search; 
     int criterion;
   };
-
   // template<class Smooth, class Stpm2>
   // void pstpm2_step_multivariate_nlm(int n, double * logsp, double * f, void *ex) {
   //   *f = pstpm2_step_multivariate<Smooth,Stpm2>(n, logsp, ex);
@@ -637,7 +743,6 @@ namespace rstpm2 {
     Pstpm2<Stpm2<LogLink>,SmoothLogH> model(args);
     return model.optim_first();
   }
-
   RcppExport SEXP optim_pstpm2LogH_multivariate_ph(SEXP args) {
     Pstpm2<Stpm2<LogLogLink>,SmoothLogH> model(args);
     return model.optim_multivariate();
@@ -667,28 +772,26 @@ namespace rstpm2 {
     return model.optim_multivariate();
   }
 
-
-
   // template<class Smooth, class Stpm2>
   // SEXP optim_pstpm2_fixedsp(SEXP args) { 
-
+  //
   //   typedef pstpm2<Smooth,Stpm2> Data;
   //   Data data(args);
   //   BFGS2<Data> bfgs;
   //   bfgs.coef = data.init;
   //   bfgs.reltol = data.reltol;
-
+  //
   //   bfgs.optimWithConstraint(pfminfn<Smooth,Stpm2>, pgrfn<Smooth,Stpm2>, data.init, (void *) &data, fminfn_constraint<Data>);
-
+  //
   //   NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, parscale, (void *) &data);
   //   double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
-
+  //
   //   return List::create(_("sp")=wrap(data.sp),
   // 			_("coef")=wrap(bfgs.coef),
   // 			_("hessian")=wrap(bfgs.hessian),
   // 			_("edf")=wrap(edf));
   // }
-
+  //
   // RcppExport SEXP optim_pstpm2LogH_fixedsp_ph(SEXP args) {
   //   return optim_pstpm2_fixedsp<SmoothLogH,stpm2>(args); }
   // RcppExport SEXP optim_pstpm2Haz_fixedsp_ph(SEXP args) {
@@ -703,51 +806,50 @@ namespace rstpm2 {
   //   return optim_pstpm2_fixedsp<SmoothHaz,stpm2Probit>(args); }
   // RcppExport SEXP optim_pstpm2LogH_fixedsp_ah(SEXP args) {
   //   return optim_pstpm2_fixedsp<SmoothLogH,stpm2AH>(args); }
-
+  //
   // template<class Smooth, class Stpm2>
   // SEXP test_pstpm2(SEXP args) { 
-
+  //
   //   pstpm2<Smooth,Stpm2> data(args);
   //   int n = data.init.size();
-
+  //
   //   NumericVector init = ew_div(data.init,data.parscale);
-
+  //
   //   double pfmin = pfminfn<Smooth,Stpm2>(n,&init[0],(void *) &data);
   //   NumericVector gr(n);
   //   pgrfn<Smooth,Stpm2>(n,&init[0], &gr[0], (void *) &data);
-
+  //
   //   init = ew_mult(init,data.parscale);
-
+  //
   //   return List::create(_("sp")=wrap(data.sp),
   // 			_("pfmin")=wrap(pfmin),
   // 			_("gr")=wrap(gr)
   // 			);
-
+  //
   // }
-
+  //
   // RcppExport SEXP test_pstpm2LogH(SEXP args) {
   //   return test_pstpm2<SmoothLogH,stpm2>(args);
   // }
-
+  //
   // RcppExport SEXP test_pstpm2Haz(SEXP args) {
   //   return test_pstpm2<SmoothHaz,stpm2>(args);
   // }
 
-
   /** 
       Extension of stpm2 and pstpm2 to include shared frailties with a cluster variable
   **/
-  template<class Stpm2Type>
-  class Stpm2Shared : public Stpm2Type {
+  template<class Base>
+  class SharedFrailty : public Base {
   public:
     typedef std::vector<int> Index;
     typedef std::map<int,Index> IndexMap;
-    Stpm2Shared(SEXP sexp) : Stpm2Type(sexp) {
+    SharedFrailty(SEXP sexp) : Base(sexp) {
       List list = as<List>(sexp);
       IntegerVector cluster = as<IntegerVector>(list["cluster"]);
       // wragged array indexed by a map of vectors
-      for (int i=0; i<cluster.size(); ++i) {
-	clusters[cluster[i]].push_back(i);
+      for (int id=0; id<cluster.size(); ++id) {
+	clusters[cluster[id]].push_back(id);
       }
     }
     /** 
@@ -756,27 +858,27 @@ namespace rstpm2 {
 	The implementation is incomplete, requiring either the use of optimisation without
 	gradients or the calculation of the gradients.
     **/
-    double objective(NumericVector beta) {
+    double objective(vec beta, bool joint = false) {
       int n = beta.size();
-      vec vbeta(&beta[0],n-1); // theta is the last parameter in beta
+      vec vbeta(beta); // theta is the last parameter in beta
+      vbeta.resize(n-1);
       double theta = beta[n-1];
-      vbeta = vbeta % this->parscale;
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
-      vec h = this->h(eta,etaD) + this->bhazard;
-      vec H = this->H(eta,etaD) + this->bhazard;
-      double constraint = this->kappa/2.0 * sum(h % h % (h<0)); // sum(h^2 | h<0)
+      vec h = Base::h(eta,etaD) + this->bhazard;
+      vec H = Base::H(eta,etaD) + this->bhazard;
+      double constraint = this->kappa/2.0 * (sum(h % h % (h<0)) + sum(H % H % (H<0)));
       vec eps = h*0.0 + 1.0e-16; 
       h = max(h,eps);
+      H = max(H,eps);
       mat H0;
-      //double ll = sum(wt % event % log(h)) - sum(wt % H) - constraint;
       if (this->delayed == 1) {
 	vec eta0 = this->X0 * vbeta;
 	vec etaD0 = this->XD0 * vbeta;
-	H0 = this->H(eta0,etaD0);
-	//ll += sum(wt0 % H0);
+	H0 = Base::H(eta0,etaD0);
+	constraint += this->kappa/2.0 * sum(H0 % H0 % (H0<0));
       }
-      double ll;
+      double ll = 0.0;
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
 	int mi=0;
 	double sumH = 0.0, sumHenter = 0.0;
@@ -789,17 +891,14 @@ namespace rstpm2 {
 	  if (this->delayed == 1)
 	    sumHenter += this->H0(*j);
 	}
-	ll -= (1.0/theta+mi)*log(1.0+theta*sumH);
-	if (this->delayed == 1)
-	  ll += 1.0/theta*log(1.0+theta*sumHenter);
+	if (joint) {
+	  ll -= (1.0/theta+mi)*log(1.0+theta*(sumH)) - 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
+	} else {
+	  ll -= (1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // conditional (Gutierrez 2002)
+	}
 	if (mi>0) {
-	  int k=1;
-	  for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
-	    if (this->event(*j)==1) {
-	      ll += log(1.0+theta*(mi-k));
-	      k++;
-	    }
-	  }
+	  for (int k=1; k<=mi; ++k)
+	    ll += log(1.0+theta*(mi-k));
 	}
       }
       ll -= constraint;
@@ -807,6 +906,26 @@ namespace rstpm2 {
     }
     IndexMap clusters;
   };
+
+
+  template<class Stpm2>
+  SEXP optim_stpm2_frailty(SEXP args) {
+    SharedFrailty<Stpm2> model(args);
+    model.pre_process();
+    model.optimWithConstraint(model.init);
+    model.post_process();
+    return List::create(_("fail")=0,//model.bfgs.fail, 
+			_("coef")=wrap(model.bfgs.coef),
+			_("hessian")=wrap(model.bfgs.hessian));
+  }
+  RcppExport SEXP optim_stpm2_frailty_ph(SEXP args) {
+    return optim_stpm2_frailty<Stpm2<LogLogLink> >(args); }
+  RcppExport SEXP optim_stpm2_frailty_po(SEXP args) {
+    return optim_stpm2_frailty<Stpm2<LogitLink> >(args); }
+  RcppExport SEXP optim_stpm2_frailty_probit(SEXP args) {
+    return optim_stpm2_frailty<Stpm2<ProbitLink> >(args); }
+  RcppExport SEXP optim_stpm2_frailty_ah(SEXP args) {
+    return optim_stpm2_frailty<Stpm2<LogLink> >(args); }
 
 
   /** 
@@ -883,8 +1002,8 @@ namespace rstpm2 {
 	sumH += H[*j];
 	sumHenter += H0[*j];
       }
-      ll -= (1.0/theta+mi)*log(1.0+theta*sumH);
-      ll += 1.0/theta*log(1.0+theta*sumHenter);
+      ll -= (1.0/theta+mi)*log(1.0+theta*(sumH-sumHenter));
+      // ll += 1.0/theta*log(1.0+theta*sumHenter);
       if (mi>0) {
 	int k=1;
 	for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
