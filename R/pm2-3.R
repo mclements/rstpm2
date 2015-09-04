@@ -435,7 +435,7 @@ stpm2 <- function(formula, data,
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE, use.rcpp= TRUE,
                      reltol=1.0e-8, trace = 0,
                      type=c("PH","PO","probit","AH"),
-                     frailty = FALSE, cluster = NULL, logtheta=0,
+                     frailty = FALSE, cluster = NULL, logtheta=-6,
                      contrasts = NULL, subset = NULL, ...) {
     type <- match.arg(type)
     link <- switch(type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
@@ -446,7 +446,7 @@ stpm2 <- function(formula, data,
     delayed <- length(lhs(formula))>=4
     counting <- attr(eventInstance,"type") == "counting"
     interval <- attr(eventInstance,"type") == "interval"
-    if (interval || frailty) { # early code
+    if (interval) { # early code
         use.rcpp <- FALSE
         use.gr <- FALSE
     }
@@ -673,7 +673,8 @@ stpm2 <- function(formula, data,
         names(control$parscale) <- names(init)
     }
     parnames(negll) <- parnames(gradnegll) <- names(init)
-    rcpp_stpm2 <- function() {
+    ## MLE
+    if (use.rcpp) {
         parscale <- rep(if (is.null(control$parscale)) 1 else control$parscale,length=length(init))
         names(parscale) <- names(init)
         program <- switch(type,PH="optim_stpm2_ph",PO="optim_stpm2_po",probit="optim_stpm2_probit",
@@ -681,14 +682,10 @@ stpm2 <- function(formula, data,
         if (frailty)
             program <- switch(type,PH="optim_stpm2_frailty_ph",PO="optim_stpm2_frailty_po",probit="optim_stpm2_frailty_probit",
                               AH="optim_stpm2_frailty_ah")
-        .Call(program,list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
+        fit <- .Call(program,list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
               delayed=if (delayed) 1 else 0, X0=X0, XD0=XD0, wt0=wt0, parscale=parscale, reltol=reltol,
                                  kappa=1, trace = trace, cluster=cluster),
               package="rstpm2")
-    }
-    ## MLE
-    if (use.rcpp) {
-        fit <- rcpp_stpm2()
         coef <- as.vector(fit$coef)
         hessian <- fit$hessian
         names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)

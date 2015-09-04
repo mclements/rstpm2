@@ -196,13 +196,35 @@ namespace rstpm2 {
     T * obj = static_cast<T*>(void_obj);
     vec coef(beta,n);
     double value = obj->objective(coef % obj->parscale);
+    if (obj->bfgs.trace>0) {
+      Rprintf("beta="); Rprint(coef);
+      Rprintf("objective=%g\n",value);
+    };
     return value;
   }
   template<class T>
   void optimgradient(int n, double * beta, double * grad, void * void_obj) {
     T * obj = static_cast<T*>(void_obj);
     vec coef(beta,n);
+    if (obj->bfgs.trace>0) {
+      Rprintf("beta="); Rprint(coef);
+      Rprintf("parscale="); Rprint(obj->parscale);
+    }
     vec gr = obj->gradient(coef % obj->parscale);
+    if (obj->bfgs.trace>0) {
+      Rprintf("gradient="); Rprint(gr);
+    };
+    for (int i=0; i<n; ++i) grad[i] = gr[i];
+  }
+  template<class T>
+  void optimgradient0(int n, double * beta, double * grad, void * void_obj) {
+    T * obj = static_cast<T*>(void_obj);
+    vec coef(beta,n);
+    vec gr = obj->gradient0(coef % obj->parscale);
+    if (obj->bfgs.trace>0) {
+      Rprintf("beta="); Rprint(coef);
+      Rprintf("gradient="); Rprint(gr);
+    };
     for (int i=0; i<n; ++i) grad[i] = gr[i];
   }
   template<class T>
@@ -211,10 +233,9 @@ namespace rstpm2 {
     vec coef(beta,n);
     *f = obj->objective(coef % obj->parscale);
   }
-
   class BFGS2 : public BFGS {
   public:
-  NumericMatrix calc_hessian(optimgr gr, vec parscale, void * ex) {
+  NumericMatrix calc_hessian_scaled(optimgr gr, vec parscale, void * ex) {
       int n = coef.size();
       NumericVector df1(n);
       NumericVector df2(n);
@@ -235,13 +256,12 @@ namespace rstpm2 {
 	for(int j=i; j<n; ++j) 
 	  if (i != j)
 	    hess(i,j) = hess(j,i) = (hess(i,j) + hess(j,i)) / 2.0;
-      return wrap(hess); // wrap()?
+      return hess; // wrap()?
     }
   };
-
   class NelderMead2 : public NelderMead {
   public:
-    NumericMatrix calc_hessian(optimfn fn, vec parscale, void * ex) {
+    NumericMatrix calc_hessian_scaled(optimfn fn, vec parscale, void * ex) {
       int n = coef.size();
       NumericMatrix hess(n,n);
       double tmpi,tmpj,f1,f0,fm1,hi,hj,fij,fimj,fmij,fmimj;
@@ -254,12 +274,12 @@ namespace rstpm2 {
 	coef[i] = tmpi - hi;
 	fm1=fn(n, &coef[0], ex);
 	// hess(i,i) = (-f2 +16.0*f1 - 30.0*f0 + 16.0*fm1 -fm2)/(12.0*hi*hi);
-	hess(i,i) = (f1 - 2.0*f0 + fm1)/(hi*hi);
+	hess(i,i) = (f1 - 2.0*f0 + fm1)/(hi*hi*parscale[i]*parscale[i]);
 	coef[i] = tmpi;
 	for (int j=i; j<n; ++j) {
 	  if (i != j) {
 	    tmpj = coef[j];
-	    hj = epshess*(1.0+abs(tmpj))/parscale[i];
+	    hj = epshess*(1.0+abs(tmpj))/parscale[j];
 	    coef[i] = tmpi + hi;
 	    coef[j] = tmpj + hj;
 	    fij=fn(n, &coef[0], ex);
@@ -272,13 +292,13 @@ namespace rstpm2 {
 	    coef[i] = tmpi - hi;
 	    coef[j] = tmpj - hj;
 	    fmimj=fn(n, &coef[0], ex);
-	    hess(j,i) = hess(i,j) = (fij-fimj-fmij+fmimj)/(4.0*hi*hj);
+	    hess(j,i) = hess(i,j) = (fij-fimj-fmij+fmimj)/(4.0*hi*hj*parscale[i]*parscale[j]);
 	    coef[i] = tmpi;
 	    coef[j] = tmpj;
 	  }
 	}
       }
-      return wrap(hess);
+      return hess;
     }
   };
 
@@ -313,6 +333,7 @@ namespace rstpm2 {
       bfgs.trace = as<int>(list["trace"]);
       bfgs.reltol = as<double>(list["reltol"]);
       n = init.size();
+      bfgs.hessianp = false;
     }
     // negative log-likelihood
     double objective(vec beta) {
@@ -390,21 +411,22 @@ namespace rstpm2 {
       }
     }
     void optim(NumericVector init) {
-      bfgs.hessianp = true;
       bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
+      bfgs.hessian = bfgs.calc_hessian_scaled(&optimgradient<This>, parscale, (void *) this);
     }
-    void optimWithConstraintWithGradient(NumericVector init) {
+    void optimWithConstraint(NumericVector init) {
       bool satisfied;
-      bfgs.hessianp = false;
+      if (bfgs.trace > 0) 
+	Rprintf("Starting optimization\n");
       do {
 	bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
 	vec vcoef(&bfgs.coef[0],n);
 	satisfied = constraint(vcoef % parscale);
 	if (!satisfied) kappa *= 2.0;   
       } while ((!satisfied) && kappa < 1.0e3);
-      bfgs.hessian = bfgs.calc_hessian(&optimgradient<This>, parscale, (void *) this);
+      bfgs.hessian = bfgs.calc_hessian_scaled(&optimgradient<This>, parscale, (void *) this);
     }
-    void optimWithConstraint(NumericVector init) {
+    void optimWithConstraintNM(NumericVector init) {
       bool satisfied;
       NelderMead2 nm;
       nm.hessianp = false;
@@ -414,7 +436,7 @@ namespace rstpm2 {
 	satisfied = constraint(vcoef % parscale);
 	if (!satisfied) kappa *= 2.0;   
       } while ((!satisfied) && kappa < 1.0e3);
-      nm.hessian = nm.calc_hessian(&optimfunction<This>, parscale, (void *) this);
+      nm.hessian = nm.calc_hessian_scaled(&optimfunction<This>, parscale, (void *) this);
       bfgs.coef = nm.coef;
       bfgs.hessian = nm.hessian;
     }
@@ -486,10 +508,8 @@ namespace rstpm2 {
 	smooth.push_back(smoothi);
       }
     }
-    double penalty(NumericVector beta, vec sp) {
+    double penalty(vec vbeta, vec sp) {
       double value = 0.0;
-      int n = beta.size();
-      vec vbeta(&beta[0],n);
       for (size_t i=0; i < smooth.size(); ++i) {
 	Smoother smoothi = smooth[i];
 	value += sp[i]/2 * 
@@ -498,9 +518,8 @@ namespace rstpm2 {
       }
       return value;  
     }
-    vec penalty_gradient(NumericVector beta, NumericVector sp) {
-      int n = beta.size();
-      vec vbeta(&beta[0],n);
+    vec penalty_gradient(vec vbeta, vec sp) {
+      int n = vbeta.size();
       rowvec vgr(n, fill::zeros);
       for (size_t i=0; i < smooth.size(); ++i) {
 	Smoother smoothi = smooth[i];
@@ -536,10 +555,8 @@ namespace rstpm2 {
 	smooth.push_back(smoothi);
       }
     }
-    double penalty(NumericVector beta, NumericVector sp) {
+    double penalty(vec vbeta, vec sp) {
       double value = 0.0;
-      int n = beta.size();
-      vec vbeta(&beta[0],n);
       for (size_t i=0; i < smooth.size(); ++i) {
 	Smoother obj = smooth[i];
 	vec s0 = obj.X0 * vbeta;
@@ -551,9 +568,8 @@ namespace rstpm2 {
       }
       return value;
     }
-  vec penalty_gradient(NumericVector beta, NumericVector sp) {
-    int n = beta.size();
-    vec vbeta(&beta[0],n);
+  vec penalty_gradient(vec vbeta, vec sp) {
+    int n = vbeta.size();
     rowvec vgr(n, fill::zeros);
     for (size_t i=0; i < smooth.size(); ++i) {
       Smoother obj = smooth[i];
@@ -594,22 +610,27 @@ namespace rstpm2 {
     typedef Pstpm2<Stpm2Type> This;
     Pstpm2(SEXP sexp) : Stpm2Type(sexp), Smooth(sexp) {
       List list = as<List>(sexp);
-      sp = as<NumericVector>(list["sp"]);
+      sp = as<vec>(list["sp"]);
       reltol_search = as<double>(list["reltol_search"]);
       alpha = as<double>(list["alpha"]);
       criterion = as<int>(list["criterion"]);
     }
     double objective(vec beta) {
-      return Stpm2Type::objective(beta) - Smooth::penalty(beta,sp);
+      return Stpm2Type::objective(beta) + Smooth::penalty(beta,sp);
     }
     vec gradient(vec beta) {
-      return Stpm2Type::gradient(beta) - Smooth::penalty_gradient(beta,sp);
+      return Stpm2Type::gradient(beta) + Smooth::penalty_gradient(beta,sp);
+    }
+    vec gradient0(vec beta) {
+      return Stpm2Type::gradient(beta);
     }
     double first_step(double logsp) {
       sp[0] = exp(logsp);
       this->pre_process();
-      this->optimWithConstraint(this->init); // do not apply parscale b4/after?
-      NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, parscale, (void *) this);
+      this->optimWithConstraint(this->init);
+      if (this->bfgs.trace > 0) Rprintf("Calculating Hessian0:\n");
+      this->bfgs.hessian = this->bfgs.calc_hessian_scaled(&optimgradient<This>, this->parscale, (void *) this);
+      NumericMatrix hessian0 = this->bfgs.calc_hessian_scaled(&optimgradient<Stpm2Type>, this->parscale, (void *) this);
       if (this->bfgs.trace > 0)  {
 	Rprintf("Debug on trace calculation. Coef:\n");
 	Rprint(this->bfgs.coef);
@@ -618,7 +639,7 @@ namespace rstpm2 {
 	Rprintf("Hessian:\n");
 	Rprint(this->bfgs.hessian);
       }
-      double edf = arma::trace(solve(as<mat>(this->bfgs.hessian),as<mat>(hessian0)));
+      double edf = arma::trace(solve(as<mat>(wrap(this->bfgs.hessian)),as<mat>(wrap(hessian0))));
       double negll = this->bfgs.calc_objective(&optimfunction<Stpm2Type>, (void *) this);
       double gcv =  negll + alpha*edf;
       double bic =  negll + alpha*edf*log(sum(this->event));
@@ -638,8 +659,9 @@ namespace rstpm2 {
 	  Rprintf("sp[%i]=%f\t",i,sp[i]);
       }
       this->optimWithConstraint(this->init);
-      NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, parscale, (void *) this);
-      double edf = arma::trace(solve(as<mat>(this->bfgs.hessian),as<mat>(hessian0)));
+      this->bfgs.hessian = this->bfgs.calc_hessian_scaled(&optimgradient<This>, this->parscale, (void *) this);
+      NumericMatrix hessian0 = this->bfgs.calc_hessian_scaled(&optimgradient<Stpm2Type>, this->parscale, (void *) this);
+      double edf = arma::trace(solve(as<mat>(wrap(this->bfgs.hessian)),as<mat>(wrap(hessian0))));
       double negll = this->bfgs.calc_objective(&optimfunction<Stpm2Type>, (void *) this);
       double gcv =  negll + alpha*edf;
       double bic =  2.0*negll + alpha*edf*log(sum(this->event));
@@ -665,8 +687,9 @@ namespace rstpm2 {
     SEXP optim_fixed() { 
       this->pre_process();
       this->optimWithConstraint(this->init);
-      NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, parscale, (void *) this);
-      double edf = trace(solve(as<mat>(this->bfgs.hessian),as<mat>(hessian0)));
+      this->bfgs.hessian = this->bfgs.calc_hessian_scaled(&optimgradient<This>, this->parscale, (void *) this);
+      NumericMatrix hessian0 = this->bfgs.calc_hessian_scaled(&optimgradient<Stpm2Type>, this->parscale, (void *) this);
+      double edf = trace(solve(as<mat>(wrap(this->bfgs.hessian)),as<mat>(wrap(hessian0))));
       this->post_process();
       return List::create(_("sp")=wrap(sp),
 			  _("coef")=wrap(this->bfgs.coef),
@@ -674,10 +697,8 @@ namespace rstpm2 {
 			  _("edf")=wrap(edf));
     }
     SEXP optim_first() { 
-      this->pre_process();
       double opt_sp = exp(Brent_fmin(log(0.001),log(1000.0),&(pstpm2_first_step<This>),(void *) this,1.0e-2));
       sp[0] = opt_sp;
-      this->post_process();
       return optim_fixed();
     }
     SEXP optim_multivariate() {
@@ -686,7 +707,6 @@ namespace rstpm2 {
       nm.reltol = 1.0e-5;
       nm.maxit = 500;
       nm.hessianp = false;
-      this->pre_process();
       NumericVector logsp(sp.size());
       for (int i=0; i < sp.size(); ++i)
 	logsp[i] = log(sp[i]);
@@ -698,11 +718,9 @@ namespace rstpm2 {
 	  if (logsp[i]< -7.0 || logsp[i] > 7.0) satisfied = false;
 	if (!satisfied) this->kappa *= 2.0;
       } while (!satisfied && this->kappa<1.0e5);
-      this->post_process();
       for (int i=0; i < nm.coef.size(); ++i)
 	sp[i] = exp(nm.coef[i]);
       this->bfgs.coef = this->init;
-      // this->bfgs.reltol = this->reltol;
       return optim_fixed();
     }
     NumericVector sp;
@@ -844,6 +862,7 @@ namespace rstpm2 {
   public:
     typedef std::vector<int> Index;
     typedef std::map<int,Index> IndexMap;
+    typedef SharedFrailty<Base> This;
     SharedFrailty(SEXP sexp) : Base(sexp) {
       List list = as<List>(sexp);
       IntegerVector cluster = as<IntegerVector>(list["cluster"]);
@@ -858,8 +877,11 @@ namespace rstpm2 {
 	The implementation is incomplete, requiring either the use of optimisation without
 	gradients or the calculation of the gradients.
     **/
-    double objective(vec beta, bool joint = false) {
+    double objective(vec beta) {
       int n = beta.size();
+      if (this->bfgs.trace>0) {
+	Rprint(beta);
+      }
       vec vbeta(beta); // theta is the last parameter in beta
       vbeta.resize(n-1);
       double theta = beta[n-1];
@@ -871,7 +893,7 @@ namespace rstpm2 {
       vec eps = h*0.0 + 1.0e-16; 
       h = max(h,eps);
       H = max(H,eps);
-      mat H0;
+      vec H0;
       if (this->delayed == 1) {
 	vec eta0 = this->X0 * vbeta;
 	vec etaD0 = this->XD0 * vbeta;
@@ -885,17 +907,17 @@ namespace rstpm2 {
 	for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
 	  if (this->event(*j)==1) {
 	    mi++;
-	    ll += log(this->h(*j));
+	    ll += log(h[*j]);
 	  }
-	  sumH += this->H(*j);
+	  sumH += H[*j];
 	  if (this->delayed == 1)
-	    sumHenter += this->H0(*j);
+	    sumHenter += H0[*j];
 	}
-	if (joint) {
-	  ll -= (1.0/theta+mi)*log(1.0+theta*(sumH)) - 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
-	} else {
-	  ll -= (1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // conditional (Gutierrez 2002)
-	}
+	// if (joint) {
+	//   ll -= (1.0/theta+mi)*log(1.0+theta*(sumH)) - 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
+	// } else {
+	  ll -= (1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // default: conditional (Gutierrez 2002)
+	// }
 	if (mi>0) {
 	  for (int k=1; k<=mi; ++k)
 	    ll += log(1.0+theta*(mi-k));
@@ -904,6 +926,76 @@ namespace rstpm2 {
       ll -= constraint;
       return -ll;  
     }
+    vec gradient(vec beta) {
+      int n = beta.size();
+      vec gr = zeros<vec>(n);
+      vec grconstraint = zeros<vec>(n);
+      vec vbeta(beta); // theta is the last parameter in beta
+      vbeta.resize(n-1);
+      double theta = beta[n-1];
+      vec eta = this->X * vbeta;
+      vec etaD = this->XD * vbeta;
+      vec h = Base::h(eta,etaD) + this->bhazard;
+      vec H = Base::H(eta,etaD) + this->bhazard;
+      mat gradh = Base::gradh(eta,etaD,this->X,this->XD);
+      mat gradH = Base::gradH(eta,etaD,this->X,this->XD);
+      vec eps = h*0.0 + 1.0e-16; 
+      vec one = ones(h.size());
+      h = max(h,eps);
+      H = max(H,eps);
+      vec H0;
+      mat gradH0;
+      if (this->delayed == 1) {
+	vec eta0 = this->X0 * vbeta;
+	vec etaD0 = this->XD0 * vbeta;
+	H0 = Base::H(eta0,etaD0);
+	gradH0 = Base::gradH(eta0,etaD0,this->X0,this->XD0);
+      }
+      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+	int mi=0;
+	double sumH = 0.0, sumHenter = 0.0;
+	vec gradi = zeros<vec>(n-1);
+	vec gradHi = zeros<vec>(n-1);
+	vec gradH0i = zeros<vec>(n-1);
+	vec grconstraint = zeros<vec>(n-1);
+	for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
+	  sumH += H(*j);
+	  gradHi += gradH.row(*j).t();
+	  gradi += gradh.row(*j).t() / h(*j) * this->event(*j);
+	  if (this->event(*j)==1) 
+	    mi++;
+	  if (this->delayed == 1) {
+	    sumHenter += H0(*j);
+	    gradH0i += gradH0.row(*j).t();
+	    grconstraint += this->kappa * (gradH0.row(*j).t() * H(*j) * (H(*j)<0));
+	  }
+	  grconstraint += this->kappa * ((gradh.row(*j).t() * h(*j) * (h(*j)<0)) + (gradH.row(*j).t() * H(*j) * (H(*j)<0)));
+	}
+	for (int k=0; k<n-1; ++k) {
+	  gr(k) += gradi(k) - (1+mi*theta)*(gradHi(k)-gradH0i(k))/(1+theta*(sumH-sumHenter)) - grconstraint(k);
+	}
+	double lastterm = 0.0;
+	if (mi>0) {
+	  for (int k=1; k<=mi; ++k)
+	    lastterm += (mi-k)/(1.0+theta*(mi-k));
+	}
+	gr(n) += log(1+theta*(sumH-sumHenter))/theta/theta - (1/theta+mi)*(sumH+sumHenter)/(1+theta*(sumH-sumHenter))+lastterm;
+      }
+      return -gr;  
+    }
+    // virtual void optimWithConstraint(NumericVector init) {
+    //   bool satisfied;
+    //   this->bfgs.hessianp = false;
+    //   if (this->bfgs.trace > 0) 
+    // 	Rprintf("Starting optimization\n");
+    //   do {
+    // 	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, this->init, (void *) this);
+    // 	vec vcoef(&this->bfgs.coef[0],this->n);
+    // 	satisfied = this->constraint(vcoef % this->parscale);
+    // 	if (!satisfied) this->kappa *= 2.0;   
+    //   } while ((!satisfied) && this->kappa < 1.0e3);
+    //   this->bfgs.hessian = this->bfgs.calc_hessian(&optimgradient<This>, this->parscale, (void *) this);
+    // }
     IndexMap clusters;
   };
 
@@ -914,7 +1006,7 @@ namespace rstpm2 {
     model.pre_process();
     model.optimWithConstraint(model.init);
     model.post_process();
-    return List::create(_("fail")=0,//model.bfgs.fail, 
+    return List::create(_("fail")=model.bfgs.fail, 
 			_("coef")=wrap(model.bfgs.coef),
 			_("hessian")=wrap(model.bfgs.hessian));
   }
