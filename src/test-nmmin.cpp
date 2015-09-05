@@ -615,6 +615,7 @@ namespace rstpm2 {
     vec gradient(vec beta) {
       return Stpm2Type::gradient(beta) + Smooth::penalty_gradient(beta,sp);
     }
+    // is the following strictly needed?
     void optimWithConstraint(NumericVector init) {
       bool satisfied;
       if (this->bfgs.trace > 0) 
@@ -910,7 +911,6 @@ namespace rstpm2 {
 	    mi++;
 	    ll += log(h[*j]);
 	  }
-	if (this->bfgs.trace>0) Rprintf("ll(1)=%g\n",ll);
 	  sumH += H[*j];
 	  if (this->delayed == 1)
 	    sumHenter += H0[*j];
@@ -920,15 +920,12 @@ namespace rstpm2 {
 	// } else {
 	  ll -= (1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // default: conditional (Gutierrez 2002)
 	// }
-	if (this->bfgs.trace>0) Rprintf("ll(2)=%g\n",ll);
 	if (mi>0) {
 	  for (int k=1; k<=mi; ++k)
 	    ll += log(1.0+theta*(mi-k));
-	if (this->bfgs.trace>0) Rprintf("ll(3)=%g\n",ll);
 	}
       }
       ll -= constraint;
-	if (this->bfgs.trace>0) Rprintf("ll(4)=%g\n",ll);
       return -ll;  
     }
     vec gradient(vec beta) {
@@ -945,7 +942,6 @@ namespace rstpm2 {
       mat gradh = Base::gradh(eta,etaD,this->X,this->XD);
       mat gradH = Base::gradH(eta,etaD,this->X,this->XD);
       vec eps = h*0.0 + 1.0e-16; 
-      vec one = ones(h.size());
       h = max(h,eps);
       H = max(H,eps);
       vec H0;
@@ -994,12 +990,29 @@ namespace rstpm2 {
 	Rprintf("Starting optimization\n");
       do {
 	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, this->init, (void *) this);
-	vec vcoef(&this->bfgs.coef[0],this->n-1);
+	vec vcoef(&this->bfgs.coef[0],this->n-1); 
 	vec parscale(this->parscale);
 	parscale.resize(this->n-1);
 	satisfied = Base::constraint(vcoef % parscale);
 	if (!satisfied) this->kappa *= 2.0;   
       } while ((!satisfied) && this->kappa < 1.0e3);
+    }
+    void optimWithConstraintNM(NumericVector init) {
+      bool satisfied;
+      NelderMead2 nm;
+      nm.hessianp = false;
+      nm.parscale = this->parscale;
+      do {
+	nm.optim(&optimfunction<This>, this->init, (void *) this);
+	vec vcoef(&nm.coef[0],this->n-1);
+	vec parscale(this->parscale);
+	parscale.resize(this->n-1);
+	satisfied = Base::constraint(vcoef % parscale);
+	if (!satisfied) this->kappa *= 2.0;   
+      } while ((!satisfied) && this->kappa < 1.0e3);
+      nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this);
+      this->bfgs.coef = nm.coef;
+      this->bfgs.hessian = nm.hessian;
     }
     IndexMap clusters;
   };
