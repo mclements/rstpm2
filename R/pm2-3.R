@@ -686,9 +686,11 @@ stpm2 <- function(formula, data,
               delayed=if (delayed) 1 else 0, X0=X0, XD0=XD0, wt0=wt0, parscale=parscale, reltol=reltol,
                                  kappa=1, trace = trace, cluster=cluster),
               package="rstpm2")
+        browser()
         coef <- as.vector(fit$coef)
         hessian <- fit$hessian
         names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
+        if (frailty) browser()  
         mle2 <- mle2(negll, coef, vecpar=TRUE, control=control, gr=gradnegll, ..., eval.only=TRUE)
         mle2@vcov <- if (!inherits(vcov <- try(solve(hessian)), "try-error")) vcov else matrix(NA,length(coef), length(coef))
         mle2@details$convergence <- fit$fail # fit$itrmcd
@@ -1352,7 +1354,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         control$parscale <- rep(1,length(init))
         names(control$parscale) <- names(init)
     }
-    rcpp_optim <- function() {
+    if (use.rcpp) {
         ## stopifnot(!delayed)
         suffix <- switch(type,PH="ph",PO="po",probit="probit",AH="ah")
         pen <- if(penalty=="logH") "LogH" else "Haz"
@@ -1362,27 +1364,23 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                      sp=sp, reltol_search=reltol$search, reltol=reltol$final, trace=trace,
                      kappa=1.0,
                      alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2))
-        if (!no.sp) { # fixed sp as specified
+        fit <- if (!no.sp) { # fixed sp as specified
             program <- sprintf("optim_pstpm2%s_fixedsp_%s",pen,suffix)
             .Call(program, args, package = "rstpm2") 
-        }
-        else if (length(sp)>1) {
+        } else if (length(sp)>1) {
             program <- sprintf("optim_pstpm2%s_multivariate_%s",pen,suffix)
             .Call(program, args, package = "rstpm2")
         } else {
             program <- sprintf("optim_pstpm2%s_first_%s",pen,suffix)
             .Call(program, args, package = "rstpm2")
         }
-    }
-    if (use.rcpp) {
-        fit <- rcpp_optim()
         fit$coef <- as.vector(fit$coef)
         names(fit$coef) <- names(init)
         init <- fit$coef
         if (!no.sp) sp <- fit$sp
         edf <- fit$edf
     } else {
-      edf <- -1
+        edf <- -1
     }
     negll <- function(beta) negllsp(beta,sp)
     gradnegll <- function(beta) gradnegllsp(beta,sp)

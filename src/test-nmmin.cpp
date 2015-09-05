@@ -217,17 +217,6 @@ namespace rstpm2 {
     for (int i=0; i<n; ++i) grad[i] = gr[i];
   }
   template<class T>
-  void optimgradient0(int n, double * beta, double * grad, void * void_obj) {
-    T * obj = static_cast<T*>(void_obj);
-    vec coef(beta,n);
-    vec gr = obj->gradient0(coef % obj->parscale);
-    if (obj->bfgs.trace>0) {
-      Rprintf("beta="); Rprint(coef);
-      Rprintf("gradient="); Rprint(gr);
-    };
-    for (int i=0; i<n; ++i) grad[i] = gr[i];
-  }
-  template<class T>
   void optimfunction_nlm(int n, double * beta, double * f, void * void_obj) {
     T * obj = static_cast<T*>(void_obj);
     vec coef(beta,n);
@@ -236,6 +225,7 @@ namespace rstpm2 {
   class BFGS2 : public BFGS {
   public:
     NumericMatrix calc_hessian(optimgr gr, void * ex) {
+      if (parscale.size()==0) REprintf("parscale is not defined for BFGS2::calc_hessian.\n");
       int n = coef.size();
       NumericVector df1(n);
       NumericVector df2(n);
@@ -263,6 +253,7 @@ namespace rstpm2 {
   class NelderMead2 : public NelderMead {
   public:
     NumericMatrix calc_hessian(optimfn fn, void * ex) {
+      if (parscale.size()==0) REprintf("parscale is not defined for NelderMead2::calc_hessian.");
       int n = coef.size();
       NumericMatrix hess(n,n);
       double tmpi,tmpj,f1,f0,fm1,hi,hj,fij,fimj,fmij,fmimj;
@@ -431,6 +422,7 @@ namespace rstpm2 {
       bool satisfied;
       NelderMead2 nm;
       nm.hessianp = false;
+      nm.parscale = parscale;
       do {
 	nm.optim(&optimfunction<This>, init, (void *) this);
 	vec vcoef(&nm.coef[0],n);
@@ -623,6 +615,17 @@ namespace rstpm2 {
     vec gradient(vec beta) {
       return Stpm2Type::gradient(beta) + Smooth::penalty_gradient(beta,sp);
     }
+    void optimWithConstraint(NumericVector init) {
+      bool satisfied;
+      if (this->bfgs.trace > 0) 
+	Rprintf("Starting optimization\n");
+      do {
+	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, this->init, (void *) this);
+	vec vcoef(&this->bfgs.coef[0],this->n);
+	satisfied = Stpm2Type::constraint(vcoef % this->parscale);
+	if (!satisfied) this->kappa *= 2.0;   
+      } while ((!satisfied) && this->kappa < 1.0e3);
+    }
     double first_step(double logsp) {
       sp[0] = exp(logsp);
       this->pre_process();
@@ -703,10 +706,11 @@ namespace rstpm2 {
     }
     SEXP optim_multivariate() {
       this->kappa = 10.0;
-      NelderMead nm;
+      NelderMead2 nm;
       nm.reltol = 1.0e-5;
       nm.maxit = 500;
       nm.hessianp = false;
+      nm.parscale = this->parscale;
       NumericVector logsp(sp.size());
       for (int i=0; i < sp.size(); ++i)
 	logsp[i] = log(sp[i]);
@@ -873,8 +877,6 @@ namespace rstpm2 {
     /** 
 	Objective function for a Gamma shared frailty
 	Assumes that weights == 1.
-	The implementation is incomplete, requiring either the use of optimisation without
-	gradients or the calculation of the gradients.
     **/
     double objective(vec beta) {
       int n = beta.size();
@@ -883,7 +885,7 @@ namespace rstpm2 {
       }
       vec vbeta(beta); // theta is the last parameter in beta
       vbeta.resize(n-1);
-      double theta = beta[n-1];
+      double theta = exp(beta[n-1]);
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
       vec h = Base::h(eta,etaD) + this->bhazard;
@@ -908,6 +910,7 @@ namespace rstpm2 {
 	    mi++;
 	    ll += log(h[*j]);
 	  }
+	if (this->bfgs.trace>0) Rprintf("ll(1)=%g\n",ll);
 	  sumH += H[*j];
 	  if (this->delayed == 1)
 	    sumHenter += H0[*j];
@@ -917,12 +920,15 @@ namespace rstpm2 {
 	// } else {
 	  ll -= (1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // default: conditional (Gutierrez 2002)
 	// }
+	if (this->bfgs.trace>0) Rprintf("ll(2)=%g\n",ll);
 	if (mi>0) {
 	  for (int k=1; k<=mi; ++k)
 	    ll += log(1.0+theta*(mi-k));
+	if (this->bfgs.trace>0) Rprintf("ll(3)=%g\n",ll);
 	}
       }
       ll -= constraint;
+	if (this->bfgs.trace>0) Rprintf("ll(4)=%g\n",ll);
       return -ll;  
     }
     vec gradient(vec beta) {
@@ -931,7 +937,7 @@ namespace rstpm2 {
       vec grconstraint = zeros<vec>(n);
       vec vbeta(beta); // theta is the last parameter in beta
       vbeta.resize(n-1);
-      double theta = beta[n-1];
+      double theta = exp(beta[n-1]);
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
       vec h = Base::h(eta,etaD) + this->bhazard;
@@ -978,32 +984,33 @@ namespace rstpm2 {
 	  for (int k=1; k<=mi; ++k)
 	    lastterm += (mi-k)/(1.0+theta*(mi-k));
 	}
-	gr(n) += log(1+theta*(sumH-sumHenter))/theta/theta - (1/theta+mi)*(sumH+sumHenter)/(1+theta*(sumH-sumHenter))+lastterm;
+	gr(n-1) += log(1+theta*(sumH-sumHenter))/theta/theta - (1/theta+mi)*(sumH+sumHenter)/(1+theta*(sumH-sumHenter))+lastterm;
       }
       return -gr;  
     }
-    // virtual void optimWithConstraint(NumericVector init) {
-    //   bool satisfied;
-    //   this->bfgs.hessianp = false;
-    //   if (this->bfgs.trace > 0) 
-    // 	Rprintf("Starting optimization\n");
-    //   do {
-    // 	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, this->init, (void *) this);
-    // 	vec vcoef(&this->bfgs.coef[0],this->n);
-    // 	satisfied = this->constraint(vcoef % this->parscale);
-    // 	if (!satisfied) this->kappa *= 2.0;   
-    //   } while ((!satisfied) && this->kappa < 1.0e3);
-    //   this->bfgs.hessian = this->bfgs.calc_hessian(&optimgradient<This>, this->parscale, (void *) this);
-    // }
+    void optimWithConstraint(NumericVector init) {
+      bool satisfied;
+      if (this->bfgs.trace > 0) 
+	Rprintf("Starting optimization\n");
+      do {
+	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, this->init, (void *) this);
+	vec vcoef(&this->bfgs.coef[0],this->n-1);
+	vec parscale(this->parscale);
+	parscale.resize(this->n-1);
+	satisfied = Base::constraint(vcoef % parscale);
+	if (!satisfied) this->kappa *= 2.0;   
+      } while ((!satisfied) && this->kappa < 1.0e3);
+    }
     IndexMap clusters;
   };
 
 
-  template<class Stpm2>
+  template<class Base>
   SEXP optim_stpm2_frailty(SEXP args) {
-    SharedFrailty<Stpm2> model(args);
+    SharedFrailty<Base> model(args);
     model.pre_process();
     model.optimWithConstraint(model.init);
+    model.bfgs.hessian = model.bfgs.calc_hessian(&optimgradient<SharedFrailty<Base> >, (void *) &model);
     model.post_process();
     return List::create(_("fail")=model.bfgs.fail, 
 			_("coef")=wrap(model.bfgs.coef),
