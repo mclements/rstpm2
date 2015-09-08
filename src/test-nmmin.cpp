@@ -106,12 +106,12 @@ namespace rstpm2 {
     vec link(vec S) { return log(-log(S)); }
     vec ilink(vec x) { return exp(-exp(x)); }
     vec h(vec eta, vec etaD) { return etaD % exp(eta); }
-    vec H(vec eta, vec etaD) { return exp(eta); }
-    mat gradH(vec eta, vec etaD, mat X, mat XD) { return rmult(X,exp(eta)); }
+    vec H(vec eta) { return exp(eta); }
+    mat gradH(vec eta, mat X) { return rmult(X,exp(eta)); }
     mat gradh(vec eta, vec etaD, mat X, mat XD) { 
       return rmult(XD, exp(eta)) + rmult(X, etaD % exp(eta));
     }
-    cube hessianH(vec beta, mat X, mat XD) { 
+    cube hessianH(vec beta, mat X) { 
       cube c(beta.size(), beta.size(), X.n_rows);
       for (size_t i=0; i<X.n_rows; ++i) 
 	c.slice(i) = X.row(i).t()*X.row(i)*exp(dot(X.row(i),beta)); 
@@ -134,8 +134,8 @@ namespace rstpm2 {
     vec ilink(vec x) { return expit(-x); }
     // vec h(vec eta, vec etaD) { return etaD % exp(eta) % expit(-eta); }
     vec h(vec eta, vec etaD) { return etaD % expit(eta); }
-    vec H(vec eta, vec etaD) { return -log(expit(-eta)); }
-    mat gradH(vec eta, vec etaD, mat X, mat XD) { 
+    vec H(vec eta) { return -log(expit(-eta)); }
+    mat gradH(vec eta, mat X) { 
       return rmult(X,expit(eta));
     }
     mat gradh(vec eta, vec etaD, mat X, mat XD) { 
@@ -145,7 +145,7 @@ namespace rstpm2 {
       return rmult(XD, expit(eta)) + 
 	rmult(X, expit(eta) % expit(-eta) % etaD);
     }
-    cube hessianH(vec beta, mat X, mat XD) { 
+    cube hessianH(vec beta, mat X) { 
       cube c(beta.size(), beta.size(), X.n_rows);
       for (size_t i=0; i<X.n_rows; ++i) {
 	colvec Xi = X.row(i);
@@ -169,9 +169,9 @@ namespace rstpm2 {
   public:
     vec link(vec S) { return -qnorm01(S); }
     vec ilink(vec eta) { return pnorm01(-eta); }
-    vec H(vec eta, vec etaD) { return -log(pnorm01(-eta)); }
+    vec H(vec eta) { return -log(pnorm01(-eta)); }
     vec h(vec eta, vec etaD) { return etaD % dnorm01(-eta) / pnorm01(-eta); }
-    mat gradH(vec eta, vec etaD, mat X, mat XD) { 
+    mat gradH(vec eta, mat X) { 
       return rmult(X, dnorm01(-eta) / pnorm01(-eta));
     }
     mat gradh(vec eta, vec etaD, mat X, mat XD) { 
@@ -185,9 +185,9 @@ namespace rstpm2 {
     vec link(vec S) { return -log(S); }
     vec ilink(vec x) { return exp(-x); }
     vec h(vec eta, vec etaD) { return etaD; }
-    vec H(vec eta, vec etaD) { return eta; }
+    vec H(vec eta) { return eta; }
     mat gradh(vec eta, vec etaD, mat X, mat XD) { return XD; }
-    mat gradH(vec eta, vec etaD, mat X, mat XD) { return X;  }
+    mat gradH(vec eta, mat X) { return X;  }
   };
 
   // wrappers to call class methods from C
@@ -213,6 +213,7 @@ namespace rstpm2 {
     vec gr = obj->gradient(coef % obj->parscale);
     if (obj->bfgs.trace>0) {
       Rprintf("gradient="); Rprint(gr);
+      Rprintf("fdgradient="); Rprint(obj->fdgradient(coef % obj->parscale));
     };
     for (int i=0; i<n; ++i) grad[i] = gr[i];
   }
@@ -306,7 +307,7 @@ namespace rstpm2 {
     using Link::gradH;
     Stpm2(SEXP sexp) : bfgs() {
       List list = as<List>(sexp);
-      init = as<NumericVector>(list["init"]);
+      bfgs.coef = init = as<NumericVector>(list["init"]);
       X = as<mat>(list["X"]); 
       XD = as<mat>(list["XD"]); 
       bhazard = as<vec>(list["bhazard"]);
@@ -318,7 +319,7 @@ namespace rstpm2 {
       wt0.set_size(1); wt0.fill(0.0);
       if (delayed == 1) {
 	X0 = as<mat>(list["X0"]); // optional
-	XD0 = as<mat>(list["XD0"]); // optional
+	// XD0 = as<mat>(list["XD0"]); // optional
 	wt0 = as<vec>(list["wt0"]); // optional
       }
       kappa = as<double>(list["kappa"]);
@@ -329,11 +330,11 @@ namespace rstpm2 {
       bfgs.parscale = parscale = as<vec>(list["parscale"]);
     }
     // negative log-likelihood
-    double objective(vec beta) {
+    virtual double objective(vec beta) {
       vec eta = X * beta;
       vec etaD = XD * beta;
       vec h = Link::h(eta,etaD) + bhazard;
-      vec H = Link::H(eta,etaD) + bhazard;
+      vec H = Link::H(eta) + bhazard;
       double constraint = kappa/2.0 * (sum(h % h % (h<0)) +
 				       sum(H % H % (H<0))); 
       vec eps = h*0.0 + 1.0e-16; 
@@ -342,22 +343,35 @@ namespace rstpm2 {
       double ll = sum(wt % event % log(h)) - sum(wt % H);
       if (delayed == 1) {
 	vec eta0 = X0 * beta;
-	vec etaD0 = XD0 * beta;
-	vec H0 = Link::H(eta0,etaD0);
+	// vec etaD0 = XD0 * beta;
+	vec H0 = Link::H(eta0);
 	constraint += kappa/2.0 * sum(H0 % H0 % (H0<0));
 	ll += sum(wt0 % H0);
       }
       return -ll + constraint;  // negative log-likelihood
     }
+    // finite-differencing of the gradient for the objective
+    vec fdgradient(vec beta, double eps = 1.0e-8) {
+      int n = beta.size();
+      vec grad(n);
+      for (int i=0; i<n; ++i) {
+	vec lower(beta);
+	vec upper(beta);
+	upper(i) += eps;
+	lower(i) -= eps;
+	grad(i) = (objective(upper) - objective(lower)) / 2.0 / eps;
+      }
+      return grad;
+    }
     // gradient of the negative log-likelihood
-    vec gradient(vec beta) {
+    virtual vec gradient(vec beta) {
       vec eta = X * beta;
       vec etaD = XD * beta;
       vec h = Link::h(eta,etaD) + bhazard;
       vec H = exp(eta);
       vec one = ones(h.size());
       vec eps = h*0.0 + 1.0e-16; // hack
-      mat gradH = Link::gradH(eta,etaD,X,XD);
+      mat gradH = Link::gradH(eta,X);
       mat gradh = Link::gradh(eta,etaD,X,XD);
       mat Xgrad = -rmult(gradH, one % (H>eps)) + rmult(gradh, event / h % (h>eps));
       mat Xconstraint = kappa * rmult(gradh,h%(h<eps)) +
@@ -367,9 +381,9 @@ namespace rstpm2 {
       rowvec vgr = sum(Xgrad,0);
       if (delayed == 1) {
 	vec eta0 = X0 * beta;
-	vec etaD0 = XD0 * beta;
-	mat gradH0 = Link::gradH(eta0, etaD0, X0, XD0); 
-	vec H0 = Link::H(eta0, etaD0); 
+	// vec etaD0 = XD0 * beta;
+	mat gradH0 = Link::gradH(eta0, X0); 
+	vec H0 = Link::H(eta0); 
 	mat Xconstraint0 = kappa * rmult(gradH0, H0 % (H<eps));
 	dconstraint += sum(Xconstraint0,0);
 	vgr += sum(rmult(gradH0, wt0),0);
@@ -384,12 +398,12 @@ namespace rstpm2 {
       vec eta = X * beta;
       vec etaD = XD * beta;
       vec h = Link::h(eta, etaD) + bhazard;
-      vec H = Link::H(eta, etaD);
+      vec H = Link::H(eta);
       bool condition = all((h>0) % (H>0));
       if (delayed == 1) {
 	vec eta0 = X0 * beta;
-	vec etaD0 = XD0 * beta;
-	vec H0 = Link::H(eta0, etaD0);
+	// vec etaD0 = XD0 * beta;
+	vec H0 = Link::H(eta0);
 	condition = condition && all(H0>0);
       }
       return condition;
@@ -402,10 +416,6 @@ namespace rstpm2 {
 	bfgs.coef[i] *= parscale[i];
 	init[i] *= parscale[i];
       }
-    }
-    void optim(NumericVector init) {
-      bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
-      bfgs.hessian = bfgs.calc_hessian(&optimgradient<This>, (void *) this);
     }
     void optimWithConstraint(NumericVector init) {
       bool satisfied;
@@ -434,32 +444,13 @@ namespace rstpm2 {
       bfgs.hessian = nm.hessian;
     }
     NumericVector init;
-    mat X, XD, X0, XD0; 
+    mat X, XD, X0; 
     vec bhazard,wt,wt0,event,time,parscale;
     double kappa;
     int delayed, n;
     BFGS2 bfgs;
   };
 
-  template<class Stpm2>
-  SEXP optim_stpm2(SEXP args) {
-    Stpm2 model(args);
-    model.pre_process();
-    model.optimWithConstraint(model.init);
-    model.bfgs.hessian = model.bfgs.calc_hessian(&optimgradient<Stpm2>, (void *) &model);
-    model.post_process();
-    return List::create(_("fail")=model.bfgs.fail, 
-			_("coef")=wrap(model.bfgs.coef),
-			_("hessian")=wrap(model.bfgs.hessian));
-  }
-  RcppExport SEXP optim_stpm2_ph(SEXP args) {
-    return optim_stpm2<Stpm2<LogLogLink> >(args); }
-  RcppExport SEXP optim_stpm2_po(SEXP args) {
-    return optim_stpm2<Stpm2<LogitLink> >(args); }
-  RcppExport SEXP optim_stpm2_probit(SEXP args) {
-    return optim_stpm2<Stpm2<ProbitLink> >(args); }
-  RcppExport SEXP optim_stpm2_ah(SEXP args) {
-    return optim_stpm2<Stpm2<LogLink> >(args); }
   // RcppExport SEXP optim_stpm2_nlm(SEXP args) {
   //   stpm2 data(args);
   //   data.init = ew_div(data.init,data.parscale);
@@ -737,127 +728,6 @@ namespace rstpm2 {
   //   *f = pstpm2_step_multivariate<Smooth,Stpm2>(n, logsp, ex);
   // };
 
-  RcppExport SEXP optim_pstpm2LogH_first_ph(SEXP args) {
-    Pstpm2<Stpm2<LogLogLink>,SmoothLogH> model(args);
-    return model.optim_first();
-  }
-  RcppExport SEXP optim_pstpm2Haz_first_ph(SEXP args) {
-    Pstpm2<Stpm2<LogLogLink>,SmoothHaz> model(args);
-    return model.optim_first();
-  }
-  RcppExport SEXP optim_pstpm2LogH_first_po(SEXP args) {
-    Pstpm2<Stpm2<LogitLink>,SmoothLogH> model(args);
-    return model.optim_first();
-  }
-  RcppExport SEXP optim_pstpm2Haz_first_po(SEXP args) {
-    Pstpm2<Stpm2<LogitLink>,SmoothHaz> model(args);
-    return model.optim_first();
-  }
-  RcppExport SEXP optim_pstpm2LogH_first_probit(SEXP args) {
-    Pstpm2<Stpm2<ProbitLink>,SmoothLogH> model(args);
-    return model.optim_first();
-  }
-  RcppExport SEXP optim_pstpm2Haz_first_probit(SEXP args) {
-    Pstpm2<Stpm2<ProbitLink>,SmoothHaz> model(args);
-    return model.optim_first();
-  }
-  RcppExport SEXP optim_pstpm2LogH_first_ah(SEXP args) {
-    Pstpm2<Stpm2<LogLink>,SmoothLogH> model(args);
-    return model.optim_first();
-  }
-  RcppExport SEXP optim_pstpm2LogH_multivariate_ph(SEXP args) {
-    Pstpm2<Stpm2<LogLogLink>,SmoothLogH> model(args);
-    return model.optim_multivariate();
-  }
-  RcppExport SEXP optim_pstpm2Haz_multivariate_ph(SEXP args) {
-    Pstpm2<Stpm2<LogLogLink>,SmoothHaz> model(args);
-    return model.optim_multivariate();
-  }
-  RcppExport SEXP optim_pstpm2LogH_multivariate_po(SEXP args) {
-    Pstpm2<Stpm2<LogitLink>,SmoothLogH> model(args);
-    return model.optim_multivariate();
-  }
-  RcppExport SEXP optim_pstpm2Haz_multivariate_po(SEXP args) {
-    Pstpm2<Stpm2<LogitLink>,SmoothHaz> model(args);
-    return model.optim_multivariate();
-  }
-  RcppExport SEXP optim_pstpm2LogH_multivariate_probit(SEXP args) {
-    Pstpm2<Stpm2<ProbitLink>,SmoothLogH> model(args);
-    return model.optim_multivariate();
-  }
-  RcppExport SEXP optim_pstpm2Haz_multivariate_probit(SEXP args) {
-    Pstpm2<Stpm2<ProbitLink>,SmoothHaz> model(args);
-    return model.optim_multivariate();
-  }
-  RcppExport SEXP optim_pstpm2LogH_multivariate_ah(SEXP args) {
-    Pstpm2<Stpm2<LogLink>,SmoothLogH> model(args);
-    return model.optim_multivariate();
-  }
-
-  // template<class Smooth, class Stpm2>
-  // SEXP optim_pstpm2_fixedsp(SEXP args) { 
-  //
-  //   typedef pstpm2<Smooth,Stpm2> Data;
-  //   Data data(args);
-  //   BFGS2<Data> bfgs;
-  //   bfgs.coef = data.init;
-  //   bfgs.reltol = data.reltol;
-  //
-  //   bfgs.optimWithConstraint(pfminfn<Smooth,Stpm2>, pgrfn<Smooth,Stpm2>, data.init, (void *) &data, fminfn_constraint<Data>);
-  //
-  //   NumericMatrix hessian0 = bfgs.calc_hessian(grfn<Data>, parscale, (void *) &data);
-  //   double edf = trace(solve(as<mat>(bfgs.hessian),as<mat>(hessian0)));
-  //
-  //   return List::create(_("sp")=wrap(data.sp),
-  // 			_("coef")=wrap(bfgs.coef),
-  // 			_("hessian")=wrap(bfgs.hessian),
-  // 			_("edf")=wrap(edf));
-  // }
-  //
-  // RcppExport SEXP optim_pstpm2LogH_fixedsp_ph(SEXP args) {
-  //   return optim_pstpm2_fixedsp<SmoothLogH,stpm2>(args); }
-  // RcppExport SEXP optim_pstpm2Haz_fixedsp_ph(SEXP args) {
-  //   return optim_pstpm2_fixedsp<SmoothHaz,stpm2>(args); }
-  // RcppExport SEXP optim_pstpm2LogH_fixedsp_po(SEXP args) {
-  //   return optim_pstpm2_fixedsp<SmoothLogH,stpm2PO>(args); }
-  // RcppExport SEXP optim_pstpm2Haz_fixedsp_po(SEXP args) {
-  //   return optim_pstpm2_fixedsp<SmoothHaz,stpm2PO>(args); }
-  // RcppExport SEXP optim_pstpm2LogH_fixedsp_probit(SEXP args) { 
-  //   return optim_pstpm2_fixedsp<SmoothLogH,stpm2Probit>(args); }
-  // RcppExport SEXP optim_pstpm2Haz_fixedsp_probit(SEXP args) {
-  //   return optim_pstpm2_fixedsp<SmoothHaz,stpm2Probit>(args); }
-  // RcppExport SEXP optim_pstpm2LogH_fixedsp_ah(SEXP args) {
-  //   return optim_pstpm2_fixedsp<SmoothLogH,stpm2AH>(args); }
-  //
-  // template<class Smooth, class Stpm2>
-  // SEXP test_pstpm2(SEXP args) { 
-  //
-  //   pstpm2<Smooth,Stpm2> data(args);
-  //   int n = data.init.size();
-  //
-  //   NumericVector init = ew_div(data.init,data.parscale);
-  //
-  //   double pfmin = pfminfn<Smooth,Stpm2>(n,&init[0],(void *) &data);
-  //   NumericVector gr(n);
-  //   pgrfn<Smooth,Stpm2>(n,&init[0], &gr[0], (void *) &data);
-  //
-  //   init = ew_mult(init,data.parscale);
-  //
-  //   return List::create(_("sp")=wrap(data.sp),
-  // 			_("pfmin")=wrap(pfmin),
-  // 			_("gr")=wrap(gr)
-  // 			);
-  //
-  // }
-  //
-  // RcppExport SEXP test_pstpm2LogH(SEXP args) {
-  //   return test_pstpm2<SmoothLogH,stpm2>(args);
-  // }
-  //
-  // RcppExport SEXP test_pstpm2Haz(SEXP args) {
-  //   return test_pstpm2<SmoothHaz,stpm2>(args);
-  // }
-
   /** 
       Extension of stpm2 and pstpm2 to include shared frailties with a cluster variable
   **/
@@ -870,6 +740,8 @@ namespace rstpm2 {
     SharedFrailty(SEXP sexp) : Base(sexp) {
       List list = as<List>(sexp);
       IntegerVector cluster = as<IntegerVector>(list["cluster"]);
+      LogicalVector ind0 = as<LogicalVector>(list["ind0"]);
+      IntegerVector map0 = as<IntegerVector>(list["map0"]);
       // wragged array indexed by a map of vectors
       for (int id=0; id<cluster.size(); ++id) {
 	clusters[cluster[id]].push_back(id);
@@ -890,7 +762,7 @@ namespace rstpm2 {
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
       vec h = Base::h(eta,etaD) + this->bhazard;
-      vec H = Base::H(eta,etaD) + this->bhazard;
+      vec H = Base::H(eta) + this->bhazard;
       double constraint = this->kappa/2.0 * (sum(h % h % (h<0)) + sum(H % H % (H<0)));
       vec eps = h*0.0 + 1.0e-16; 
       h = max(h,eps);
@@ -898,8 +770,8 @@ namespace rstpm2 {
       vec H0;
       if (this->delayed == 1) {
 	vec eta0 = this->X0 * vbeta;
-	vec etaD0 = this->XD0 * vbeta;
-	H0 = Base::H(eta0,etaD0);
+	// vec etaD0 = this->XD0 * vbeta;
+	H0 = Base::H(eta0);
 	constraint += this->kappa/2.0 * sum(H0 % H0 % (H0<0));
       }
       double ll = 0.0;
@@ -912,8 +784,8 @@ namespace rstpm2 {
 	    ll += log(h[*j]);
 	  }
 	  sumH += H[*j];
-	  if (this->delayed == 1)
-	    sumHenter += H0[*j];
+	  if (this->delayed == 1 && this->ind0[*j])
+	    sumHenter += H0[this->map0[*j]];
 	}
 	// if (joint) {
 	//   ll -= (1.0/theta+mi)*log(1.0+theta*(sumH)) - 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
@@ -938,9 +810,9 @@ namespace rstpm2 {
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
       vec h = Base::h(eta,etaD) + this->bhazard;
-      vec H = Base::H(eta,etaD) + this->bhazard;
+      vec H = Base::H(eta) + this->bhazard;
       mat gradh = Base::gradh(eta,etaD,this->X,this->XD);
-      mat gradH = Base::gradH(eta,etaD,this->X,this->XD);
+      mat gradH = Base::gradH(eta,this->X);
       vec eps = h*0.0 + 1.0e-16; 
       h = max(h,eps);
       H = max(H,eps);
@@ -948,9 +820,9 @@ namespace rstpm2 {
       mat gradH0;
       if (this->delayed == 1) {
 	vec eta0 = this->X0 * vbeta;
-	vec etaD0 = this->XD0 * vbeta;
-	H0 = Base::H(eta0,etaD0);
-	gradH0 = Base::gradH(eta0,etaD0,this->X0,this->XD0);
+	// vec etaD0 = this->XD0 * vbeta;
+	H0 = Base::H(eta0);
+	gradH0 = Base::gradH(eta0,this->X0);
       }
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
 	int mi=0;
@@ -965,10 +837,11 @@ namespace rstpm2 {
 	  gradi += gradh.row(*j).t() / h(*j) * this->event(*j);
 	  if (this->event(*j)==1) 
 	    mi++;
-	  if (this->delayed == 1) {
-	    sumHenter += H0(*j);
-	    gradH0i += gradH0.row(*j).t();
-	    grconstraint += this->kappa * (gradH0.row(*j).t() * H(*j) * (H(*j)<0));
+	  if (this->delayed == 1  && this->ind0[*j]) {
+	    int jj = this->map0[*j];
+	    sumHenter += H0(jj);
+	    gradH0i += gradH0.row(jj).t();
+	    grconstraint += this->kappa * (gradH0.row(jj).t() * H0(jj) * (H0(jj)<0));
 	  }
 	  grconstraint += this->kappa * ((gradh.row(*j).t() * h(*j) * (h(*j)<0)) + (gradH.row(*j).t() * H(*j) * (H(*j)<0)));
 	}
@@ -978,9 +851,14 @@ namespace rstpm2 {
 	double lastterm = 0.0;
 	if (mi>0) {
 	  for (int k=1; k<=mi; ++k)
-	    lastterm += (mi-k)/(1.0+theta*(mi-k));
+	    lastterm += theta*(mi-k)/(1.0+theta*(mi-k));
 	}
-	gr(n-1) += log(1+theta*(sumH-sumHenter))/theta/theta - (1/theta+mi)*(sumH+sumHenter)/(1+theta*(sumH-sumHenter))+lastterm;
+	gr(n-1) += log(1.0+theta*(sumH-sumHenter))/theta - 
+	  (1.0/theta+mi)*theta*(sumH-sumHenter)/(1.0+theta*(sumH-sumHenter)) + 
+	  lastterm;
+      }
+      if (this->bfgs.trace>0) {
+	Rprintf("Calculating fdgradient:\n"); Rprint(this->fdgradient(beta)); Rprintf("(=fdgradient)\n");
       }
       return -gr;  
     }
@@ -1014,120 +892,115 @@ namespace rstpm2 {
       this->bfgs.coef = nm.coef;
       this->bfgs.hessian = nm.hessian;
     }
+    LogicalVector ind0;
+    IntegerVector map0;
     IndexMap clusters;
   };
 
-
-  template<class Base>
-  SEXP optim_stpm2_frailty(SEXP args) {
-    SharedFrailty<Base> model(args);
-    model.pre_process();
-    model.optimWithConstraint(model.init);
-    model.bfgs.hessian = model.bfgs.calc_hessian(&optimgradient<SharedFrailty<Base> >, (void *) &model);
-    model.post_process();
-    return List::create(_("fail")=model.bfgs.fail, 
-			_("coef")=wrap(model.bfgs.coef),
-			_("hessian")=wrap(model.bfgs.hessian));
+  template<class T>
+  SEXP stpm2_model_output_(SEXP args) {
+    T model(args);
+    List list = as<List>(args);
+    std::string return_type = as<std::string>(list["return_type"]);
+    vec beta(&model.init[0],model.n);
+    if (return_type == "optim") {
+      model.pre_process();
+      model.optimWithConstraint(model.init);
+      model.bfgs.hessian = model.bfgs.calc_hessian(&optimgradient<T>, (void *) &model);
+      model.post_process();
+      return List::create(_("fail")=model.bfgs.fail, 
+			  _("coef")=wrap(model.bfgs.coef),
+			  _("hessian")=wrap(model.bfgs.hessian));
+    }
+    else if (return_type == "objective")
+      return wrap(model.objective(beta));
+    else if (return_type == "gradient")
+      return wrap(model.gradient(beta));
+    else if (return_type == "constraint")
+      return wrap(model.constraint(beta));
+    else {
+      REprintf("Unknown return_type.\n");
+      return wrap(-1);
+    }
   }
-  RcppExport SEXP optim_stpm2_frailty_ph(SEXP args) {
-    return optim_stpm2_frailty<Stpm2<LogLogLink> >(args); }
-  RcppExport SEXP optim_stpm2_frailty_po(SEXP args) {
-    return optim_stpm2_frailty<Stpm2<LogitLink> >(args); }
-  RcppExport SEXP optim_stpm2_frailty_probit(SEXP args) {
-    return optim_stpm2_frailty<Stpm2<ProbitLink> >(args); }
-  RcppExport SEXP optim_stpm2_frailty_ah(SEXP args) {
-    return optim_stpm2_frailty<Stpm2<LogLink> >(args); }
-
-
-  /** 
-      Utility function for calculating a gamma frailty log-likelihood within R code 
-   **/
-  RcppExport SEXP llgammafrailty(SEXP _theta, SEXP _h, SEXP _H, SEXP _d,
-				    SEXP _cluster) {
-    double theta = as<double>(_theta);
-    NumericVector h = as<NumericVector>(_h);
-    NumericVector H = as<NumericVector>(_H);
-    IntegerVector d = as<IntegerVector>(_d);
-    IntegerVector cluster = as<IntegerVector>(_cluster);
-    double ll = 0.0;
-    // wragged array indexed by a map of vectors
-    typedef std::vector<int> Index;
-    typedef std::map<int,Index> IndexMap;
-    IndexMap clusters;
-    for (int i=0; i<cluster.size(); ++i) {
-      clusters[cluster[i]].push_back(i);
+  template<class T>
+  SEXP pstpm2_model_output_(SEXP args) {
+    T model(args);
+    List list = as<List>(args);
+    std::string return_type = as<std::string>(list["return_type"]);
+    vec beta(&model.init[0],model.n);
+    if (return_type == "optim_fixed")
+      return(model.optim_fixed());
+    else if (return_type == "optim_first")
+      return(model.optim_first());
+    else if (return_type == "optim_multivariate")
+      return(model.optim_multivariate());
+    else if (return_type == "objective")
+      return wrap(model.objective(beta));
+    else if (return_type == "gradient")
+      return wrap(model.gradient(beta));
+    else if (return_type == "constraint")
+      return wrap(model.constraint(beta));
+    else {
+      REprintf("Unknown return_type.\n");
+      return wrap(-1);
     }
-    for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
-      int mi=0;
-      double sumH = 0.0;
-      for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
-	if (d[*j]==1) {
-	  mi++;
-	  ll += log(h[*j]);
-	}
-	sumH += H[*j];
-	// sumHenter += Henter[*j];
-      }
-      ll -= (1.0/theta+mi)*log(1.0+theta*sumH);
-      // ll += 1.0/theta*log(1.0+theta*sumHenter);
-      if (mi>0) {
-	int k=1;
-	for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
-	  if (d[*j]==1) {
-	    ll += log(1.0+theta*(mi-k));
-	    k++;
-	  }
-	}
-      }
-    }
-    return wrap(ll);
   }
-
-  /** 
-      Utility function for calculating a gamma frailty log-likelihood with delayed entry within R code 
-   **/
-  RcppExport SEXP llgammafrailtydelayed(SEXP _theta, SEXP _h, SEXP _H, SEXP _H0, SEXP _d,
-				    SEXP _cluster) {
-    double theta = as<double>(_theta);
-    NumericVector h = as<NumericVector>(_h);
-    NumericVector H = as<NumericVector>(_H);
-    NumericVector H0 = as<NumericVector>(_H0); // assumes that _H0 is zero for data not left truncated
-    IntegerVector d = as<IntegerVector>(_d);
-    IntegerVector cluster = as<IntegerVector>(_cluster);
-    double ll = 0.0;
-    // wragged array indexed by a map of vectors
-    typedef std::vector<int> Index;
-    typedef std::map<int,Index> IndexMap;
-    IndexMap clusters;
-    for (int i=0; i<cluster.size(); ++i) {
-      clusters[cluster[i]].push_back(i);
-    }
-    for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
-      int mi=0;
-      double sumH = 0.0, sumHenter = 0.0;
-      for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
-	if (d[*j]==1) {
-	  mi++;
-	  ll += log(h[*j]);
-	}
-	sumH += H[*j];
-	sumHenter += H0[*j];
-      }
-      ll -= (1.0/theta+mi)*log(1.0+theta*(sumH-sumHenter));
-      // ll += 1.0/theta*log(1.0+theta*sumHenter);
-      if (mi>0) {
-	int k=1;
-	for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
-	  if (d[*j]==1) {
-	    ll += log(1.0+theta*(mi-k));
-	    k++;
-	  }
-	}
+  RcppExport SEXP model_output(SEXP args) {
+    List list = as<List>(args);
+    std::string link = as<std::string>(list["link"]);
+    std::string type = as<std::string>(list["type"]);
+    if (type=="stpm2") {
+      if (link == "PH")
+	return stpm2_model_output_<Stpm2<LogLogLink> >(args);
+      else if (link == "PO")
+	return stpm2_model_output_<Stpm2<LogitLink> >(args);
+      else if (link == "AH")
+	return stpm2_model_output_<Stpm2<LogLink> >(args);
+      else if (link == "probit")
+	return stpm2_model_output_<Stpm2<ProbitLink> >(args);
+      else {
+	REprintf("Unknown link function.\n");
+	return wrap(-1);
       }
     }
-    return wrap(ll);
+    else if (type=="pstpm2") {
+      if (link == "PH")
+	return pstpm2_model_output_<Pstpm2<Stpm2<LogLogLink>,SmoothLogH> >(args);
+      else if (link == "PO")
+	return pstpm2_model_output_<Pstpm2<Stpm2<LogitLink>,SmoothLogH> >(args);
+      else if (link == "AH")
+	return pstpm2_model_output_<Pstpm2<Stpm2<LogLink>,SmoothLogH> >(args);
+      else if (link == "probit")
+	return pstpm2_model_output_<Pstpm2<Stpm2<ProbitLink>,SmoothLogH> >(args);
+      else {
+	REprintf("Unknown link function.\n");
+	return wrap(-1);
+      }
+    }
+    else if (type=="stpm2_frailty") {
+      if (link == "PH")
+	return stpm2_model_output_<SharedFrailty<Stpm2<LogLogLink> > >(args);
+      else if (link == "PO")
+	return stpm2_model_output_<SharedFrailty<Stpm2<LogitLink> > >(args);
+      else if (link == "AH")
+	return stpm2_model_output_<SharedFrailty<Stpm2<LogLink> > >(args);
+      else if (link == "probit")
+	return stpm2_model_output_<SharedFrailty<Stpm2<ProbitLink> > >(args);
+      else {
+	REprintf("Unknown link function.\n");
+	return wrap(-1);
+      }
+    }
+    else {
+      REprintf("Unknown model type.\n");
+      return wrap(-1);
+    }
   }
 
+
+  // Proof of concept for a Weibull cure model
+  
   struct CureModel {
     int n0, n1, n2;
     mat Xshape, Xscale, Xcure;
@@ -1177,11 +1050,7 @@ namespace rstpm2 {
 			_("hessian")=wrap(nm.hessian));
   }
 
-
-
   // R CMD INSTALL ~/src/R/microsimulation
   // R -q -e "require(microsimulation); .Call('test_nmmin',1:2,PACKAGE='microsimulation')"
-
-  // .Call("optim_stpm2",init,X,XD,rep(bhazard,nrow(X)),wt,ifelse(event,1,0),package="rstpm2")
 
 } // anonymous namespace
