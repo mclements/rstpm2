@@ -69,6 +69,22 @@ summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
 head(predict(fit,se.fit=TRUE)) 
 pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)
 
+require(rstpm2)
+require(frailtypack)
+data(dataAdditive)
+mod1 <- frailtyPenal(Surv(t1,t2,event)~cluster(group)+var1,data=dataAdditive,
+                     n.knots=8,kappa1=10000,cross.validation=TRUE)
+system.time(mod2 <- stpm2(Surv(t1,t2,event)~var1,
+                          data=dataAdditive,
+                          cluster=dataAdditive$group))
+summary(mod2)
+coef2 <- coef(summary(mod2))
+theta <- exp(coef2[nrow(coef2),1])
+se.logtheta <- coef2[nrow(coef2),2]
+se.theta <- theta*se.logtheta
+test.statistic <- 1/se.logtheta
+pchisq(test.statistic,df=1,lower.tail=FALSE)/2
+
 refresh
 require(rstpm2)
 require(ICE)

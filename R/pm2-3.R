@@ -436,7 +436,7 @@ stpm2 <- function(formula, data,
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE, use.rcpp= TRUE,
                      reltol=1.0e-8, trace = 0,
                      link.type=c("PH","PO","probit","AH"),
-                     frailty = FALSE, cluster = NULL, logtheta=-6,
+                     frailty = !is.null(cluster), cluster = NULL, logtheta=-6,
                      contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
@@ -751,6 +751,32 @@ stpm2 <- function(formula, data,
       out@vcov <- sandwich.stpm2(out)
     return(out)
   }
+setClass("summary.stpm2", representation(frailty="logical",theta="list"), contains="summary.mle2")
+## setAs("summary.stpm2", "summary.mle2",
+##       function(from,to) new("summary.mle2", call=from@call, coef=from@call, m2logL=from@m2logL))
+setMethod("show", "stpm2", function(object) show(as(object,"mle2")))
+setMethod("show", "summary.stpm2", function(object) show(as(object,"summary.mle2")))
+setMethod("summary", "stpm2",
+          function(object) {
+              newobj <- as(summary(as(object,"mle2")),"summary.stpm2")
+              newobj@frailty <- object@frailty
+              if (object@frailty) {
+                  coef <- coef(newobj)
+                  theta <- exp(coef[nrow(coef),1])
+                  se.logtheta <- coef[nrow(coef),2]
+                  se.theta <- theta*se.logtheta
+                  test.statistic <- 1/se.logtheta
+                  p.value <- pchisq(test.statistic,df=1,lower.tail=FALSE)/2
+                  newobj@theta <- list(theta=theta, se.theta=se.theta, p.value=p.value)
+              } else newobj@theta <- NULL
+              newobj })
+setMethod("show", "summary.stpm2",
+          function(object) {
+              show(as(object,"summary.mle2"))
+              if (object@frailty)
+                  cat(sprintf("\ntheta=%g\tse=%g\tp=%g\n",
+                              object@theta$theta,object@theta$se.theta,object@theta$p.value))
+          })
 setMethod("predictnl", "stpm2",
           function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"),...)
   {
@@ -1051,7 +1077,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=NULL, trace = 0,
                    link.type=c("PH","PO","probit","AH"),
-                   frailty=FALSE, cluster = NULL, logtheta=-6,
+                   frailty=!is.null(cluster), cluster = NULL, logtheta=-6,
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
