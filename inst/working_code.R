@@ -18,6 +18,8 @@
 ##   require(bbmle)
 ## }
 
+
+
 require(abind)
 X <- matrix(seq(0,1,length=5*10),nrow=10)
 beta <- seq(0,1,length=5)

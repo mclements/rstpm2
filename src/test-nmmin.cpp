@@ -384,7 +384,8 @@ namespace rstpm2 {
 	// vec etaD0 = XD0 * beta;
 	mat gradH0 = Link::gradH(eta0, X0); 
 	vec H0 = Link::H(eta0); 
-	mat Xconstraint0 = kappa * rmult(gradH0, H0 % (H<eps));
+	vec eps0 = H0*0.0 + 1.0e-16; // hack
+	mat Xconstraint0 = kappa * rmult(gradH0, H0 % (H0<eps0));
 	dconstraint += sum(Xconstraint0,0);
 	vgr += sum(rmult(gradH0, wt0),0);
       }
@@ -394,7 +395,7 @@ namespace rstpm2 {
       }
       return gr;
     }
-    bool constraint(vec beta) {
+    virtual bool feasible(vec beta) {
       vec eta = X * beta;
       vec etaD = XD * beta;
       vec h = Link::h(eta, etaD) + bhazard;
@@ -424,7 +425,7 @@ namespace rstpm2 {
       do {
 	bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
 	vec vcoef(&bfgs.coef[0],n);
-	satisfied = constraint(vcoef % parscale);
+	satisfied = feasible(vcoef % parscale);
 	if (!satisfied) kappa *= 2.0;   
       } while ((!satisfied) && kappa < 1.0e3);
     }
@@ -436,7 +437,7 @@ namespace rstpm2 {
       do {
 	nm.optim(&optimfunction<This>, init, (void *) this);
 	vec vcoef(&nm.coef[0],n);
-	satisfied = constraint(vcoef % parscale);
+	satisfied = feasible(vcoef % parscale);
 	if (!satisfied) kappa *= 2.0;   
       } while ((!satisfied) && kappa < 1.0e3);
       nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this);
@@ -614,7 +615,7 @@ namespace rstpm2 {
       do {
 	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, this->init, (void *) this);
 	vec vcoef(&this->bfgs.coef[0],this->n);
-	satisfied = Stpm2Type::constraint(vcoef % this->parscale);
+	satisfied = Stpm2Type::feasible(vcoef % this->parscale);
 	if (!satisfied) this->kappa *= 2.0;   
       } while ((!satisfied) && this->kappa < 1.0e3);
     }
@@ -862,16 +863,19 @@ namespace rstpm2 {
       }
       return -gr;  
     }
+    bool feasible(vec beta) {
+      vec coef(beta);
+      coef.resize(this->n-1);
+      return Base::feasible(coef);
+    }
     void optimWithConstraint(NumericVector init) {
       bool satisfied;
       if (this->bfgs.trace > 0) 
 	Rprintf("Starting optimization\n");
       do {
 	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, this->init, (void *) this);
-	vec vcoef(&this->bfgs.coef[0],this->n-1); 
-	vec parscale(this->parscale);
-	parscale.resize(this->n-1);
-	satisfied = Base::constraint(vcoef % parscale);
+	vec vcoef(&this->bfgs.coef[0],this->n); 
+	satisfied = feasible(vcoef % this->parscale);
 	if (!satisfied) this->kappa *= 2.0;   
       } while ((!satisfied) && this->kappa < 1.0e3);
     }
@@ -882,10 +886,8 @@ namespace rstpm2 {
       nm.parscale = this->parscale;
       do {
 	nm.optim(&optimfunction<This>, this->init, (void *) this);
-	vec vcoef(&nm.coef[0],this->n-1);
-	vec parscale(this->parscale);
-	parscale.resize(this->n-1);
-	satisfied = Base::constraint(vcoef % parscale);
+	vec vcoef(&this->bfgs.coef[0],this->n); 
+	satisfied = feasible(vcoef % this->parscale);
 	if (!satisfied) this->kappa *= 2.0;   
       } while ((!satisfied) && this->kappa < 1.0e3);
       nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this);
@@ -916,8 +918,8 @@ namespace rstpm2 {
       return wrap(model.objective(beta));
     else if (return_type == "gradient")
       return wrap(model.gradient(beta));
-    else if (return_type == "constraint")
-      return wrap(model.constraint(beta));
+    else if (return_type == "feasible")
+      return wrap(model.feasible(beta));
     else {
       REprintf("Unknown return_type.\n");
       return wrap(-1);
@@ -940,7 +942,9 @@ namespace rstpm2 {
     else if (return_type == "gradient")
       return wrap(model.gradient(beta));
     else if (return_type == "constraint")
-      return wrap(model.constraint(beta));
+      return wrap(model.feasible(beta));
+    else if (return_type == "feasible")
+      return wrap(model.feasible(beta));
     else {
       REprintf("Unknown return_type.\n");
       return wrap(-1);
@@ -987,6 +991,20 @@ namespace rstpm2 {
 	return stpm2_model_output_<SharedFrailty<Stpm2<LogLink> > >(args);
       else if (link == "probit")
 	return stpm2_model_output_<SharedFrailty<Stpm2<ProbitLink> > >(args);
+      else {
+	REprintf("Unknown link function.\n");
+	return wrap(-1);
+      }
+    }
+    else if (type=="pstpm2_frailty") {
+      if (link == "PH")
+	return pstpm2_model_output_<Pstpm2<SharedFrailty<Stpm2<LogLogLink> >,SmoothLogH> >(args);
+      else if (link == "PO")
+	return pstpm2_model_output_<Pstpm2<SharedFrailty<Stpm2<LogitLink> >,SmoothLogH> >(args);
+      else if (link == "AH")
+	return pstpm2_model_output_<Pstpm2<SharedFrailty<Stpm2<LogLink> >,SmoothLogH> >(args);
+      else if (link == "probit")
+	return pstpm2_model_output_<Pstpm2<SharedFrailty<Stpm2<ProbitLink> >,SmoothLogH> >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);

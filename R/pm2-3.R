@@ -614,65 +614,77 @@ stpm2 <- function(formula, data,
                  kappa=1, trace = trace, cluster=cluster, map0 = map0 - 1L, ind0 = ind0, link=link.type,
                  type=if (frailty) "stpm2_frailty" else "stpm2", return_type="optim")
     negll <- function(beta,kappa=1) {
-        if (use.rcpp || frailty) {
+        if (!interval) {
             localargs <- args
             localargs$kappa <- kappa
             localargs$return_type <- "objective"
             return(.Call("model_output", localargs, package="rstpm2"))
-        }
-        eta <- as.vector(pars$X %*% beta)
-        etaD <- as.vector(pars$XD %*% beta)
-        H <- link$H(eta) 
-        h <- link$h(eta,etaD) + bhazard
-        constraint <- kappa*sum(((pars$wt*h)[h<0])^2)
-        h[h<0] <- 1e-16
-        ll <- sum(pars$wt[pars$event]*log(h[pars$event])) - sum(pars$wt*H) - constraint/2
-        if (delayed) { # includes counting and interval types
+        } else {
+        ## eta <- as.vector(pars$X %*% beta)
+        ## etaD <- as.vector(pars$XD %*% beta)
+        ## H <- link$H(eta) 
+        ## h <- link$h(eta,etaD) + bhazard
+        ## constraint <- 0 + kappa*sum(((pars$wt*h)[h<0])^2) + kappa*sum(((pars$wt*H)[H<0])^2)
+        ## h[h<0] <- 1e-16
+        ## ll <- sum(pars$wt[pars$event]*log(h[pars$event])) - sum(pars$wt*H) - constraint/2
+        ## if (delayed) { # includes counting and interval types
             eta0 <- as.vector(pars0$X %*% beta)
-            ## etaD0 <- as.vector(pars0$XD %*% beta)[pars0$ind]
+            etaD0 <- as.vector(pars0$XD %*% beta)[pars0$ind]
             H0 <- link$H(eta0)
-            ll <- ll + sum(pars0$wt*H0)
-        }
-        if (interval) {
+        ##     constraint <- constraint + kappa*sum(((pars0$wt*H0)[H0<0])^2)
+        ##     ll <- ll + sum(pars0$wt*H0)
+        ## }
+        ## if (interval) {
             ## initial values will be a problem
             h0 <- link$h(eta0,etaD0)
             ll <- 0
+            constraint <- 0
             i <- ttype==0 # right censoring
             ll <- ll - sum((H0*wt0)[i])
+            constraint <- constraint + kappa*sum(ifelse(i,((wt0*H0)[H0<0])^2,0))
             i <- ttype==1 # exact
             ll <- ll - sum((H0*wt0)[i]) + sum(log(h0*wt0)[i])
+            constraint <- constraint + kappa*sum(ifelse(i,((wt0*h0)[h0<0])^2,0))
             i <- ttype==2 # left censoring
             ll <- ll + sum((log(1-exp(-H0))*wt0)[i])
+            constraint <- constraint + kappa*sum(ifelse(i,((wt0*H0)[H0<0])^2,0))
             i <- ttype==3 # interval censoring
             ll <- ll + sum((log(exp(-H0)-exp(-H))*wt)[i])
+            constraint <- constraint + kappa*sum(ifelse(i,((wt*H)[H<0])^2,0)) +
+                kappa*sum(ifelse(i,((wt*H0)[H0<0])^2,0))
+        ## }
+            ll <- ll - constraint/2
+            return(-ll)
         }
-        return(-ll)
     }
     gradnegll <- function(beta,kappa=1) {
-        if (use.rcpp || frailty) {
-            localargs <- args
-            localargs$kappa <- kappa
-            localargs$return_type <- "gradient"
-            return(.Call("model_output", localargs, package="rstpm2"))
-        }
-        eta <- as.vector(pars$X %*% beta)
-        etaD <- as.vector(pars$XD %*% beta)
-        h <- link$h(eta,etaD)
-        gradh <- link$gradh(eta,etaD,pars)
-        gradH <- link$gradH(eta,pars)
-        gconstraint <- colSums((kappa*h*pars$wt*gradh)[h<0,])
-        h[h<0] <- 1e-16
-        g <- colSums(pars$wt*(-gradH + ifelse(pars$event,1/h,0)*gradh)) - gconstraint
-        if (delayed) {
-            eta <- as.vector(pars0$X %*% beta)
-            etaD <- as.vector(pars0$XD %*% beta)
-            gradH <- link$gradH(eta,pars0)
-            g <- g + colSums(gradH*pars0$wt)
-        }
-        return(-g)
+        if (interval) stop("Gradient not implemented for interval-censored data.")
+        localargs <- args
+        localargs$kappa <- kappa
+        localargs$return_type <- "gradient"
+        return(.Call("model_output", localargs, package="rstpm2"))
+        ## eta <- as.vector(pars$X %*% beta)
+        ## etaD <- as.vector(pars$XD %*% beta)
+        ## h <- link$h(eta,etaD)
+        ## H <- link$H(eta)
+        ## gradh <- link$gradh(eta,etaD,pars)
+        ## gradH <- link$gradH(eta,pars)
+        ## gconstraint <- colSums((kappa*h*pars$wt*gradh)[h<0,]) + colSums((kappa*H*pars$wt*gradH)[H<0,])
+        ## h[h<0] <- 1e-16
+        ## H[H<0] <- 1e-16
+        ## g <- colSums(pars$wt*(-gradH + ifelse(pars$event,1/h,0)*gradh)) - gconstraint
+        ## if (delayed) {
+        ##     eta0 <- as.vector(pars0$X %*% beta)
+        ##     H0 <- link$H(eta0)
+        ##     gradH <- link$gradH(eta0,pars0)
+        ##     g <- g + colSums(gradH*pars0$wt)
+        ##     gconstraint <- gconstraint + colSums((kappa*H0*pars0$wt*gradH)[H0<0,])
+        ## }
+        ## g <- g - gconstraint
+        ## return(-g)
     }
     logli <- function(beta) {
-        stop("logli for logit link not implemented")
+        stop("logli not implemented")
         ## eta <- X %*% beta
         ## h <- (XD %*% beta)*exp(eta) + bhazard
         ## ##  h[h<0] <- 1e-100
@@ -1016,6 +1028,7 @@ setClass("pstpm2", representation(xlevels="list",
 	                          model.frame="list",
 	                          fullformula="formula",
                                   delayed="logical",
+                                  frailty="logical",
                                   x="matrix",
                                   xd="matrix",
                                   termsd="terms",
@@ -1038,7 +1051,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=NULL, trace = 0,
                    link.type=c("PH","PO","probit","AH"),
-                   frailty=FALSE, cluster = NULL,
+                   frailty=FALSE, cluster = NULL, logtheta=-6,
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
@@ -1201,6 +1214,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     if (is.null(init)) {
         init <- coef(gam.obj)
     }
+    if (frailty)
+        init <- c(init,logtheta=logtheta)
     pars <- list(event=event,X=X,XD=XD,wt=wt,bhazard=bhazard,delayed=delayed)
     pars0 <- list(event=event,X=X0,XD=matrix(0,1,1),wt=wt0,bhazard=bhazard,delayed=delayed)
     ## smoothing parameters
@@ -1227,7 +1242,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                  alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2),
                  cluster=cluster, map0 = map0 - 1L, ind0 = ind0, link = link.type,
                  penalty = penalty,
-                 type = if (frailty) "pstpm2_frailty" else "pstpm2")
+                 type = if (frailty) "pstpm2_frailty" else "pstpm2", return_type="optim")
     ## penalty function
     pfun <- function(beta,sp) {
         sum(sapply(1:length(gam.obj$smooth),
@@ -1244,24 +1259,28 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
             localargs$kappa <- kappa
             localargs$return_type <- "objective"
             ll <- .Call("model_output", localargs, package="rstpm2")
-            localargs$return_type <- "constraint"
-            constraint <- .Call("model_output", localargs, package="rstpm2")
+            localargs$return_type <- "feasible"
+            feasible <- .Call("model_output", localargs, package="rstpm2")
         }
         else {
             eta <- as.vector(X %*% beta)
             etaD <- as.vector(XD %*% beta)
             H <- link$H(eta) 
             h <- link$h(eta,etaD) + bhazard
-            constraint <- kappa*sum((wt*h)[h<0]^2) + kappa*sum((wt*H)[H<0]^2)
+            constraint <- 0 + kappa*sum((wt*h)[h<0]^2) + kappa*sum((wt*H)[H<0]^2)
             h <- pmax(h,1e-16)
-            ll <- sum(wt[event]*log(h[event])) - sum(wt*H) - pfun(beta,sp) - constraint
+            ll <- sum(wt[event]*log(h[event])) - sum(wt*H) - pfun(beta,sp)
             if (delayed) {
                 eta0 <- as.vector(X0 %*% beta)
                 ## etaD0 <- as.vector(XD0 %*% beta)
-                ll <- ll + sum(wt0*link$H(eta0))
+                H0 <- link$H(eta0)
+                ll <- ll + sum(wt0*H0)
+                constraint <- constraint + kappa*sum((wt0*H0)[H0<0]^2)
             }
+            feasible <- (constraint == 0)
+            ll <- ll - constraint
         }
-        attr(ll,"infeasible") <- constraint > 0
+        attr(ll,"feasible") <- feasible
         return(-ll)
     }
     dpfun <- function(beta,sp) {
@@ -1360,13 +1379,15 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     }
     if(!is.null(gam.obj$full.sp)) gam.obj$sp <- gam.obj$full.sp
     value <- NULL
-    while(is.na(value <- negllsp(init,gam.obj$sp)) || attr(value,"infeasible")) {
+    while(is.na(value <- negllsp(init,gam.obj$sp)) || !attr(value,"feasible")) {
         gam.call$sp <- gam.obj$sp * 5
         if (no.sp) sp <- gam.call$sp
         ## Unresolved: should we change sp.init if the initial values are not feasible?
         gam.obj <- eval(gam.call)
         if(!is.null(gam.obj$full.sp)) gam.obj$sp <- gam.obj$full.sp
         init <- coef(gam.obj)
+        if (frailty)
+            init <- c(init,logtheta=logtheta)
         if (all(gam.obj$sp > 1e5)) break
         ## stop("Initial values not valid and revised sp>1e5")
     }
@@ -1395,6 +1416,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         init <- fit$coef
         if (!no.sp) sp <- fit$sp
         edf <- fit$edf
+        names(fit$coef) <- rownames(fit$hessian) <- colnames(fit$hessian) <- names(init)
     } else {
         edf <- -1
     }
@@ -1444,6 +1466,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    like = like,
     	             fullformula = fullformula,
                    delayed=delayed,
+                   frailty = frailty, 
                    x = X,
                    xd = XD,
                    termsd = mt, # wrong!
@@ -1582,6 +1605,8 @@ setMethod("predict", "pstpm2",
           }
         }
         beta <- coef(object)
+        if (object@frailty)
+            beta <- beta[-length(beta)]
         eta <- as.vector(X %*% beta)
         etaD <- as.vector(XD %*% beta)
         S <- link$ilink(eta)
