@@ -751,11 +751,12 @@ stpm2 <- function(formula, data,
       out@vcov <- sandwich.stpm2(out)
     return(out)
   }
+## summary.mle is not exported from bbmle
+.__C__summary.mle2 <- bbmle:::.__C__summary.mle2 # hack suggested from http://stackoverflow.com/questions/28871632/how-to-resolve-warning-messages-metadata-object-not-found-spatiallinesnull-cla
 setClass("summary.stpm2", representation(frailty="logical",theta="list"), contains="summary.mle2")
 ## setAs("summary.stpm2", "summary.mle2",
 ##       function(from,to) new("summary.mle2", call=from@call, coef=from@call, m2logL=from@m2logL))
-setMethod("show", "stpm2", function(object) show(as(object,"mle2")))
-setMethod("show", "summary.stpm2", function(object) show(as(object,"summary.mle2")))
+## setMethod("show", "stpm2", function(object) show(as(object,"mle2")))
 setMethod("summary", "stpm2",
           function(object) {
               newobj <- as(summary(as(object,"mle2")),"summary.stpm2")
@@ -1504,7 +1505,29 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     if (robust) # kludge
         out@vcov <- sandwich.stpm2(out)
     return(out)
-}  
+}
+setClass("summary.pstpm2", representation(frailty="logical",theta="list"), contains="summary.mle2")
+setMethod("summary", "pstpm2",
+          function(object) {
+              newobj <- as(summary(as(object,"mle2")),"summary.stpm2")
+              newobj@frailty <- object@frailty
+              if (object@frailty) {
+                  coef <- coef(newobj)
+                  theta <- exp(coef[nrow(coef),1])
+                  se.logtheta <- coef[nrow(coef),2]
+                  se.theta <- theta*se.logtheta
+                  test.statistic <- 1/se.logtheta
+                  p.value <- pchisq(test.statistic,df=1,lower.tail=FALSE)/2
+                  newobj@theta <- list(theta=theta, se.theta=se.theta, p.value=p.value)
+              } else newobj@theta <- NULL
+              newobj })
+setMethod("show", "summary.pstpm2",
+          function(object) {
+              show(as(object,"summary.mle2"))
+              if (object@frailty)
+                  cat(sprintf("\ntheta=%g\tse=%g\tp=%g\n",
+                              object@theta$theta,object@theta$se.theta,object@theta$p.value))
+          })
 
 ########GCV##############
 ##require(numDeriv)
