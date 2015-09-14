@@ -78,11 +78,13 @@ require(rstpm2)
 require(frailtypack)
 data(dataAdditive)
 mod1 <- frailtyPenal(Surv(t1,t2,event)~cluster(group)+var1,data=dataAdditive,
-                     n.knots=8,kappa1=10000,cross.validation=TRUE)
+                     n.knots=8,kappa1=0.1,cross.validation=TRUE)
 system.time(mod2 <- pstpm2(Surv(t1,t2,event)~var1,
                           data=dataAdditive,
+                           criterion="BIC",
                           smooth.formula=~s(t2),
                           cluster=dataAdditive$group))
+system.time(mod3 <- coxph(Surv(t1,t2,event)~frailty(group,distribution="gamma")+var1,data=dataAdditive))
 summary(mod2)
 coef2 <- coef(summary(mod2))
 theta <- exp(coef2[nrow(coef2),1])

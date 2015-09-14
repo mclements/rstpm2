@@ -301,6 +301,8 @@ namespace rstpm2 {
   class Stpm2 : public Link {
   public:
     typedef Stpm2<Link> This;
+    struct li_constraint { vec li; double constraint; };
+    struct gradli_constraint { mat gradli; mat constraint; };
     using Link::h;
     using Link::H;
     using Link::gradh;
@@ -322,6 +324,8 @@ namespace rstpm2 {
 	// XD0 = as<mat>(list["XD0"]); // optional
 	wt0 = as<vec>(list["wt0"]); // optional
       }
+      LogicalVector ind0 = as<LogicalVector>(list["ind0"]);
+      IntegerVector map0 = as<IntegerVector>(list["map0"]);
       kappa = as<double>(list["kappa"]);
       bfgs.trace = as<int>(list["trace"]);
       bfgs.reltol = as<double>(list["reltol"]);
@@ -329,27 +333,53 @@ namespace rstpm2 {
       bfgs.hessianp = false;
       bfgs.parscale = parscale = as<vec>(list["parscale"]);
     }
-    // negative log-likelihood
-    virtual double objective(vec beta) {
-      vec eta = X * beta;
+    // log-likelihood components and constraints
+    virtual li_constraint li(vec beta, double offset = 0.0) {
+      int N = X.n_cols;
+      vec eta = X * beta + offset;
       vec etaD = XD * beta;
       vec h = Link::h(eta,etaD) + bhazard;
-      vec H = Link::H(eta) + bhazard;
+      vec H = Link::H(eta);
+      vec eps = h*0.0 + 1.0e-16; 
       double constraint = kappa/2.0 * (sum(h % h % (h<0)) +
 				       sum(H % H % (H<0))); 
-      vec eps = h*0.0 + 1.0e-16; 
       h = max(h,eps);
       H = max(H,eps);
-      double ll = sum(wt % event % log(h)) - sum(wt % H);
+      vec li = wt % event % log(h) - wt % H;
       if (delayed == 1) {
-	vec eta0 = X0 * beta;
-	// vec etaD0 = XD0 * beta;
-	vec H0 = Link::H(eta0);
+    	vec eta0 = X0 * beta + offset;
+    	vec H0 = Link::H(eta0);
 	constraint += kappa/2.0 * sum(H0 % H0 % (H0<0));
-	ll += sum(wt0 % H0);
+	for (int i=0; i<N; ++i) 
+	  if (this->ind0[i])
+	    li(i,k) += H0[map0[i]];
       }
-      return -ll + constraint;  // negative log-likelihood
+      return {li, constraint};
     }
+    // negative log-likelihood
+    virtual double objective(vec beta, double offset = 0.0) {
+      li_constraint intermediate = li(beta, offset);
+      return -sum(intermediate.li) + intermediate.constraint;
+      // vec eta = X * beta;
+      // vec etaD = XD * beta;
+      // vec h = Link::h(eta,etaD) + bhazard;
+      // vec H = Link::H(eta);
+      // double constraint = kappa/2.0 * (sum(h % h % (h<0)) +
+      // 				       sum(H % H % (H<0))); 
+      // vec eps = h*0.0 + 1.0e-16; 
+      // h = max(h,eps);
+      // H = max(H,eps);
+      // double ll = sum(wt % event % log(h)) - sum(wt % H);
+      // if (delayed == 1) {
+      // 	vec eta0 = X0 * beta;
+      // 	// vec etaD0 = XD0 * beta;
+      // 	vec H0 = Link::H(eta0);
+      // 	constraint += kappa/2.0 * sum(H0 % H0 % (H0<0));
+      // 	ll += sum(wt0 % H0);
+      // }
+      // return -ll + constraint;  // negative log-likelihood
+    }
+    // virtual mat gradli(vec beta) {} 
     // finite-differencing of the gradient for the objective
     vec fdgradient(vec beta, double eps = 1.0e-8) {
       int n = beta.size();
@@ -363,8 +393,8 @@ namespace rstpm2 {
       }
       return grad;
     }
-    // gradient of the negative log-likelihood
-    virtual vec gradient(vec beta) {
+    virtual gradli_constraint gradli(vec beta, double offset = 0.0) {
+      int N = X.n_rows;
       vec eta = X * beta;
       vec etaD = XD * beta;
       vec h = Link::h(eta,etaD) + bhazard;
@@ -376,9 +406,9 @@ namespace rstpm2 {
       mat Xgrad = -rmult(gradH, one % (H>eps)) + rmult(gradh, event / h % (h>eps));
       mat Xconstraint = kappa * rmult(gradh,h%(h<eps)) +
 	kappa * rmult(gradH,H % (H<eps));
-      rowvec dconstraint = sum(Xconstraint,0);
+      // rowvec dconstraint = sum(Xconstraint,0);
       Xgrad = rmult(Xgrad,wt);
-      rowvec vgr = sum(Xgrad,0);
+      // rowvec vgr = sum(Xgrad,0);
       if (delayed == 1) {
 	vec eta0 = X0 * beta;
 	// vec etaD0 = XD0 * beta;
@@ -386,11 +416,44 @@ namespace rstpm2 {
 	vec H0 = Link::H(eta0); 
 	vec eps0 = H0*0.0 + 1.0e-16; // hack
 	mat Xconstraint0 = kappa * rmult(gradH0, H0 % (H0<eps0));
-	dconstraint += sum(Xconstraint0,0);
-	vgr += sum(rmult(gradH0, wt0),0);
+	for (int i=0; i<N; ++i) 
+	  if (ind0[i]) {
+	    Xgrad.row(i) += gradH0.row(map0[i])*wt0[map0[i]];
+	    Xconstraint.row(i) += Xconstraint0.row(map0[i]);
+	  }
       }
+      return {Xgrad, Xconstraint};
+    }
+    // gradient of the negative log-likelihood
+    virtual vec gradient(vec beta, double offset = 0.0) {
+      gradli_constraint intermediate = gradli(beta, offset);
+      rowvec dconstraint = sum(intermediate.constraint,0);
+      rowvec vgr = sum(intermediate.gradli,0);
+      // vec eta = X * beta + offset;
+      // vec etaD = XD * beta;
+      // vec h = Link::h(eta,etaD) + bhazard;
+      // vec H = exp(eta);
+      // vec one = ones(h.size());
+      // vec eps = h*0.0 + 1.0e-16; // hack
+      // mat gradH = Link::gradH(eta,X);
+      // mat gradh = Link::gradh(eta,etaD,X,XD);
+      // mat Xgrad = -rmult(gradH, one % (H>eps)) + rmult(gradh, event / h % (h>eps));
+      // mat Xconstraint = kappa * rmult(gradh,h%(h<eps)) +
+      // 	kappa * rmult(gradH,H % (H<eps));
+      // rowvec dconstraint = sum(Xconstraint,0);
+      // Xgrad = rmult(Xgrad,wt);
+      // rowvec vgr = sum(Xgrad,0);
+      // if (delayed == 1) {
+      // 	vec eta0 = X0 * beta;
+      // 	mat gradH0 = Link::gradH(eta0, X0); 
+      // 	vec H0 = Link::H(eta0); 
+      // 	vec eps0 = H0*0.0 + 1.0e-16; // hack
+      // 	mat Xconstraint0 = kappa * rmult(gradH0, H0 % (H0<eps0));
+      // 	dconstraint += sum(Xconstraint0,0);
+      // 	vgr += sum(rmult(gradH0, wt0),0);
+      // }
       vec gr(n);
-      for (int i = 0; i<n; ++i) {
+      for (int i = 0; i<beta.size(); ++i) {
 	gr[i] = -vgr[i] + dconstraint[i];
       }
       return gr;
@@ -450,6 +513,8 @@ namespace rstpm2 {
     double kappa;
     int delayed, n;
     BFGS2 bfgs;
+    LogicalVector ind0;
+    IntegerVector map0;
   };
 
   // RcppExport SEXP optim_stpm2_nlm(SEXP args) {
@@ -730,19 +795,17 @@ namespace rstpm2 {
   // };
 
   /** 
-      Extension of stpm2 and pstpm2 to include shared frailties with a cluster variable
+      Extension of stpm2 and pstpm2 to include gamma shared frailties with a cluster variable
   **/
   template<class Base>
-  class SharedFrailty : public Base {
+  class GammaSharedFrailty : public Base {
   public:
     typedef std::vector<int> Index;
     typedef std::map<int,Index> IndexMap;
-    typedef SharedFrailty<Base> This;
-    SharedFrailty(SEXP sexp) : Base(sexp) {
+    typedef GammaSharedFrailty<Base> This;
+    GammaSharedFrailty(SEXP sexp) : Base(sexp) {
       List list = as<List>(sexp);
       IntegerVector cluster = as<IntegerVector>(list["cluster"]);
-      LogicalVector ind0 = as<LogicalVector>(list["ind0"]);
-      IntegerVector map0 = as<IntegerVector>(list["map0"]);
       // wragged array indexed by a map of vectors
       for (int id=0; id<cluster.size(); ++id) {
 	clusters[cluster[id]].push_back(id);
@@ -757,13 +820,13 @@ namespace rstpm2 {
       if (this->bfgs.trace>0) {
 	Rprint(beta);
       }
-      vec vbeta(beta); // theta is the last parameter in beta
+      vec vbeta(beta); // logtheta is the last parameter in beta
       vbeta.resize(n-1);
       double theta = exp(beta[n-1]);
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
       vec h = Base::h(eta,etaD) + this->bhazard;
-      vec H = Base::H(eta) + this->bhazard;
+      vec H = Base::H(eta);
       double constraint = this->kappa/2.0 * (sum(h % h % (h<0)) + sum(H % H % (H<0)));
       vec eps = h*0.0 + 1.0e-16; 
       h = max(h,eps);
@@ -771,7 +834,6 @@ namespace rstpm2 {
       vec H0;
       if (this->delayed == 1) {
 	vec eta0 = this->X0 * vbeta;
-	// vec etaD0 = this->XD0 * vbeta;
 	H0 = Base::H(eta0);
 	constraint += this->kappa/2.0 * sum(H0 % H0 % (H0<0));
       }
@@ -810,8 +872,8 @@ namespace rstpm2 {
       double theta = exp(beta[n-1]);
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
-      vec h = Base::h(eta,etaD) + this->bhazard;
-      vec H = Base::H(eta) + this->bhazard;
+      vec h = Base::h(eta,etaD);
+      vec H = Base::H(eta);
       mat gradh = Base::gradh(eta,etaD,this->X,this->XD);
       mat gradH = Base::gradH(eta,this->X);
       vec eps = h*0.0 + 1.0e-16; 
@@ -894,10 +956,180 @@ namespace rstpm2 {
       this->bfgs.coef = nm.coef;
       this->bfgs.hessian = nm.hessian;
     }
-    LogicalVector ind0;
-    IntegerVector map0;
     IndexMap clusters;
   };
+
+  /** 
+      Extension of stpm2 and pstpm2 to include log-normal shared frailties with a cluster variable
+  **/
+  template<class Base>
+  class NormalSharedFrailty : public Base {
+  public:
+    typedef std::vector<int> Index;
+    typedef std::map<int,Index> IndexMap;
+    typedef NormalSharedFrailty<Base> This;
+    NormalSharedFrailty(SEXP sexp) : Base(sexp) {
+      List list = as<List>(sexp);
+      IntegerVector cluster = as<IntegerVector>(list["cluster"]);
+      gauss_x = as<vec>(list["gauss_x"]); // node values
+      gauss_w = as<vec>(list["gauss_w"]); // probability weights
+      // wragged array indexed by a map of vectors
+      for (int id=0; id<cluster.size(); ++id) {
+	clusters[cluster[id]].push_back(id);
+      }
+    }
+    /** 
+	Objective function for a log-normal shared frailty
+	Assumes that weights == 1.
+    **/
+    double objective(vec beta) {
+      int n = beta.size();
+      int N = this->X.n_rows;
+      vec vbeta(beta); // logtheta is the last parameter in beta
+      vbeta.resize(n-1);
+      double theta = exp(beta[n-1]); // variance
+      // vec eta = this->X * vbeta;
+      // vec etaD = this->XD * vbeta;
+      // vec eps = eta*0.0 + 1.0e-16; 
+      int K = gauss_x.size(); // number of nodes
+      // vec eta0, eps0;
+      // if (this->delayed == 1) {
+      // 	eta0 = this->X0 * vbeta;
+      // 	H0 = Base::H(eta0);
+      // 	eps0 = H0*0.0+1.0E-16;
+      // }
+      mat lik(N,K);
+      double constraint = 0.0;
+      double sigma = sqrt(theta); // standard deviation
+      vec wstar = gauss_w/sqrt(datum::pi);
+      for (int k=0; k<K; ++k) {
+	double bi = sqrt(2.0)*sigma*gauss_x[k];
+	// vec h = Link::h(eta+bi,etaD) + this->bhazard;
+	// vec H = Link::H(eta+bi);
+	// constraint += this->kappa/2.0 * (sum(h % h % (h<0)) + sum(H % H % (H<0)));
+	// h = max(h,eps);
+	// H = max(H,eps);
+	li_constraint intermediate = Base::li(vbeta,bi);
+	lik.col(k) = intermediate.li;
+	constraint += intermediate.constraint;
+	// if (this->delayed == 1) {
+	//   vec H0 = Base::H(eta0+bi);
+	//   constraint += this->kappa/2.0 * sum(H0 % H0 % (H0<0));
+	//   H0 = max(H0,eps0);
+	//   for (int i=0; i<N; ++i) 
+	//     if (this->ind0[i])
+	//       lij(i,k) += H0[this->map0[i]];
+	// }
+      }
+      double ll = 0.0;
+      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+	double Li = 0.0;
+	for (int k=0; k<K; ++k) {
+	  double k_mean = 0.0;
+	  for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
+	    k_mean += lik(*j,k);
+	  }
+	  Li += wstar[k]*exp(k_mean);
+	}
+	ll += log(Li);
+      }
+      ll -= constraint;
+      return -ll;  
+    }
+    vec gradient(vec beta) {
+      int n = beta.size();
+      int N = this->X.n_rows;
+      vec vbeta(beta); // logsigma is the last parameter in beta
+      vbeta.resize(n-1);
+      double theta = exp(beta[n-1]);
+      // vec gr = zeros<vec>(n);
+      // vec grconstraint = zeros<vec>(n);
+      // vec eta = this->X * vbeta;
+      // vec etaD = this->XD * vbeta;
+      // vec eps = eta*0.0 + 1.0e-16; 
+      int K = gauss_x.size();
+      // vec eta0, eps0;
+      // if (this->delayed == 1) {
+      // 	eta0 = this->X0 * vbeta;
+      // 	eps0 = H0*0.0+1.0E-16;
+      // }
+      mat lik(n,K);
+      double constraint = 0.0;
+      double sigma = sqrt(theta); // standard deviation
+      vec wstar = gauss_w/sqrt(datum::pi);
+      for (int k=0; k<K; ++k) {
+	double bi = sqrt(2.0)*sigma*gauss_x[i];
+	gradli_constraint intermediate = gradli(beta,bi);
+	vec h = Link::h(eta+offset,etaD) + this->bhazard;
+	vec H = Link::H(eta+offset);
+	mat gradh = Base::gradh(eta+offset,etaD,this->X,this->XD); // should X depend on the frailty?
+	mat gradH = Base::gradH(eta+offset,this->X);  // should X depend on the frailty?
+	gconstraint += this->kappa * (sum(h % h % (h<0)) + sum(H % H % (H<0))); // ??
+	vec eps = h*0.0 + 1.0e-16; 
+	h = max(h,eps);
+	H = max(H,eps);
+	lij.col(k) = this->event % log(h) - H;
+	if (this->delayed == 1) {
+	  vec H0 = Base::H(eta0+offset);
+	  constraint += this->kappa/2.0 * sum(H0 % H0 % (H0<0));
+	  H0 = max(H0,eps0);
+	  gradH0 = Base::gradH(eta0+offset,this->X0);
+	  lij.col(k) += H0;
+	}
+      }
+      double ll = 0.0;
+      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+	double Li = 0.0;
+	for (int k=0; k<K; ++k) {
+	  double k_mean = 0.0;
+	  for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
+	    k_mean += lij(*j,k);
+	  }
+	  Li += gaussian_weights[k]*exp(k_mean);
+	}
+	// ll += log(Li);
+      }
+      if (this->bfgs.trace>0) {
+	Rprintf("Calculating fdgradient:\n"); Rprint(this->fdgradient(beta)); Rprintf("(=fdgradient)\n");
+      }
+      return -gr;  
+    }
+    bool feasible(vec beta) {
+      vec coef(beta);
+      coef.resize(this->n-1);
+      return Base::feasible(coef);
+    }
+    void optimWithConstraint(NumericVector init) {
+      bool satisfied;
+      if (this->bfgs.trace > 0) 
+	Rprintf("Starting optimization\n");
+      do {
+	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, this->init, (void *) this);
+	vec vcoef(&this->bfgs.coef[0],this->n); 
+	satisfied = feasible(vcoef % this->parscale);
+	if (!satisfied) this->kappa *= 2.0;   
+      } while ((!satisfied) && this->kappa < 1.0e3);
+    }
+    void optimWithConstraintNM(NumericVector init) {
+      bool satisfied;
+      NelderMead2 nm;
+      nm.hessianp = false;
+      nm.parscale = this->parscale;
+      do {
+	nm.optim(&optimfunction<This>, this->init, (void *) this);
+	vec vcoef(&this->bfgs.coef[0],this->n); 
+	satisfied = feasible(vcoef % this->parscale);
+	if (!satisfied) this->kappa *= 2.0;   
+      } while ((!satisfied) && this->kappa < 1.0e3);
+      nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this);
+      this->bfgs.coef = nm.coef;
+      this->bfgs.hessian = nm.hessian;
+    }
+    IndexMap clusters;
+    vec gauss_x, gauss_w;
+  };
+
+
 
   template<class T>
   SEXP stpm2_model_output_(SEXP args) {
@@ -984,13 +1216,13 @@ namespace rstpm2 {
     }
     else if (type=="stpm2_frailty") {
       if (link == "PH")
-	return stpm2_model_output_<SharedFrailty<Stpm2<LogLogLink> > >(args);
+	return stpm2_model_output_<GammaSharedFrailty<Stpm2<LogLogLink> > >(args);
       else if (link == "PO")
-	return stpm2_model_output_<SharedFrailty<Stpm2<LogitLink> > >(args);
+	return stpm2_model_output_<GammaSharedFrailty<Stpm2<LogitLink> > >(args);
       else if (link == "AH")
-	return stpm2_model_output_<SharedFrailty<Stpm2<LogLink> > >(args);
+	return stpm2_model_output_<GammaSharedFrailty<Stpm2<LogLink> > >(args);
       else if (link == "probit")
-	return stpm2_model_output_<SharedFrailty<Stpm2<ProbitLink> > >(args);
+	return stpm2_model_output_<GammaSharedFrailty<Stpm2<ProbitLink> > >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
@@ -998,13 +1230,13 @@ namespace rstpm2 {
     }
     else if (type=="pstpm2_frailty") {
       if (link == "PH")
-	return pstpm2_model_output_<Pstpm2<SharedFrailty<Stpm2<LogLogLink> >,SmoothLogH> >(args);
+	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<LogLogLink> >,SmoothLogH> >(args);
       else if (link == "PO")
-	return pstpm2_model_output_<Pstpm2<SharedFrailty<Stpm2<LogitLink> >,SmoothLogH> >(args);
+	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<LogitLink> >,SmoothLogH> >(args);
       else if (link == "AH")
-	return pstpm2_model_output_<Pstpm2<SharedFrailty<Stpm2<LogLink> >,SmoothLogH> >(args);
+	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<LogLink> >,SmoothLogH> >(args);
       else if (link == "probit")
-	return pstpm2_model_output_<Pstpm2<SharedFrailty<Stpm2<ProbitLink> >,SmoothLogH> >(args);
+	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<ProbitLink> >,SmoothLogH> >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
