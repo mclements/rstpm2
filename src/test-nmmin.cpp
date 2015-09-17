@@ -334,10 +334,10 @@ namespace rstpm2 {
       bfgs.parscale = parscale = as<vec>(list["parscale"]);
     }
     // log-likelihood components and constraints
-    virtual li_constraint li(vec beta, double offset = 0.0) {
+    virtual li_constraint li(vec eta, vec etaD) {
       int N = X.n_cols;
-      vec eta = X * beta + offset;
-      vec etaD = XD * beta;
+      // vec eta = X * beta + offset;
+      // vec etaD = XD * beta;
       vec h = Link::h(eta,etaD) + bhazard;
       vec H = Link::H(eta);
       vec eps = h*0.0 + 1.0e-16; 
@@ -358,6 +358,8 @@ namespace rstpm2 {
     }
     // negative log-likelihood
     virtual double objective(vec beta, double offset = 0.0) {
+      vec eta = this->X * beta;
+      vec etaD = this->XD * beta;
       li_constraint intermediate = li(beta, offset);
       return -sum(intermediate.li) + intermediate.constraint;
       // vec eta = X * beta;
@@ -985,41 +987,21 @@ namespace rstpm2 {
     double objective(vec beta) {
       int n = beta.size();
       int N = this->X.n_rows;
+      // mat Z(N,1,fill::ones);
+      // mat Xstar = join_horiz(X,Z); 
       vec vbeta(beta); // logtheta is the last parameter in beta
       vbeta.resize(n-1);
       double theta = exp(beta[n-1]); // variance
-      // vec eta = this->X * vbeta;
-      // vec etaD = this->XD * vbeta;
-      // vec eps = eta*0.0 + 1.0e-16; 
       int K = gauss_x.size(); // number of nodes
-      // vec eta0, eps0;
-      // if (this->delayed == 1) {
-      // 	eta0 = this->X0 * vbeta;
-      // 	H0 = Base::H(eta0);
-      // 	eps0 = H0*0.0+1.0E-16;
-      // }
       mat lik(N,K);
       double constraint = 0.0;
       double sigma = sqrt(theta); // standard deviation
       vec wstar = gauss_w/sqrt(datum::pi);
       for (int k=0; k<K; ++k) {
 	double bi = sqrt(2.0)*sigma*gauss_x[k];
-	// vec h = Link::h(eta+bi,etaD) + this->bhazard;
-	// vec H = Link::H(eta+bi);
-	// constraint += this->kappa/2.0 * (sum(h % h % (h<0)) + sum(H % H % (H<0)));
-	// h = max(h,eps);
-	// H = max(H,eps);
 	li_constraint intermediate = Base::li(vbeta,bi);
 	lik.col(k) = intermediate.li;
 	constraint += intermediate.constraint;
-	// if (this->delayed == 1) {
-	//   vec H0 = Base::H(eta0+bi);
-	//   constraint += this->kappa/2.0 * sum(H0 % H0 % (H0<0));
-	//   H0 = max(H0,eps0);
-	//   for (int i=0; i<N; ++i) 
-	//     if (this->ind0[i])
-	//       lij(i,k) += H0[this->map0[i]];
-	// }
       }
       double ll = 0.0;
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
@@ -1042,21 +1024,37 @@ namespace rstpm2 {
       vec vbeta(beta); // logsigma is the last parameter in beta
       vbeta.resize(n-1);
       double theta = exp(beta[n-1]);
-      // vec gr = zeros<vec>(n);
-      // vec grconstraint = zeros<vec>(n);
-      // vec eta = this->X * vbeta;
-      // vec etaD = this->XD * vbeta;
-      // vec eps = eta*0.0 + 1.0e-16; 
-      int K = gauss_x.size();
-      // vec eta0, eps0;
-      // if (this->delayed == 1) {
-      // 	eta0 = this->X0 * vbeta;
-      // 	eps0 = H0*0.0+1.0E-16;
-      // }
-      mat lik(n,K);
+      int K = gauss_x.size(); // number of nodes
+      mat lijk(N,K);
+      mat hijk(N,K);
+      cube gradhijk(N,n,K);
+      cube gradHijk(N,n,K);
       double constraint = 0.0;
       double sigma = sqrt(theta); // standard deviation
       vec wstar = gauss_w/sqrt(datum::pi);
+      vec etaD = this->XD * vbeta;
+      for (int k=0; k<K; ++k) {
+	double bi = sqrt(2.0)*sigma*gauss_x[k];
+	li_constraint intermediate = Base::li(vbeta,bi);
+	vec eta = this->X * vbeta + bi;
+	lijk.col(k) = intermediate.li;
+	hijk.col(k) = Base::h(eta, etaD) + this->bhazard;
+	gradhijk.slice(k) = Base::gradh(eta,this->X,etaD,this->XD);
+	gradHijk.slice(k) = Base::gradH(eta,this->X);
+	constraint += intermediate.constraint;
+      }
+      double sigma = sqrt(theta); // standard deviation
+      vec wstar = gauss_w/sqrt(datum::pi);
+      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+	// calculate Li and gradLi
+	for (int k=0; k<K; ++k) {
+	  double k_mean = 0.0;
+	  for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
+	    k_mean += lijk(*j,k);
+	  }
+	  double Li  = exp(k_mean);
+	}
+	// calculate weighted gradients
       for (int k=0; k<K; ++k) {
 	double bi = sqrt(2.0)*sigma*gauss_x[i];
 	gradli_constraint intermediate = gradli(beta,bi);
@@ -1077,8 +1075,10 @@ namespace rstpm2 {
 	  lij.col(k) += H0;
 	}
       }
-      double ll = 0.0;
+      }
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+	// calculate Li
+	// calculate weighted gradients
 	double Li = 0.0;
 	for (int k=0; k<K; ++k) {
 	  double k_mean = 0.0;
