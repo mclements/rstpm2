@@ -324,8 +324,8 @@ namespace rstpm2 {
       interval = as<bool>(list["interval"]);
       n = init.size(); // number of parameters
       N = X.n_rows; // number of observations
-      X0.set_size(1,n); X0.fill(0.0);
-      X1.set_size(1,n); X1.fill(0.0);
+      X1 = as<mat>(list["X1"]);
+      X0 = as<mat>(list["X1"]);
       wt0.set_size(N); wt0.fill(0.0);
       if (delayed) {
 	X0 = as<mat>(list["X0"]);
@@ -360,7 +360,7 @@ namespace rstpm2 {
       vec H0 = Link::H(eta0);
       double constraint = kappa/2.0 * sum(H0 % H0 % (H0<0));
       vec eps = H0*0.0 + 1e-16;
-      vec li = max(H0,eps);
+      vec li = wt0 % max(H0,eps);
       li_constraint out = {li, constraint};
       return out;
     }
@@ -378,13 +378,13 @@ namespace rstpm2 {
       vec li(N,fill::zeros);
       uvec index;
       index = find(ttype == 0); // right censored
-      if (any(index)) li(index) -= H(index);
+      if (any(index)) li(index) -= wt(index) % H(index);
       index = find(ttype == 1); // exact
-      if (any(index)) li(index) += log(h(index)) - H(index);
+      if (any(index)) li(index) += wt(index) % (log(h(index)) - H(index));
       index = find(ttype == 2); // left censored
-      if (any(index)) li(index) += 1-exp(-H(index));
+      if (any(index)) li(index) += wt(index) % (1-exp(-H(index)));
       index = find(ttype == 3); // interval censored
-      if (any(index)) li(index) += H1(index)  - H(index);
+      if (any(index)) li(index) += wt(index) % (H1(index)  - H(index));
       li_constraint out = {li, constraint};
       return out;
     }
@@ -427,9 +427,11 @@ namespace rstpm2 {
       vec eps = h*0.0 + 1.0e-16; // hack
       mat gradH = Link::gradH(eta,X);
       mat gradh = Link::gradh(eta,etaD,X,XD);
-      mat Xgrad = -rmult(gradH, one % (H>eps)) + rmult(gradh, event / h % (h>eps));
-      mat Xconstraint = kappa * rmult(gradh,h%(h<eps)) +
-	kappa * rmult(gradH,H % (H<eps));
+      mat Xconstraint = kappa * (rmult(gradh,h%(h<eps)) +
+				 rmult(gradH,H % (H<eps)));
+      H = max(H,eps);
+      h = max(h,eps);
+      mat Xgrad = -rmult(gradH, wt % H) + rmult(gradh, event / h % wt);
       Xgrad = rmult(Xgrad,wt);
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
@@ -440,7 +442,8 @@ namespace rstpm2 {
       vec one = ones(H0.size());
       vec eps = H0*0.0 + 1.0e-16; // hack
       mat Xconstraint = kappa * rmult(gradH0, H0 % (H0<eps));
-      mat Xgrad = -rmult(gradH0, one % (H0>eps));
+      H0 = max(H0,eps);
+      mat Xgrad = -rmult(gradH0, wt0 % H0);
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
     }
@@ -462,13 +465,13 @@ namespace rstpm2 {
       mat li(N,n,fill::zeros);
       uvec index;
       index = find(ttype == 0); // right censored
-      if (any(index)) li(index) -= gradH.rows(index);
+      if (any(index)) li(index) -= rmult(gradH.rows(index),wt(index));
       index = find(ttype == 1); // exact
-      if (any(index)) li(index) += rmult(gradh.rows(index),1/h(index)) - gradH.rows(index);
+      if (any(index)) li(index) += rmult(gradh.rows(index),wt(index) % (1/h(index)) - gradH.rows(index));
       index = find(ttype == 2); // left censored
-      if (any(index)) li(index) += 1-exp(-gradH.rows(index));
+      if (any(index)) li(index) += rmult(1-exp(-gradH.rows(index)),wt(index));
       index = find(ttype == 3); // interval censored
-      if (any(index)) li(index) += gradH1.rows(index) - gradH.rows(index);
+      if (any(index)) li(index) += rmult(gradH1.rows(index) - gradH.rows(index),wt(index));
       gradli_constraint out = {li, Xconstraint};
       return out;
     }
@@ -1032,11 +1035,10 @@ namespace rstpm2 {
       int n = beta.size();
       vec vbeta(beta); // logtheta is the last parameter in beta
       vbeta.resize(n-1);
-      double theta = exp(beta[n-1]); // variance
+      double sigma = exp(0.5*beta[n-1]); // standard deviation
       int K = gauss_x.size(); // number of nodes
       mat lijk(this->N,K);
       double constraint = 0.0;
-      double sigma = sqrt(theta); // standard deviation
       vec wstar = gauss_w/sqrt(datum::pi);
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
@@ -1051,7 +1053,7 @@ namespace rstpm2 {
       double ll = 0.0;
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
 	uvec index = as<uvec>(wrap(it->second));
-	double Li = exp(sum(lijk.rows(index),0)) * wstar;
+	double Li = dot(exp(sum(lijk.rows(index),0)),wstar);
 	ll += log(Li);
       }
       ll -= constraint;
@@ -1059,56 +1061,50 @@ namespace rstpm2 {
     }
     vec gradient(vec beta) {
       int n = beta.size();
-      vec vbeta(beta); // logsigma is the last parameter in beta
-      vbeta.resize(n-1);
-      double theta = exp(beta[n-1]);
+      // vec vbeta(beta); // logsigma is the last parameter in beta
+      // vbeta.resize(n-1);
+      double sigma = exp(0.5*beta[n-1]);
       mat Z(this->N,1,fill::ones);
-      mat Z0(this->X0.n_rows,1,fill::ones);
       mat ZD(this->N,1,fill::zeros);
+      mat Z0(this->X0.n_rows,1,fill::ones);
+      mat Z1(this->X1.n_rows,1,fill::ones);
       mat Xstar = join_horiz(this->X, Z); 
-      mat Xstar0 = join_horiz(this->X0, Z0); 
-      mat XDstar = join_horiz(this->XD, ZD); 
+      mat XDstar = join_horiz(this->XD, ZD); // assumes time-invariant random effects
+      mat X0star = join_horiz(this->X0, Z0); 
+      mat X1star = join_horiz(this->X1, Z1); 
       int K = gauss_x.size(); // number of nodes
-      mat lijk(this->N,K);
-      double constraint = 0.0;
-      double sigma = sqrt(theta); // standard deviation
       vec wstar = gauss_w/sqrt(datum::pi);
-      vec eta = this->X * vbeta;
-      vec etaD = this->XD * vbeta;
-      vec eta0 = this->X0 * vbeta;
-      vec eta1 = this->X1 * vbeta;
+      int G = clusters.size();
+      vec Li(G,fill::zeros);
+      mat gradLi(G,n,fill::zeros);
+      vec betastar = beta;
+      rowvec dconstraint(n,fill::zeros); 
       for (int k=0; k<K; ++k) {
 	double bi = sqrt(2.0)*sigma*gauss_x[k];
-	li_constraint lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
-	lijk.col(k) = lik.li;
-	constraint += lik.constraint;
-      }
-      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
-	uvec index = as<uvec>(wrap(it->second));
-	double Li = exp(sum(lijk.rows(index),0)) * wstar;
-	vec gradLi(n);
-	uvec i0(1,0);
-	uvec i00(1,0);
-	if (this->delayed) {
-	  i0 = as<uvec>(wrap(cluster_events[it->first]));  // index within X0 | in cluster & event
-	  i00 = as<uvec>(wrap(cluster_event_indices[it->first]));  // index within cluster | event
-	}
-	for (int k=0; k<K; ++k) {
-	  double bi = sqrt(2.0)*sigma*gauss_x[k];
-	  vec etastar = eta(index) + bi;
-	  vec hi = Base::h(etastar, etaD(index)) + this->bhazard(index);
-	  mat gradhi = Base::gradh(etastar, etaD(index), Xstar.rows(index), XDstar.rows(index)); // NB: last gradient is for bi (not variance)
-	  mat gradHi = Base::gradH(etastar, Xstar.rows(index));
-	  mat gradH0i(index.size(),n,fill::zeros);
-	  if (this->delayed) {
-	    gradH0i(i00) = Base::gradH(eta0(i0) + bi, Xstar0.rows(i0));
-	  }
-	  gradLi += wstar[k]*(lmult(this->event(index)/hi, gradhi) - gradHi + gradH0i);
+	betastar[betastar.size()-1] = bi;
+	vec etastar = Xstar * betastar;
+	vec etaDstar = XDstar * betastar;
+	vec eta0star = X0star * betastar;
+	vec eta1star = X1star * betastar;
+	li_constraint lik = Base::li(etastar, etaDstar, eta0star, eta1star);
+	gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,
+						 Xstar, XDstar, X0star, X1star);
+	// adjust the last column of the gradient to account for the variance components
+	gradlik.gradli.col(gradlik.gradli.n_cols-1) *= bi*0.5;
+	dconstraint += sum(gradlik.constraint,0); // ignores clustering??
+	int g = 0;
+	for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it, ++g) {
+	  uvec index = as<uvec>(wrap(it->second));
+	  double Lik = exp(sum(lik.li(index)));
+	  Li(g) += Lik*wstar[k];
+	  gradLi.row(g) += wstar[k]*Lik*sum(gradlik.gradli.rows(index),0);
 	}
       }
+      rowvec grad = sum(rmult(gradLi,1/Li),0);
       if (this->bfgs.trace>0) 
-	Rprintf("Calculating fdgradient:\n"); Rprint(this->fdgradient(beta)); Rprintf("(=fdgradient)\n");
+	Rprintf("fdgradient="); Rprint(this->fdgradient(beta)); 
       vec gr(n,fill::zeros);
+      for (int i=0; i<n; i++) gr(i) = grad(i) - dconstraint(i);
       return -gr;  
     }
     bool feasible(vec beta) {
@@ -1118,11 +1114,12 @@ namespace rstpm2 {
     }
     void optimWithConstraint(NumericVector init) {
       bool satisfied;
+      int n = init.size();
       if (this->bfgs.trace > 0) 
 	Rprintf("Starting optimization\n");
       do {
-	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, this->init, (void *) this);
-	vec vcoef(&this->bfgs.coef[0],this->n); 
+	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
+	vec vcoef(&this->bfgs.coef[0],n); 
 	satisfied = feasible(vcoef % this->parscale);
 	if (!satisfied) this->kappa *= 2.0;   
       } while ((!satisfied) && this->kappa < 1.0e3);
@@ -1231,7 +1228,7 @@ namespace rstpm2 {
 	return wrap(-1);
       }
     }
-    else if (type=="stpm2_frailty") {
+    else if (type=="stpm2_gamma_frailty") {
       if (link == "PH")
 	return stpm2_model_output_<GammaSharedFrailty<Stpm2<LogLogLink> > >(args);
       else if (link == "PO")
@@ -1245,7 +1242,7 @@ namespace rstpm2 {
 	return wrap(-1);
       }
     }
-    else if (type=="pstpm2_frailty") {
+    else if (type=="pstpm2_gamma_frailty") {
       if (link == "PH")
 	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<LogLogLink> >,SmoothLogH> >(args);
       else if (link == "PO")
@@ -1254,6 +1251,34 @@ namespace rstpm2 {
 	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<LogLink> >,SmoothLogH> >(args);
       else if (link == "probit")
 	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<ProbitLink> >,SmoothLogH> >(args);
+      else {
+	REprintf("Unknown link function.\n");
+	return wrap(-1);
+      }
+    }
+    else if (type=="stpm2_normal_frailty") {
+      if (link == "PH")
+	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogLogLink> > >(args);
+      else if (link == "PO")
+	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogitLink> > >(args);
+      else if (link == "AH")
+	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogLink> > >(args);
+      else if (link == "probit")
+	return stpm2_model_output_<NormalSharedFrailty<Stpm2<ProbitLink> > >(args);
+      else {
+	REprintf("Unknown link function.\n");
+	return wrap(-1);
+      }
+    }
+    else if (type=="pstpm2_normal_frailty") {
+      if (link == "PH")
+	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<LogLogLink> >,SmoothLogH> >(args);
+      else if (link == "PO")
+	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<LogitLink> >,SmoothLogH> >(args);
+      else if (link == "AH")
+	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<LogLink> >,SmoothLogH> >(args);
+      else if (link == "probit")
+	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<ProbitLink> >,SmoothLogH> >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);

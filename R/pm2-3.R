@@ -437,7 +437,7 @@ stpm2 <- function(formula, data,
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE,
                      reltol=1.0e-8, trace = 0,
                      link.type=c("PH","PO","probit","AH"),
-                     frailty = !is.null(cluster), cluster = NULL, logtheta=-6,
+                     frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,
                      contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
@@ -575,7 +575,6 @@ stpm2 <- function(formula, data,
     map0 <- 0L
     which0 <- 0
     wt0 <- 0
-    X0 <- matrix(0,1,1)
     ttype <- 0
     if (!interval) { # surv.type %in% c("right","counting")
         X <- lpmatrix.lm(lm.obj,data)
@@ -609,8 +608,9 @@ stpm2 <- function(formula, data,
         X0 <- matrix(0,1,ncol(X))
         rm(data0)
     } 
-    if (frailty)
+    if (frailty) {
         init <- c(init,logtheta=logtheta)
+    }
     if (!is.null(control) && "parscale" %in% names(control)) {
       if (length(control$parscale)==1)
         control$parscale <- rep(control$parscale,length(init))
@@ -622,7 +622,12 @@ stpm2 <- function(formula, data,
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
                  kappa=1, trace = trace, cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0 = which0, link=link.type, ttype=ttype,
-                 type=if (frailty) "stpm2_frailty" else "stpm2", return_type="optim")
+                 type=if (frailty) "stpm2_normal_frailty" else "stpm2", return_type="optim")
+    if (frailty) {
+        rule <- fastGHQuad::gaussHermiteData(nodes)
+        args$gauss_x <- rule$x
+        args$gauss_w <- rule$w
+    }
     negll <- function(beta,kappa=1) {
         localargs <- args
         localargs$kappa <- kappa
@@ -694,7 +699,7 @@ stpm2 <- function(formula, data,
   }
 ## summary.mle is not exported from bbmle
 .__C__summary.mle2 <- bbmle:::.__C__summary.mle2 # hack suggested from http://stackoverflow.com/questions/28871632/how-to-resolve-warning-messages-metadata-object-not-found-spatiallinesnull-cla
-setClass("summary.stpm2", representation(frailty="logical",theta="numeric"), contains="summary.mle2")
+setClass("summary.stpm2", representation(frailty="logical",theta="list"), contains="summary.mle2")
 ## setAs("summary.stpm2", "summary.mle2",
 ##       function(from,to) new("summary.mle2", call=from@call, coef=from@call, m2logL=from@m2logL))
 ## setMethod("show", "stpm2", function(object) show(as(object,"mle2")))
@@ -710,7 +715,7 @@ setMethod("summary", "stpm2",
                   test.statistic <- 1/se.logtheta
                   p.value <- pchisq(test.statistic,df=1,lower.tail=FALSE)/2
                   newobj@theta <- list(theta=theta, se.theta=se.theta, p.value=p.value)
-              } else newobj@theta <- -1
+              } else newobj@theta <- list()
               newobj })
 setMethod("show", "summary.stpm2",
           function(object) {
@@ -1020,7 +1025,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=NULL, trace = 0,
                    link.type=c("PH","PO","probit","AH"),
-                   frailty=!is.null(cluster), cluster = NULL, logtheta=-6,
+                   frailty=!is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
@@ -1198,8 +1203,9 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     if (is.null(init)) {
         init <- coef(gam.obj)
     }
-    if (frailty)
+    if (frailty) {
         init <- c(init,logtheta=logtheta)
+    }
     ## smoothing parameters
     if (no.sp <- is.null(sp)) {
         sp <- if(is.null(gam.obj$full.sp)) gam.obj$sp else gam.obj$full.sp
@@ -1223,8 +1229,13 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                  kappa=1.0,
                  alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2),
                  cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0=which0, link = link.type,
-                 penalty = penalty, ttype=ttype,
-                 type = if (frailty) "pstpm2_frailty" else "pstpm2", return_type="optim")
+                 penalty = penalty, ttype=ttype, 
+                 type = if (frailty) "pstpm2_normal_frailty" else "pstpm2", return_type="optim")
+    if (frailty) {
+        rule <- fastGHQuad::gaussHermiteData(nodes)
+        args$gauss_x <- rule$x
+        args$gauss_w <- rule$w
+    }
     ## penalty function
     pfun <- function(beta,sp) {
         sum(sapply(1:length(gam.obj$smooth),
