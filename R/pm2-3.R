@@ -443,6 +443,7 @@ stpm2 <- function(formula, data,
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
     RandDist <- match.arg(RandDist)
     optimiser <- match.arg(optimiser)
+    use.gr <- (optimiser == "BFGS")
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)

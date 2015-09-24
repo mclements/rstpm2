@@ -77,6 +77,7 @@ summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
 require(rstpm2)
 require(frailtypack)
 data(dataAdditive)
+
 mod1 <- frailtyPenal(Surv(t1,t2,event)~cluster(group)+var1,data=dataAdditive,
                      n.knots=8,kappa1=0.1,cross.validation=TRUE)
 mod1n <- frailtyPenal(Surv(t1,t2,event)~cluster(group)+var1,data=dataAdditive,
@@ -87,20 +88,24 @@ system.time(mod2 <- stpm2(Surv(t1,t2,event)~var1, # Gamma
                           logH.formula=~ns(t2,df=7),
                           cluster=dataAdditive$group))
 
+system.time(coxph1 <- coxph(Surv(t1,t2,event)~var1+frailty(group,distribution="gaussian"),
+                          data=dataAdditive))
+summary(coxph1)
+
 system.time(mod2n <- stpm2(Surv(t1,t2,event)~var1,
                            data=dataAdditive,
-                           criterion="BIC",
                            RandDist="LogN",
                            optimiser="NelderMead",
                            logH.formula=~ns(t2,df=7),
                            cluster=dataAdditive$group, trace=1))
 
 
-system.time(mod2 <- pstpm2(Surv(t1,t2,event)~var1,
+system.time(mod3 <- pstpm2(Surv(t1,t2,event)~var1,
                           data=dataAdditive,
                            criterion="BIC",
                           smooth.formula=~s(t2),
                           cluster=dataAdditive$group))
+
 system.time(mod3 <- coxph(Surv(t1,t2,event)~frailty(group,distribution="gamma")+var1,data=dataAdditive))
 summary(mod2)
 coef2 <- coef(summary(mod2))

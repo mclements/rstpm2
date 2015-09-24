@@ -429,7 +429,7 @@ namespace rstpm2 {
     virtual gradli_constraint gradli_right_censored(vec eta, vec etaD, mat X, mat XD) {
       vec h = Link::h(eta,etaD) + bhazard;
       vec H = Link::H(eta);
-      vec one = ones(h.size());
+      // vec one = ones(h.size());
       vec eps = h*0.0 + 1.0e-16; // hack
       mat gradH = Link::gradH(eta,X);
       mat gradh = Link::gradh(eta,etaD,X,XD);
@@ -444,7 +444,7 @@ namespace rstpm2 {
     virtual gradli_constraint gradli_left_truncated(vec eta0, mat X0) {
       mat gradH0 = Link::gradH(eta0, X0); 
       vec H0 = Link::H(eta0); 
-      vec one = ones(H0.size());
+      // vec one = ones(H0.size());
       vec eps = H0*0.0 + 1.0e-16; // hack
       mat Xconstraint = kappa * rmult(gradH0, H0 % (H0<eps));
       H0 = max(H0,eps);
@@ -1106,9 +1106,9 @@ namespace rstpm2 {
 	int g = 0;
 	for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it, ++g) {
 	  uvec index = as<uvec>(wrap(it->second));
-	  double Lik = exp(sum(lik.li(index)));
-	  Li(g) += Lik*wstar[k];
-	  gradLi.row(g) += wstar[k]*Lik*sum(gradlik.gradli.rows(index),0);
+	  double Lgk = exp(sum(lik.li(index)));
+	  Li(g) += Lgk*wstar[k];
+	  gradLi.row(g) += wstar[k]*Lgk*sum(gradlik.gradli.rows(index),0);
 	}
       }
       rowvec grad = sum(rmult(gradLi,1/Li),0);
