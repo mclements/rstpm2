@@ -436,11 +436,13 @@ stpm2 <- function(formula, data,
                      coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE, 
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE,
                      reltol=1.0e-8, trace = 0,
-                     link.type=c("PH","PO","probit","AH"),
-                     frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,
+                     link.type=c("PH","PO","probit","AH"), optimiser=c("BFGS","NelderMead"),
+                     frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"),
                      contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
+    RandDist <- match.arg(RandDist)
+    optimiser <- match.arg(optimiser)
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
@@ -622,7 +624,8 @@ stpm2 <- function(formula, data,
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
                  kappa=1, trace = trace, cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0 = which0, link=link.type, ttype=ttype,
-                 type=if (frailty) "stpm2_normal_frailty" else "stpm2", return_type="optim")
+                 RandDist=RandDist, optimiser=optimiser,
+                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", return_type="optim")
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x
@@ -1025,11 +1028,13 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=NULL, trace = 0,
                    link.type=c("PH","PO","probit","AH"),
-                   frailty=!is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,
+                   frailty=!is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,RandDist=c("Gamma","LogN"),
                    reltol = list(search = 1.0e-6, final = 1.0e-8),
                    contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
+    link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
+    RandDist <- match.arg(RandDist)
     ## set up the data
     ## ensure that data is a data frame
     temp.formula <- formula
@@ -1229,8 +1234,9 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                  kappa=1.0,
                  alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2),
                  cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0=which0, link = link.type,
-                 penalty = penalty, ttype=ttype, 
-                 type = if (frailty) "pstpm2_normal_frailty" else "pstpm2", return_type="optim")
+                 penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser="BFGS",
+                 type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2",
+                 return_type="optim")
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x

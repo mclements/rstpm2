@@ -338,12 +338,15 @@ namespace rstpm2 {
       map0 = as<uvec>(list["map0"]); // length N map from individuals to row of X0
       which0 = as<uvec>(list["which0"]); // length N0 indicator for X0
       kappa = as<double>(list["kappa"]);
+      optimiser = as<std::string>(list["optimiser"]);
       bfgs.trace = as<int>(list["trace"]);
       bfgs.reltol = as<double>(list["reltol"]);
       bfgs.hessianp = false;
       bfgs.parscale = parscale = as<vec>(list["parscale"]);
     }
     // log-likelihood components and constraints
+    // Note: the li and gradli components depend on other variables (bhazard, wt, wt0, wt, event);
+    //       calculations should *not* be done on subsets
     virtual li_constraint li_right_censored(vec eta, vec etaD) {
       vec h = Link::h(eta,etaD) + bhazard;
       vec H = Link::H(eta);
@@ -420,9 +423,12 @@ namespace rstpm2 {
       }
       return grad;
     }
+    // log-likelihood gradient components
+    // Note: gradH and gradh are currently calculated at eta and etaD and may not satisfy the constraints, 
+    //       while H and h may be transformed for the constraints 
     virtual gradli_constraint gradli_right_censored(vec eta, vec etaD, mat X, mat XD) {
       vec h = Link::h(eta,etaD) + bhazard;
-      vec H = exp(eta);
+      vec H = Link::H(eta);
       vec one = ones(h.size());
       vec eps = h*0.0 + 1.0e-16; // hack
       mat gradH = Link::gradH(eta,X);
@@ -432,7 +438,6 @@ namespace rstpm2 {
       H = max(H,eps);
       h = max(h,eps);
       mat Xgrad = -rmult(gradH, wt % H) + rmult(gradh, event / h % wt);
-      Xgrad = rmult(Xgrad,wt);
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
     }
@@ -443,7 +448,7 @@ namespace rstpm2 {
       vec eps = H0*0.0 + 1.0e-16; // hack
       mat Xconstraint = kappa * rmult(gradH0, H0 % (H0<eps));
       H0 = max(H0,eps);
-      mat Xgrad = -rmult(gradH0, wt0 % H0);
+      mat Xgrad = rmult(gradH0, wt0 % H0);
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
     }
@@ -496,9 +501,9 @@ namespace rstpm2 {
       rowvec vgr = sum(gc.gradli,0);
       vec gr(n);
       for (int i = 0; i<beta.size(); ++i) {
-	gr[i] = -vgr[i] + dconstraint[i];
+	gr[i] = vgr[i] - dconstraint[i];
       }
-      return gr;
+      return -gr;
     }
     virtual bool feasible(vec beta) {
       vec eta = X * beta;
@@ -523,7 +528,7 @@ namespace rstpm2 {
 	init[i] *= parscale[i];
       }
     }
-    void optimWithConstraint(NumericVector init) {
+    void optimWithConstraintBFGS(NumericVector init) {
       bool satisfied;
       if (bfgs.trace > 0) 
 	Rprintf("Starting optimization\n");
@@ -549,6 +554,12 @@ namespace rstpm2 {
       bfgs.coef = nm.coef;
       bfgs.hessian = nm.hessian;
     }
+    void optimWithConstraint(NumericVector init) {
+      if (this->optimiser == "NelderMead")
+	optimWithConstraintNM(init);
+      else
+	optimWithConstraintBFGS(init);
+    }
     // find the left truncated values for a given index
     uvec find0() { return map0(find(ind0)); }
     uvec find0(vec index) { return (map0(index))(find(ind0(index))); }
@@ -560,6 +571,7 @@ namespace rstpm2 {
     int n, N;
     BFGS2 bfgs;
     uvec ind0, map0, which0;
+    std::string optimiser;
   };
 
   // RcppExport SEXP optim_stpm2_nlm(SEXP args) {
@@ -890,7 +902,7 @@ namespace rstpm2 {
 	int mi = sum(this->event(index));
 	double sumH = sum(H(index));
 	double sumHenter = 0.0;
-	ll += sum(log(h(index)) % this->event);
+	ll += sum(log(h(index)) % this->event(index));
 	if (this->delayed && cluster_events.count(it->first) > 0) {
 	  uvec ind00 = as<uvec>(wrap(cluster_events[it->first]));
 	  sumHenter = sum(H0(ind00));
@@ -1033,7 +1045,7 @@ namespace rstpm2 {
     **/
     double objective(vec beta) {
       int n = beta.size();
-      vec vbeta(beta); // logtheta is the last parameter in beta
+      vec vbeta(beta); // nu=log(variance) is the last parameter in beta; exp(nu)=sigma^2
       vbeta.resize(n-1);
       double sigma = exp(0.5*beta[n-1]); // standard deviation
       int K = gauss_x.size(); // number of nodes
@@ -1056,13 +1068,11 @@ namespace rstpm2 {
 	double Li = dot(exp(sum(lijk.rows(index),0)),wstar);
 	ll += log(Li);
       }
-      ll -= constraint;
+      // ll -= constraint;
       return -ll;  
     }
     vec gradient(vec beta) {
       int n = beta.size();
-      // vec vbeta(beta); // logsigma is the last parameter in beta
-      // vbeta.resize(n-1);
       double sigma = exp(0.5*beta[n-1]);
       mat Z(this->N,1,fill::ones);
       mat ZD(this->N,1,fill::zeros);
@@ -1089,7 +1099,8 @@ namespace rstpm2 {
 	li_constraint lik = Base::li(etastar, etaDstar, eta0star, eta1star);
 	gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,
 						 Xstar, XDstar, X0star, X1star);
-	// adjust the last column of the gradient to account for the variance components
+	// adjust the last column of the gradient to account for the variance components:
+	// chain rule: d lik/d bi * d bi/d nu where bi = sqrt(2)*exp(nu/2)*x_k
 	gradlik.gradli.col(gradlik.gradli.n_cols-1) *= bi*0.5;
 	dconstraint += sum(gradlik.constraint,0); // ignores clustering??
 	int g = 0;
@@ -1101,18 +1112,19 @@ namespace rstpm2 {
 	}
       }
       rowvec grad = sum(rmult(gradLi,1/Li),0);
-      if (this->bfgs.trace>0) 
+      if (this->bfgs.trace>0) {
 	Rprintf("fdgradient="); Rprint(this->fdgradient(beta)); 
+      }
       vec gr(n,fill::zeros);
-      for (int i=0; i<n; i++) gr(i) = grad(i) - dconstraint(i);
+      for (int i=0; i<n; i++) gr(i) = grad(i); // - dconstraint(i);
       return -gr;  
     }
     bool feasible(vec beta) {
       vec coef(beta);
-      coef.resize(this->n-1);
+      coef.resize(beta.size()-1);
       return Base::feasible(coef);
     }
-    void optimWithConstraint(NumericVector init) {
+    void optimWithConstraintBFGS(NumericVector init) {
       bool satisfied;
       int n = init.size();
       if (this->bfgs.trace > 0) 

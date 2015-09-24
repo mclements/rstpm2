@@ -79,6 +79,23 @@ require(frailtypack)
 data(dataAdditive)
 mod1 <- frailtyPenal(Surv(t1,t2,event)~cluster(group)+var1,data=dataAdditive,
                      n.knots=8,kappa1=0.1,cross.validation=TRUE)
+mod1n <- frailtyPenal(Surv(t1,t2,event)~cluster(group)+var1,data=dataAdditive,
+                     n.knots=8,kappa1=0.1,cross.validation=TRUE, RandDist="LogN")
+
+system.time(mod2 <- stpm2(Surv(t1,t2,event)~var1, # Gamma
+                          data=dataAdditive,
+                          logH.formula=~ns(t2,df=7),
+                          cluster=dataAdditive$group))
+
+system.time(mod2n <- stpm2(Surv(t1,t2,event)~var1,
+                           data=dataAdditive,
+                           criterion="BIC",
+                           RandDist="LogN",
+                           optimiser="NelderMead",
+                           logH.formula=~ns(t2,df=7),
+                           cluster=dataAdditive$group, trace=1))
+
+
 system.time(mod2 <- pstpm2(Surv(t1,t2,event)~var1,
                           data=dataAdditive,
                            criterion="BIC",
