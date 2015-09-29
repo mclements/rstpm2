@@ -429,7 +429,6 @@ namespace rstpm2 {
     virtual gradli_constraint gradli_right_censored(vec eta, vec etaD, mat X, mat XD) {
       vec h = Link::h(eta,etaD) + bhazard;
       vec H = Link::H(eta);
-      // vec one = ones(h.size());
       vec eps = h*0.0 + 1.0e-16; // hack
       mat gradH = Link::gradH(eta,X);
       mat gradh = Link::gradh(eta,etaD,X,XD);
@@ -437,18 +436,17 @@ namespace rstpm2 {
 				 rmult(gradH,H % (H<eps)));
       H = max(H,eps);
       h = max(h,eps);
-      mat Xgrad = -rmult(gradH, wt % H) + rmult(gradh, event / h % wt);
+      mat Xgrad = -rmult(gradH, wt) + rmult(gradh, event / h % wt);
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
     }
     virtual gradli_constraint gradli_left_truncated(vec eta0, mat X0) {
       mat gradH0 = Link::gradH(eta0, X0); 
       vec H0 = Link::H(eta0); 
-      // vec one = ones(H0.size());
       vec eps = H0*0.0 + 1.0e-16; // hack
       mat Xconstraint = kappa * rmult(gradH0, H0 % (H0<eps));
       H0 = max(H0,eps);
-      mat Xgrad = rmult(gradH0, wt0 % H0);
+      mat Xgrad = rmult(gradH0, wt0);
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
     }
@@ -487,7 +485,7 @@ namespace rstpm2 {
 	gradli_constraint s = gradli_right_censored(eta, etaD, X, XD);
 	if (delayed) {
 	  gradli_constraint s0 = gradli_left_truncated(eta0, X0);
-	  s.constraint += s0.constraint;
+	  s.constraint.rows(which0) += s0.constraint;
 	  s.gradli.rows(which0) += s0.gradli;
 	}
 	return s;

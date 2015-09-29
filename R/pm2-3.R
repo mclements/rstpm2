@@ -624,7 +624,7 @@ stpm2 <- function(formula, data,
     names(parscale) <- names(init)
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
-                 kappa=1, trace = trace, cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0 = which0, link=link.type, ttype=ttype,
+                 kappa=1, trace = trace, cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
                  RandDist=RandDist, optimiser=optimiser,
                  type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", return_type="optim")
     if (frailty) {
@@ -1234,7 +1234,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                  sp=sp, reltol_search=reltol$search, reltol=reltol$final, trace=trace,
                  kappa=1.0,
                  alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2),
-                 cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0=which0, link = link.type,
+                 cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0=which0 - 1L, link = link.type,
                  penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser="BFGS",
                  type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2",
                  return_type="optim")
