@@ -387,7 +387,7 @@ namespace rstpm2 {
       index = find(ttype == 2); // left censored
       if (any(index)) li(index) += wt(index) % (1-exp(-H(index)));
       index = find(ttype == 3); // interval censored
-      if (any(index)) li(index) += wt(index) % (H1(index)  - H(index));
+      if (any(index)) li(index) += wt(index) % log(exp(-H(index)) - exp(-H1(index)));
       li_constraint out = {li, constraint};
       return out;
     }
@@ -470,11 +470,15 @@ namespace rstpm2 {
       index = find(ttype == 0); // right censored
       if (any(index)) li(index) -= rmult(gradH.rows(index),wt(index));
       index = find(ttype == 1); // exact
-      if (any(index)) li(index) += rmult(gradh.rows(index),wt(index) % (1/h(index)) - gradH.rows(index));
+      if (any(index)) li(index) += rmult(gradh.rows(index),wt(index) / h(index)) - rmult(gradH.rows(index),wt(index));
       index = find(ttype == 2); // left censored
-      if (any(index)) li(index) += rmult(1-exp(-gradH.rows(index)),wt(index));
+      if (any(index)) li(index) += rmult(-gradH.rows(index),-exp(-H(index)) % wt(index));
       index = find(ttype == 3); // interval censored
-      if (any(index)) li(index) += rmult(gradH1.rows(index) - gradH.rows(index),wt(index));
+      if (any(index)) {
+	vec V = wt(index) / (exp(-H(index)) - exp(-H1(index)));
+	li(index) += rmult(gradH1.rows(index),V % exp(-H1(index))) - 
+	  rmult(gradH.rows(index),V % exp(-H(index)));
+      }
       gradli_constraint out = {li, Xconstraint};
       return out;
     }

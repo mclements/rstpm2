@@ -36,7 +36,9 @@ dopredictions
 
 * delayed entry
 preserve
-  replace _t0 = rectime*0.5 if hormon==0
+  gen entry = 0
+  replace entry = rectime*0.5 if hormon==0
+  stset rectime, f(censrec==1) enter(entry)
   stpm2 hormon, df(3) scale(h)
   dopredictions
 restore
