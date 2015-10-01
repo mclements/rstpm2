@@ -1073,6 +1073,69 @@ namespace rstpm2 {
       // ll -= constraint;
       return -ll;  
     }
+
+/// Another way for gradients
+/// gradient of objective
+vec gradient_new(vec beta) {
+	int n = beta.size();
+	double sigma = exp(0.5*beta[n-1]);
+	mat Z(this->N,1,fill::ones);
+	mat ZD(this->N,1,fill::zeros);
+	mat Z0(this->X0.n_rows,1,fill::ones);
+	mat Z1(this->X1.n_rows,1,fill::ones);
+	mat Xstar = join_horiz(this->X, Z); 
+	mat XDstar = join_horiz(this->XD, ZD); // assumes time-invariant random effects
+	mat X0star = join_horiz(this->X0, Z0); 
+	mat X1star = join_horiz(this->X1, Z1); 
+	int K = gauss_x.size(); // number of nodes
+	vec wstar = gauss_w/sqrt(datum::pi);
+	int G = clusters.size();
+	vec Li(G,fill::zeros);
+	mat gradLi(G,n,fill::zeros);
+	vec betastar = beta;
+	rowvec dconstraint(n,fill::zeros); 
+	mat likeli_jk(this->N,K,fill::zeros);
+	vec likeli_k(K,fill::zeros);
+	cube grad_jk(this->N,n,K,fill::zeros);
+	mat grad_kn(K,n,fill::zeros);
+	// for K nodes calculation 
+	for (int k=0; k<K; ++k) {
+		double bi = sqrt(2.0)*sigma*gauss_x[k];
+		betastar[betastar.size()-1] = bi;
+		vec etastar = Xstar * betastar;
+		vec etaDstar = XDstar * betastar;
+		vec eta0star = X0star * betastar;
+		vec eta1star = X1star * betastar;
+		li_constraint lik = Base::li(etastar, etaDstar, eta0star, eta1star);
+		gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star);
+		// adjust the last column of the gradient to account for the variance components:
+			// chain rule: d lik/d bi * d bi/d nu where bi = sqrt(2)*exp(nu/2)*x_k
+		gradlik.gradli.col(gradlik.gradli.n_cols-1) *= bi*0.5;
+		dconstraint += sum(gradlik.constraint,0); // ignores clustering??
+		likeli_jk.col(k) = lik.li;
+		grad_jk.slice(k) = gradlik.gradli;
+	}
+	// Iteration in each cluster and get vec Li(g) and mat gradLi(g,n)
+	int g = 0;
+	for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it, ++g) {
+		uvec index = as<uvec>(wrap(it->second));
+		vec likeli_k = exp(sum(likeli_jk.rows(index),0)).t(); // sum  index components at all nodes for cluster i
+		for(int k=0; k<K; ++k){
+			grad_kn.row(k) = sum(grad_jk.slice(k).rows(index),0);
+		}
+		Li(g) = dot(likeli_k,wstar);
+		gradLi.row(g) = sum(rmult(grad_kn,wstar%likeli_k),0);
+		// gradLi.row(g) = grad_kn.t() * (wstar%likeli_k);
+	}
+	// Last step to summarize all clusters 
+	rowvec grad = sum(rmult(gradLi,1/Li),0); // Rows of matrix is multiplied with elements of vector
+	if (this->bfgs.trace>0) {
+		Rprintf("fdgradient="); Rprint(this->fdgradient(beta)); 
+	}
+	vec gr(n,fill::zeros);
+	for (int i=0; i<n; i++) gr(i) = grad(i); // - dconstraint(i);
+	return -gr;  
+}
     vec gradient(vec beta) {
       int n = beta.size();
       double sigma = exp(0.5*beta[n-1]);

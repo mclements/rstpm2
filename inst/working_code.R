@@ -77,6 +77,17 @@ summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
 require(rstpm2)
 require(frailtypack)
 data(dataAdditive)
+system.time(mod2n <- stpm2(Surv(t1,t2,event)~var1,
+                           data=dataAdditive,
+                           RandDist="LogN",
+                           optimiser="NelderMead",
+                           logH.formula=~ns(t2,df=7),
+                           cluster=dataAdditive$group, nodes=20))
+system.time(mod2nb <- stpm2(Surv(t1,t2,event)~var1,
+                           data=dataAdditive,
+                           RandDist="LogN",
+                           logH.formula=~ns(t2,df=7),
+                           cluster=dataAdditive$group, nodes=20))
 
 mod1 <- frailtyPenal(Surv(t1,t2,event)~cluster(group)+var1,data=dataAdditive,
                      n.knots=8,kappa1=0.1,cross.validation=TRUE)
