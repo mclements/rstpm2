@@ -37,9 +37,20 @@
 
 \begin{document}
 
-\section{Theory}
+\section{Background and theory}
 
-Currently, the best description of the theory is in draft paper by Liu, Pawitan and Clements. 
+\emph{Link-based survival models} provide a flexible and general approach to modelling survival or time-to-event data. The survival function $S(t|x)$ to time $t$ for covariates $x$ is defined in terms of a link function $G$ and a linear prediction $\eta(t,x)$, such that
+
+\begin{align*}
+  S(t|x) &= G(\eta(t,x))
+\end{align*}
+
+\noindent where $\eta$ is a function of both time $t$ and covariates $x$. The linear predictor can be constructed in a flexible manner. Royston and Parmar (2003) focused on time being modelled using natural splines for log-time, including left truncation and relative survival. We have implemented the Royston-Parmar model class and extended it in several ways, allowing for: (i) general parametric models for $\eta(t,x)$, including B-splines and natural splines for different transformations of time; (ii) general semi-parametric models for $\eta(t,x)$ including penalised smoothers together with unpenalised parametric functions; (iii) interval censoring; and (iv) frailties using Gamma and log-Normal distributions. Fully parametric models are estimated using maximum likelihood, while the semi-parametric models are estimated using maximum penalised likelihood with smoothing parameters selected using 
+A more detailed theoretical development is available from the paper by Liu, Pawitan and Clements (available on request). 
+
+Why would you want to use these models? 
+
+\section{}
 
 
 \section{Mean survival}

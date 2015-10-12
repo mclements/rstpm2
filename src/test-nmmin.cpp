@@ -385,7 +385,7 @@ namespace rstpm2 {
       index = find(ttype == 1); // exact
       if (any(index)) li(index) += wt(index) % (log(h(index)) - H(index));
       index = find(ttype == 2); // left censored
-      if (any(index)) li(index) += wt(index) % (1-exp(-H(index)));
+      if (any(index)) li(index) += wt(index) % log(1-exp(-H(index)));
       index = find(ttype == 3); // interval censored
       if (any(index)) li(index) += wt(index) % log(exp(-H(index)) - exp(-H1(index)));
       li_constraint out = {li, constraint};
@@ -472,7 +472,7 @@ namespace rstpm2 {
       index = find(ttype == 1); // exact
       if (any(index)) li(index) += rmult(gradh.rows(index),wt(index) / h(index)) - rmult(gradH.rows(index),wt(index));
       index = find(ttype == 2); // left censored
-      if (any(index)) li(index) += rmult(-gradH.rows(index),-exp(-H(index)) % wt(index));
+      if (any(index)) li(index) += rmult(-gradH.rows(index),-exp(-H(index)) / (1-exp(-H(index))) % wt(index));
       index = find(ttype == 3); // interval censored
       if (any(index)) {
 	vec V = wt(index) / (exp(-H(index)) - exp(-H1(index)));
