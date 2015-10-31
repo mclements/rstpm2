@@ -895,8 +895,8 @@ setMethod("plot", signature(x="stpm2", y="missing"),
           function(x,y,newdata,type="surv",
                       xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
                       add=FALSE,ci=!add,rug=!add,
-                      var=NULL,...) {
-  y <- predict(x,newdata,type=type,var=var,grid=TRUE,se.fit=TRUE)
+                      var=NULL,exposed=incrVar(var),...) {
+  y <- predict(x,newdata,type=type,var=var,exposed=exposed,grid=TRUE,se.fit=TRUE)
   if (is.null(xlab)) xlab <- deparse(x@timeExpr)
   if (is.null(ylab))
     ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
@@ -1015,6 +1015,7 @@ setClass("pstpm2", representation(xlevels="list",
                                   nevent="numeric",
                                   link="list",
                                   edf="numeric",
+                                  edf_var="numeric",
                                   df="numeric",
                                   args="list"),
          contains="mle2")
@@ -1367,6 +1368,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     args$init <- init <- fit$coef
     if (!no.sp) args$sp <- sp <- fit$sp
     edf <- fit$edf
+    edf_var<- as.vector(fit$edf_var)
     names(fit$coef) <- rownames(fit$hessian) <- colnames(fit$hessian) <- names(init)
     negll <- function(beta) negllsp(beta,sp)
     gradnegll <- function(beta) gradnegllsp(beta,sp)
@@ -1415,13 +1417,14 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                nevent=nevent,
                link=link,
                edf=edf,
+               edf_var=edf_var,
                df=edf,
                args=args)
     if (robust) # kludge
         out@vcov <- sandwich.stpm2(out)
     return(out)
 }
-setClass("summary.pstpm2", representation(frailty="logical",theta="numeric"), contains="summary.mle2")
+setClass("summary.pstpm2", representation(frailty="logical",theta="list"), contains="summary.mle2")
 setMethod("summary", "pstpm2",
           function(object) {
               newobj <- as(summary(as(object,"mle2")),"summary.stpm2")
@@ -1434,11 +1437,13 @@ setMethod("summary", "pstpm2",
                   test.statistic <- 1/se.logtheta
                   p.value <- pchisq(test.statistic,df=1,lower.tail=FALSE)/2
                   newobj@theta <- list(theta=theta, se.theta=se.theta, p.value=p.value)
-              } else newobj@theta <- -1
+              } else newobj@theta <- list()
               newobj })
 setMethod("show", "summary.pstpm2",
           function(object) {
               show(as(object,"summary.mle2"))
+              cat(sprintf("\nedf=%g\n",object@edf))
+              cat(sprintf("\nedf_var=%g\n",object@edf_var)) ## how to get the names??di
               if (object@frailty)
                   cat(sprintf("\ntheta=%g\tse=%g\tp=%g\n",
                               object@theta$theta,object@theta$se.theta,object@theta$p.value))

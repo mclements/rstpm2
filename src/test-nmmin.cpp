@@ -214,13 +214,17 @@ namespace rstpm2 {
     vec coef(beta,n);
     if (obj->bfgs.trace>0) {
       Rprintf("beta="); Rprint(coef);
+    }
+    if (obj->bfgs.trace>1) {
       Rprintf("parscale="); Rprint(obj->parscale);
     }
     vec gr = obj->gradient(coef % obj->parscale);
     if (obj->bfgs.trace>0) {
       Rprintf("gradient="); Rprint(gr);
+    }
+    if (obj->bfgs.trace>1) {
       Rprintf("fdgradient="); Rprint(obj->fdgradient(coef % obj->parscale));
-    };
+    }
     for (int i=0; i<n; ++i) grad[i] = gr[i];
   }
   template<class T>
@@ -640,66 +644,76 @@ namespace rstpm2 {
       for (int i=0; i<n; ++i) gr[i] = vgr[i];
       return gr;
     }
-    std::vector<Smoother> smooth;
-  };
-  class SmoothHaz {
-  public:
-    struct Smoother {
-      mat X0, X1, X2, X3;
-      vec w;
-      double lambda;
-    };
-    SmoothHaz(SEXP sexp) {
-      List list = as<List>(sexp);
-      List lsmooth = as<List>(list["smooth"]);
-      for(int i=0; i<lsmooth.size(); ++i) {
-	List lsmoothi = as<List>(lsmooth[i]);
-	Smoother smoothi =  {
-	  as<mat>(lsmoothi["X0"]), 
-	  as<mat>(lsmoothi["X1"]), 
-	  as<mat>(lsmoothi["X2"]), 
-	  as<mat>(lsmoothi["X3"]), 
-	  as<vec>(lsmoothi["w"]), 
-	  as<double>(lsmoothi["lambda"])
-	};
-	smooth.push_back(smoothi);
-      }
-    }
-    double penalty(vec vbeta, vec sp) {
-      double value = 0.0;
+    vec traces(mat X) {
+      vec values(smooth.size(), fill::zeros);
       for (size_t i=0; i < smooth.size(); ++i) {
-	Smoother obj = smooth[i];
-	vec s0 = obj.X0 * vbeta;
-	vec s1 = obj.X1 * vbeta;
-	vec s2 = obj.X2 * vbeta;
-	vec s3 = obj.X3 * vbeta;
-	vec h2 = exp(s0) % (s3 + 3*s1%s2 + s1%s1%s1);
-	value += sp[i]/2 * obj.lambda * sum(obj.w % h2 % h2);
+	Smoother smoothi = smooth[i];
+	for (size_t j=smoothi.first_para; j <= static_cast<size_t>(smoothi.last_para); ++j)
+	  values[i] += X(j,j);
       }
-      return value;
+      return values;
     }
-  vec penalty_gradient(vec vbeta, vec sp) {
-    int n = vbeta.size();
-    rowvec vgr(n, fill::zeros);
-    for (size_t i=0; i < smooth.size(); ++i) {
-      Smoother obj = smooth[i];
-      vec s0 = obj.X0 * vbeta;
-      vec s1 = obj.X1 * vbeta;
-      vec s2 = obj.X2 * vbeta;
-      vec s3 = obj.X3 * vbeta;
-      vec h2 = exp(s0) % (s3 + 3*s1%s2 + s1%s1%s1);
-      mat dh2sq_dbeta = 
-	2*lmult(h2 % exp(s0),
-		obj.X3+3*(rmult(obj.X1,s2)+rmult(obj.X2,s1))+3*lmult(s1%s1,obj.X1))+
-	2*lmult(h2 % h2,obj.X0);
-      vgr += sp[i]*obj.lambda*sum(lmult(obj.w, dh2sq_dbeta),0);
-    }
-    vec gr(n);
-    for (int i = 0; i<n; ++i) gr[i] = vgr[i];
-    return gr;
-  }
     std::vector<Smoother> smooth;
   };
+  // // TODO: include first_para and last_para class data for the traces() method
+  // class SmoothHaz {
+  // public:
+  //   struct Smoother {
+  //     mat X0, X1, X2, X3;
+  //     vec w;
+  //     double lambda;
+  //   };
+  //   SmoothHaz(SEXP sexp) {
+  //     List list = as<List>(sexp);
+  //     List lsmooth = as<List>(list["smooth"]);
+  //     for(int i=0; i<lsmooth.size(); ++i) {
+  // 	List lsmoothi = as<List>(lsmooth[i]);
+  // 	Smoother smoothi =  {
+  // 	  as<mat>(lsmoothi["X0"]), 
+  // 	  as<mat>(lsmoothi["X1"]), 
+  // 	  as<mat>(lsmoothi["X2"]), 
+  // 	  as<mat>(lsmoothi["X3"]), 
+  // 	  as<vec>(lsmoothi["w"]), 
+  // 	  as<double>(lsmoothi["lambda"])
+  // 	};
+  // 	smooth.push_back(smoothi);
+  //     }
+  //   }
+  //   double penalty(vec vbeta, vec sp) {
+  //     double value = 0.0;
+  //     for (size_t i=0; i < smooth.size(); ++i) {
+  // 	Smoother obj = smooth[i];
+  // 	vec s0 = obj.X0 * vbeta;
+  // 	vec s1 = obj.X1 * vbeta;
+  // 	vec s2 = obj.X2 * vbeta;
+  // 	vec s3 = obj.X3 * vbeta;
+  // 	vec h2 = exp(s0) % (s3 + 3*s1%s2 + s1%s1%s1);
+  // 	value += sp[i]/2 * obj.lambda * sum(obj.w % h2 % h2);
+  //     }
+  //     return value;
+  //   }
+  // vec penalty_gradient(vec vbeta, vec sp) {
+  //   int n = vbeta.size();
+  //   rowvec vgr(n, fill::zeros);
+  //   for (size_t i=0; i < smooth.size(); ++i) {
+  //     Smoother obj = smooth[i];
+  //     vec s0 = obj.X0 * vbeta;
+  //     vec s1 = obj.X1 * vbeta;
+  //     vec s2 = obj.X2 * vbeta;
+  //     vec s3 = obj.X3 * vbeta;
+  //     vec h2 = exp(s0) % (s3 + 3*s1%s2 + s1%s1%s1);
+  //     mat dh2sq_dbeta = 
+  // 	2*lmult(h2 % exp(s0),
+  // 		obj.X3+3*(rmult(obj.X1,s2)+rmult(obj.X2,s1))+3*lmult(s1%s1,obj.X1))+
+  // 	2*lmult(h2 % h2,obj.X0);
+  //     vgr += sp[i]*obj.lambda*sum(lmult(obj.w, dh2sq_dbeta),0);
+  //   }
+  //   vec gr(n);
+  //   for (int i = 0; i<n; ++i) gr[i] = vgr[i];
+  //   return gr;
+  // }
+  //   std::vector<Smoother> smooth;
+  // };
 
   template<class T>
   double pstpm2_multivariate_step(int n, double * logsp_ptr, void * model_ptr) {
@@ -755,8 +769,10 @@ namespace rstpm2 {
       if (this->bfgs.trace > 0)  {
 	Rprintf("Debug on trace calculation. Coef:\n");
 	Rprint(this->bfgs.coef);
-	Rprintf("Hessian0:\n");
-	Rprint(hessian0);
+	if (this->bfgs.trace > 1) {
+	  Rprintf("Hessian0:\n");
+	  Rprint(hessian0);
+	}
 	Rprintf("Hessian:\n");
 	Rprint(this->bfgs.hessian);
       }
@@ -809,12 +825,16 @@ namespace rstpm2 {
       this->optimWithConstraint(this->init);
       this->bfgs.hessian = this->bfgs.calc_hessian(&optimgradient<This>, (void *) this);
       NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, (void *) this);
-      double edf = trace(solve(as<mat>(wrap(this->bfgs.hessian)),as<mat>(wrap(hessian0))));
+      mat Proj = solve(as<mat>(wrap(this->bfgs.hessian)),as<mat>(wrap(hessian0)));
+      double edf = trace(Proj);
+      NumericVector edf_var = as<NumericVector>(wrap(Smooth::traces(Proj)));
       this->post_process();
       return List::create(_("sp")=wrap(sp),
 			  _("coef")=wrap(this->bfgs.coef),
 			  _("hessian")=wrap(this->bfgs.hessian),
-			  _("edf")=wrap(edf));
+			  _("edf")=wrap(edf),
+			  _("edf_var")=wrap(edf_var)
+			  );
     }
     SEXP optim_first() { 
       double opt_sp = exp(Brent_fmin(log(0.001),log(1000.0),&(pstpm2_first_step<This>),(void *) this,1.0e-2));
@@ -909,11 +929,8 @@ namespace rstpm2 {
 	  uvec ind00 = as<uvec>(wrap(cluster_events[it->first]));
 	  sumHenter = sum(H0(ind00));
 	}
-	// if (joint) {
-	//   ll -= (1.0/theta+mi)*log(1.0+theta*(sumH)) - 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
-	// } else {
-	ll -= (1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // default: conditional (Gutierrez 2002)
-	// }
+	ll += -(1.0/theta+mi)*log(1.0+theta*(sumH)) + 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
+	// ll -= (1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // conditional (Gutierrez 2002)
 	if (mi>0) {
 	  for (int k=1; k<=mi; ++k)
 	    ll += log(1.0+theta*(mi-k));
@@ -968,18 +985,24 @@ namespace rstpm2 {
 	  grconstraint += this->kappa * ((gradh.row(*j).t() * h(*j) * (h(*j)<0)) + (gradH.row(*j).t() * H(*j) * (H(*j)<0)));
 	}
 	for (int k=0; k<n-1; ++k) {
-	  gr(k) += gradi(k) - (1+mi*theta)*(gradHi(k)-gradH0i(k))/(1+theta*(sumH-sumHenter)) - grconstraint(k);
+	  // gr(k) += gradi(k) - (1+mi*theta)*(gradHi(k)-gradH0i(k))/(1+theta*(sumH-sumHenter)) - grconstraint(k); // Gutierrez
+	  gr(k) += gradi(k) - (1+mi*theta)*gradHi(k)/(1+theta*(sumH)) + 1.0/(1+theta*sumHenter)*gradH0i(k) - grconstraint(k); // Rondeau et al
 	}
 	double lastterm = 0.0;
 	if (mi>0) {
 	  for (int k=1; k<=mi; ++k)
 	    lastterm += theta*(mi-k)/(1.0+theta*(mi-k));
 	}
-	gr(n-1) += log(1.0+theta*(sumH-sumHenter))/theta - 
-	  (1.0/theta+mi)*theta*(sumH-sumHenter)/(1.0+theta*(sumH-sumHenter)) + 
-	  lastterm;
+	// gr(n-1) += log(1.0+theta*(sumH-sumHenter))/theta - 
+	//   (1.0/theta+mi)*theta*(sumH-sumHenter)/(1.0+theta*(sumH-sumHenter)) + 
+	//   lastterm; // Gutierrez 
+	gr(n-1) += log(1.0+theta*sumH)/theta - 
+	  (1.0+mi*theta)*sumH/(1.0+theta*sumH) + 
+	  sumHenter/(1.0+theta*sumHenter) -
+	  log(1.0+theta*sumHenter)/theta +
+	  lastterm; // Rondeau et al
       }
-      if (this->bfgs.trace>0) {
+      if (this->bfgs.trace>1) {
 	Rprintf("Calculating fdgradient:\n"); Rprint(this->fdgradient(beta)); Rprintf("(=fdgradient)\n");
       }
       return -gr;  
@@ -1073,7 +1096,6 @@ namespace rstpm2 {
       // ll -= constraint;
       return -ll;  
     }
-
 /// Another way for gradients
 /// gradient of objective
 vec gradient_new(vec beta) {
