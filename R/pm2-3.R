@@ -1356,14 +1356,15 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
 #     }
     ## MLE
     args$return_type <- if (!no.sp) { # fixed sp as specified
-        args$return_type <- "optim"
+        args$return_type <- "optim_fixed"
     } else if (length(sp)>1) {
         "optim_multivariate"
     } else {
         "optim_first"
     }
-    fit <- .Call("model_output", args, package = "rstpm2") 
+    fit <- .Call("model_output", args, package = "rstpm2")
     fit$coef <- as.vector(fit$coef)
+    fit$sp <- as.vector(fit$sp)
     names(fit$coef) <- names(init)
     args$init <- init <- fit$coef
     if (!no.sp) args$sp <- sp <- fit$sp

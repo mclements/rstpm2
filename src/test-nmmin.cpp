@@ -719,11 +719,13 @@ namespace rstpm2 {
   double pstpm2_multivariate_step(int n, double * logsp_ptr, void * model_ptr) {
     T * model = static_cast<T *>(model_ptr);
     vec logsp(logsp_ptr,n);
+    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
     return model->multivariate_step(logsp);
   }    
   template<class T>
   double pstpm2_first_step(double logsp, void * model_ptr) {
     T * model = static_cast<T *>(model_ptr);
+    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
     return model->first_step(logsp);
   }    
 
@@ -985,7 +987,7 @@ namespace rstpm2 {
 	  grconstraint += this->kappa * ((gradh.row(*j).t() * h(*j) * (h(*j)<0)) + (gradH.row(*j).t() * H(*j) * (H(*j)<0)));
 	}
 	for (int k=0; k<n-1; ++k) {
-	  // gr(k) += gradi(k) - (1+mi*theta)*(gradHi(k)-gradH0i(k))/(1+theta*(sumH-sumHenter)) - grconstraint(k); // Gutierrez
+	  // gr(k) += gradi(k) - (1+mi*theta)*(gradHi(k)-gradH0i(k))/(1+theta*(sumH-sumHenter)) - grconstraint(k); // Gu tierrez
 	  gr(k) += gradi(k) - (1+mi*theta)*gradHi(k)/(1+theta*(sumH)) + 1.0/(1+theta*sumHenter)*gradH0i(k) - grconstraint(k); // Rondeau et al
 	}
 	double lastterm = 0.0;
