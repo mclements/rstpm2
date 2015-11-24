@@ -1568,9 +1568,15 @@ setMethod("predict", "pstpm2",
             if (missing(exposed))
               stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff')")
             newdata2 <- exposed(newdata)
+            lpfunc <- function(x,...) {
+                newdata3 <- newdata2
+                newdata3[[object@timeVar]] <- x
+                predict(object@gam,newdata3,type="lpmatrix")
+            }
             X2 <- predict(object@gam, newdata2, type="lpmatrix")
-            XD2 <- grad(lpfunc,0,object@gam,newdata2,object@timeVar)
-            XD2 <- matrix(XD,nrow=nrow(X))
+            XD2 <- grad1(lpfunc,newdata[[object@timeVar]])    
+            ## XD2 <- grad(lpfunc,0,object@gam,newdata2,object@timeVar)
+            ## XD2 <- matrix(XD,nrow=nrow(X))
           }
         }
         beta <- coef(object)
@@ -1658,9 +1664,9 @@ setMethod("plot", signature(x="pstpm2", y="missing"),
           function(x,y,newdata,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
                    lwd=par("lwd"),
-                   add=FALSE,ci=!add,rug=!add,
+                   add=FALSE,ci=!add,rug=!add,exposed=incrVar(var),
                    var=NULL,...) {
-  y <- predict(x,newdata,type=type,var=var,grid=TRUE,se.fit=TRUE)
+  y <- predict(x,newdata,type=type,var=var,exposed=exposed,grid=TRUE,se.fit=TRUE)
   if (is.null(xlab)) xlab <- deparse(x@timeExpr)
   if (is.null(ylab))
     ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
