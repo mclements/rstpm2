@@ -862,7 +862,6 @@ setMethod("predict", "stpm2",
         }
       }
     ##debug(local)
-    type <- match.arg(type)
     if (is.null(newdata) && type %in% c("hr","sdiff","hdiff"))
       stop("Prediction using type in ('hr','sdiff','hdiff') requires newdata to be specified.")
     if (grid) {
@@ -1625,7 +1624,6 @@ setMethod("predict", "pstpm2",
         }
       }
     ##debug(local)
-    type <- match.arg(type)
     if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff"))
       stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff') requires newdata to be specified.")
     if (grid) {

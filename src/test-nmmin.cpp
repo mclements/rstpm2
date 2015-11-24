@@ -202,7 +202,7 @@ namespace rstpm2 {
     T * obj = static_cast<T*>(void_obj);
     vec coef(beta,n);
     double value = obj->objective(coef % obj->parscale);
-    if (obj->bfgs.trace>0) {
+    if (obj->bfgs.trace>1) {
       Rprintf("beta="); Rprint(coef);
       Rprintf("objective=%g\n",value);
     };
@@ -212,17 +212,17 @@ namespace rstpm2 {
   void optimgradient(int n, double * beta, double * grad, void * void_obj) {
     T * obj = static_cast<T*>(void_obj);
     vec coef(beta,n);
-    if (obj->bfgs.trace>0) {
+    if (obj->bfgs.trace>1) {
       Rprintf("beta="); Rprint(coef);
     }
-    if (obj->bfgs.trace>1) {
+    if (obj->bfgs.trace>2) {
       Rprintf("parscale="); Rprint(obj->parscale);
     }
     vec gr = obj->gradient(coef % obj->parscale);
-    if (obj->bfgs.trace>0) {
+    if (obj->bfgs.trace>1) {
       Rprintf("gradient="); Rprint(gr);
     }
-    if (obj->bfgs.trace>1) {
+    if (obj->bfgs.trace>2) {
       Rprintf("fdgradient="); Rprint(obj->fdgradient(coef % obj->parscale));
     }
     for (int i=0; i<n; ++i) grad[i] = gr[i];
