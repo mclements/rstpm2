@@ -351,7 +351,7 @@ namespace rstpm2 {
     // log-likelihood components and constraints
     // Note: the li and gradli components depend on other variables (bhazard, wt, wt0, wt, event);
     //       calculations should *not* be done on subsets
-    virtual li_constraint li_right_censored(vec eta, vec etaD) {
+    li_constraint li_right_censored(vec eta, vec etaD) {
       vec h = Link::h(eta,etaD) + bhazard;
       vec H = Link::H(eta);
       vec eps = h*0.0 + 1.0e-16; 
@@ -363,7 +363,7 @@ namespace rstpm2 {
       li_constraint out = {li, constraint};
       return out;
     }
-    virtual li_constraint li_left_truncated(vec eta0) {
+    li_constraint li_left_truncated(vec eta0) {
       vec H0 = Link::H(eta0);
       double constraint = kappa/2.0 * sum(H0 % H0 % (H0<0));
       vec eps = H0*0.0 + 1e-16;
@@ -371,7 +371,7 @@ namespace rstpm2 {
       li_constraint out = {li, constraint};
       return out;
     }
-    virtual li_constraint li_interval(vec eta, vec etaD, vec eta1) {
+    li_constraint li_interval(vec eta, vec etaD, vec eta1) {
       vec H = Link::H(eta);
       vec H1 = Link::H(eta1);
       vec h = Link::h(eta, etaD) + bhazard;
@@ -395,7 +395,7 @@ namespace rstpm2 {
       li_constraint out = {li, constraint};
       return out;
     }
-    virtual li_constraint li(vec eta, vec etaD, vec eta0, vec eta1) {
+    li_constraint li(vec eta, vec etaD, vec eta0, vec eta1) {
       if (interval) {
 	return li_interval(eta, etaD, eta1);
       }
@@ -410,7 +410,7 @@ namespace rstpm2 {
       }
     }
     // negative log-likelihood
-    virtual double objective(vec beta) {
+    double objective(vec beta) {
       li_constraint s = li(X * beta, XD * beta, X0 * beta, X1 * beta);
       return -sum(s.li) + s.constraint;
     }
@@ -430,7 +430,7 @@ namespace rstpm2 {
     // log-likelihood gradient components
     // Note: gradH and gradh are currently calculated at eta and etaD and may not satisfy the constraints, 
     //       while H and h may be transformed for the constraints 
-    virtual gradli_constraint gradli_right_censored(vec eta, vec etaD, mat X, mat XD) {
+    gradli_constraint gradli_right_censored(vec eta, vec etaD, mat X, mat XD) {
       vec h = Link::h(eta,etaD) + bhazard;
       vec H = Link::H(eta);
       vec eps = h*0.0 + 1.0e-16; // hack
@@ -444,7 +444,7 @@ namespace rstpm2 {
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
     }
-    virtual gradli_constraint gradli_left_truncated(vec eta0, mat X0) {
+    gradli_constraint gradli_left_truncated(vec eta0, mat X0) {
       mat gradH0 = Link::gradH(eta0, X0); 
       vec H0 = Link::H(eta0); 
       vec eps = H0*0.0 + 1.0e-16; // hack
@@ -454,7 +454,7 @@ namespace rstpm2 {
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
     }
-    virtual gradli_constraint gradli_interval_censored(vec eta, vec etaD, vec eta1, 
+    gradli_constraint gradli_interval_censored(vec eta, vec etaD, vec eta1, 
 						       mat X, mat XD, mat X1) {
       vec H = Link::H(eta);
       vec h = Link::h(eta,etaD);
@@ -486,7 +486,7 @@ namespace rstpm2 {
       gradli_constraint out = {li, Xconstraint};
       return out;
     }
-    virtual gradli_constraint gradli(vec eta, vec etaD, vec eta0, vec eta1,
+    gradli_constraint gradli(vec eta, vec etaD, vec eta0, vec eta1,
 				     mat X, mat XD, mat X0, mat X1) {
       if (interval) return gradli_interval_censored(eta, etaD, eta1, X, XD, X1);
       else {
@@ -500,7 +500,7 @@ namespace rstpm2 {
       }
     }
     // gradient of the negative log-likelihood
-    virtual vec gradient(vec beta) {
+    vec gradient(vec beta) {
       gradli_constraint gc = gradli(X * beta, XD * beta, X0 * beta, X1 * beta,
 				    X, XD, X0, X1);
       rowvec dconstraint = sum(gc.constraint,0);
@@ -511,7 +511,7 @@ namespace rstpm2 {
       }
       return -gr;
     }
-    virtual bool feasible(vec beta) {
+    bool feasible(vec beta) {
       vec eta = X * beta;
       vec etaD = XD * beta;
       vec h = Link::h(eta, etaD) + bhazard;
@@ -778,7 +778,7 @@ namespace rstpm2 {
 	Rprintf("Hessian:\n");
 	Rprint(this->bfgs.hessian);
       }
-      double edf = arma::trace(solve(as<mat>(wrap(this->bfgs.hessian)),as<mat>(wrap(hessian0))));
+      double edf = arma::trace(solve(as<mat>(this->bfgs.hessian),as<mat>(hessian0)));
       double negll = this->bfgs.calc_objective(&optimfunction<Stpm2Type>, (void *) this);
       double gcv =  negll + alpha*edf;
       double bic =  negll + alpha*edf*log(sum(this->event));
@@ -799,7 +799,7 @@ namespace rstpm2 {
       this->optimWithConstraint(this->init);
       this->bfgs.hessian = this->bfgs.calc_hessian(&optimgradient<This>, (void *) this);
       NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, (void *) this);
-      double edf = arma::trace(solve(as<mat>(wrap(this->bfgs.hessian)),as<mat>(wrap(hessian0))));
+      double edf = arma::trace(solve(as<mat>(this->bfgs.hessian),as<mat>(hessian0)));
       double negll = this->bfgs.calc_objective(&optimfunction<Stpm2Type>, (void *) this);
       double gcv =  negll + alpha*edf;
       double bic =  2.0*negll + alpha*edf*log(sum(this->event));
