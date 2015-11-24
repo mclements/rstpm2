@@ -1574,7 +1574,7 @@ setMethod("predict", "pstpm2",
                 predict(object@gam,newdata3,type="lpmatrix")
             }
             X2 <- predict(object@gam, newdata2, type="lpmatrix")
-            XD2 <- grad1(lpfunc,newdata[[object@timeVar]])    
+            XD2 <- grad1(lpfunc,newdata2[[object@timeVar]])    
             ## XD2 <- grad(lpfunc,0,object@gam,newdata2,object@timeVar)
             ## XD2 <- matrix(XD,nrow=nrow(X))
           }
