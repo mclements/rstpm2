@@ -344,7 +344,7 @@ namespace rstpm2 {
       kappa = as<double>(list["kappa"]);
       optimiser = as<std::string>(list["optimiser"]);
       bfgs.trace = as<int>(list["trace"]);
-      bfgs.reltol = as<double>(list["reltol"]);
+      reltol = bfgs.reltol = as<double>(list["reltol"]);
       bfgs.hessianp = false;
       bfgs.parscale = parscale = as<vec>(list["parscale"]);
     }
@@ -572,7 +572,7 @@ namespace rstpm2 {
     NumericVector init;
     mat X, XD, X0, X1; 
     vec bhazard,wt,wt0,event,time,parscale,ttype;
-    double kappa;
+    double kappa, reltol;
     bool delayed, interval;
     int n, N;
     BFGS2 bfgs;
@@ -738,6 +738,7 @@ namespace rstpm2 {
       List list = as<List>(sexp);
       sp = as<vec>(list["sp"]);
       reltol_search = as<double>(list["reltol_search"]);
+      reltol_outer = as<double>(list["reltol_outer"]);
       alpha = as<double>(list["alpha"]);
       criterion = as<int>(list["criterion"]);
     }
@@ -839,17 +840,20 @@ namespace rstpm2 {
 			  );
     }
     SEXP optim_first() { 
-      double opt_sp = exp(Brent_fmin(log(0.001),log(1000.0),&(pstpm2_first_step<This>),(void *) this,1.0e-2));
+      this->bfgs.reltol = reltol_search;
+      double opt_sp = exp(Brent_fmin(log(0.001),log(1000.0),&(pstpm2_first_step<This>),(void *) this,reltol_outer));
       sp[0] = opt_sp;
+      this->bfgs.reltol = this->reltol;
       return optim_fixed();
     }
     SEXP optim_multivariate() {
       this->kappa = 10.0;
       NelderMead2 nm;
-      nm.reltol = 1.0e-5;
+      nm.reltol = reltol_outer;
       nm.maxit = 500;
       nm.hessianp = false;
       nm.parscale = this->parscale;
+      this->bfgs.reltol = reltol_search;
       NumericVector logsp(sp.size());
       for (int i=0; i < sp.size(); ++i)
 	logsp[i] = log(sp[i]);
@@ -864,10 +868,11 @@ namespace rstpm2 {
       for (int i=0; i < nm.coef.size(); ++i)
 	sp[i] = exp(nm.coef[i]);
       this->bfgs.coef = this->init;
+      this->bfgs.reltol = this->reltol;
       return optim_fixed();
     }
     NumericVector sp;
-    double alpha, reltol_search; 
+    double alpha, reltol_search, reltol_outer; 
     int criterion;
   };
   // template<class Smooth, class Stpm2>

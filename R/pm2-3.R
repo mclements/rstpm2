@@ -1030,7 +1030,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=NULL, trace = 0,
                    link.type=c("PH","PO","probit","AH"),
                    frailty=!is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,RandDist=c("Gamma","LogN"),
-                   reltol = list(search = 1.0e-6, final = 1.0e-8),
+                   reltol = list(search = 1.0e-6, final = 1.0e-8, outer=1.0e-2),
                    contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
     link.type <- match.arg(link.type)
@@ -1231,7 +1231,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=control$parscale,
                  smooth=if(penalty == "logH") gam.obj$smooth else design,
-                 sp=sp, reltol_search=reltol$search, reltol=reltol$final, trace=trace,
+                 sp=sp, reltol_search=reltol$search, reltol=reltol$final, reltol_outer=reltol$outer, trace=trace,
                  kappa=1.0,
                  alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2),
                  cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0=which0 - 1L, link = link.type,

@@ -54,6 +54,7 @@ system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO"
 system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
 system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit"))) # slow
 
+
 ## delayed entry
 ## Stata estimated coef for hormon (PH): -1.162504
 data(brcancer)
@@ -1252,8 +1253,24 @@ summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=subset(brcan
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=subset(brcancer3,rectime>10),df=3))
 
 ## check the performance time
-brcancer10 = do.call("rbind",lapply(1:100,function(i) brcancer))
+refresh
+require(rstpm2)
+data(brcancer)
+brcancer10 = do.call("rbind",lapply(1:10,function(i) brcancer))
 system.time(summary(fit <- stpm2(Surv(rectime,censrec==1)~hormon,df=3,data=brcancer10)))
+system.time(summary(fit <- stpm2(Surv(rectime,censrec==1)~hormon,df=3,data=brcancer10)))
+system.time(summary(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer10, logH.formula=~ns(log(rectime),df=4)+hormon:ns(log(rectime),df=3))))
+system.time(summary(fit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer10)))
+system.time(summary(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon))))
+
+fit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer10)
+
+system.time(summary(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon))))
+
+system.time(summary(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon),
+                                  reltol=list(outer=1e-1,search=1e-4,final=1e-4))))
+
+system.time(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon),sp=c(1,1)))
 
 
 nsx(1:10,df=3) - ns(1:10,df=3)
