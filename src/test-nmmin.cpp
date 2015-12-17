@@ -802,13 +802,13 @@ namespace rstpm2 {
     vec gradient(vec beta) {
       return Stpm2Type::gradient(beta) + Smooth::penalty_gradient(beta,sp);
     }
-    // is the following strictly needed?
+    // is the following strictly needed - or even correct?
     void optimWithConstraint(NumericVector init) {
       bool satisfied;
       if (this->bfgs.trace > 0) 
 	Rprintf("Starting optimization\n");
       do {
-	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, this->init, (void *) this);
+	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
 	vec vcoef(&this->bfgs.coef[0],this->n);
 	satisfied = Stpm2Type::feasible(vcoef % this->parscale);
 	if (!satisfied) this->kappa *= 2.0;   

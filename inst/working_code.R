@@ -1269,7 +1269,7 @@ system.time(summary(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, sm
 
 system.time(summary(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, 
                                   smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon),
-                                  sp.init=c(0.1,0.75),trace=1,
+                                  sp=c(0.006,0.0031),trace=1,outer_optim=2,criterion="GCV",
                                   reltol=list(outer=1e-5,search=1e-10,final=1e-10))))
 ## > fit@sp
 ## [1] 0.06104312 0.31430954
