@@ -8,10 +8,10 @@ namespace rstpm2 {
   typedef double optimfn(int, double *, void *);
   typedef void optimgr(int, double *, double *, void *);
 
-  /* type of pointer to the target and gradient functions  for Nlm */
+  /* type of pointer to the target and gradient functions for Nlm */
   typedef void (*fcn_p)(int, double *, double *, void *);
 
-  /* type of pointer to the hessian functions */
+  /* type of pointer to the hessian functions for Nlm */
   typedef void (*d2fcn_p)(int, int, double *, double *, void *);
 
   double min(double a, double b);
@@ -97,11 +97,12 @@ namespace rstpm2 {
 	double gradtl = 1.0e-6, // nlm()
 	double stepmx = 0.0,    // set to -1.0 to get nlm()'s behaviour
 	double steptl = 1.0e-6,  // nlm()
+  double epshess = 6.055454e-06,
 	int itrmcd = 0, 
 	int itncnt = 0,
-	bool hessianp = true
-	);
-    void optim(fcn_p fcn, fcn_p d1fcn, Rcpp::NumericVector init, void * state); // assumes iahflg=0
+	bool hessianp = true);
+    void optim(fcn_p fcn, fcn_p d1fcn, Rcpp::NumericVector init, void * state);
+    void optim(fcn_p fcn, Rcpp::NumericVector init, void * state);
     double calc_objective(fcn_p fn, Rcpp::NumericVector coef, void * ex);
     double calc_objective(fcn_p fn, void * ex);
     Rcpp::NumericMatrix calc_hessian(fcn_p gr, void * ex);
@@ -118,6 +119,7 @@ namespace rstpm2 {
     double gradtl;
     double stepmx;
     double steptl;
+    double epshess;
     int itrmcd;
     int itncnt;
     bool hessianp;

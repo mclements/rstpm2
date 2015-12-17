@@ -306,6 +306,52 @@ namespace rstpm2 {
     vec parscale;
   };
 
+  class Nlm2 : public Nlm {
+  public:
+    NumericMatrix calc_hessian(fcn_p fn, void * ex) {
+      if (parscale.size()==0) REprintf("parscale is not defined for Nlm2::calc_hessian.");
+      int n = coef.size();
+      NumericMatrix hess(n,n);
+      double tmpi,tmpj,f1,f0,fm1,hi,hj,fij,fimj,fmij,fmimj;
+      fn(n,&coef[0],&f0,ex);
+      for(int i=0; i<n; ++i) {
+  tmpi = coef[i];
+	hi = epshess*(1.0+std::abs(tmpi))/parscale[i];
+	coef[i] = tmpi + hi;
+	fn(n, &coef[0], &f1, ex);
+	coef[i] = tmpi - hi;
+	fn(n, &coef[0], &fm1, ex);
+	// hess(i,i) = (-f2 +16.0*f1 - 30.0*f0 + 16.0*fm1 -fm2)/(12.0*hi*hi);
+	hess(i,i) = (f1 - 2.0*f0 + fm1)/(hi*hi*parscale[i]*parscale[i]);
+	coef[i] = tmpi;
+	for (int j=i; j<n; ++j) {
+	  if (i != j) {
+	    tmpj = coef[j];
+	    hj = epshess*(1.0+std::abs(tmpj))/parscale[j];
+	    coef[i] = tmpi + hi;
+	    coef[j] = tmpj + hj;
+	    fn(n, &coef[0], &fij, ex);
+	    coef[i] = tmpi + hi;
+	    coef[j] = tmpj - hj;
+	    fn(n, &coef[0], &fimj, ex);
+	    coef[i] = tmpi - hi;
+	    coef[j] = tmpj + hj;
+	    fn(n, &coef[0], &fmij, ex);
+	    coef[i] = tmpi - hi;
+	    coef[j] = tmpj - hj;
+	    fn(n, &coef[0], &fmimj, ex);
+	    hess(j,i) = hess(i,j) = (fij-fimj-fmij+fmimj)/(4.0*hi*hj*parscale[i]*parscale[j]);
+	    coef[i] = tmpi;
+	    coef[j] = tmpj;
+	  }
+	}
+      }
+      return hess;
+    }
+    vec parscale;
+  };
+
+
   // Main class for Stpm2 (fully parametric)
   template<class Link = LogLogLink>
   class Stpm2 : public Link {
@@ -506,7 +552,7 @@ namespace rstpm2 {
       rowvec dconstraint = sum(gc.constraint,0);
       rowvec vgr = sum(gc.gradli,0);
       vec gr(n);
-      for (int i = 0; i<beta.size(); ++i) {
+      for (size_t i = 0; i<beta.size(); ++i) {
 	gr[i] = vgr[i] - dconstraint[i];
       }
       return -gr;
@@ -728,6 +774,13 @@ namespace rstpm2 {
     R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
     return model->first_step(logsp);
   }    
+  template<class T>
+  void pstpm2_multivariate_stepNlm(int n, double * logsp_ptr, double * objective, void * model_ptr) {
+    T * model = static_cast<T *>(model_ptr);
+    vec logsp(logsp_ptr,n);
+    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
+    *objective = model->multivariate_step(logsp);
+  }    
 
   // Penalised link-based models
   template<class Stpm2Type = Stpm2<LogLogLink>, class Smooth = SmoothLogH>
@@ -741,6 +794,7 @@ namespace rstpm2 {
       reltol_outer = as<double>(list["reltol_outer"]);
       alpha = as<double>(list["alpha"]);
       criterion = as<int>(list["criterion"]);
+      outer_optim = as<int>(list["outer_optim"]);
     }
     double objective(vec beta) {
       return Stpm2Type::objective(beta) + Smooth::penalty(beta,sp);
@@ -791,10 +845,10 @@ namespace rstpm2 {
     double multivariate_step(vec logsp) {
       this->pre_process();
       double lsp = -9.0, usp = 9.0;
-      for (int i=0; i < sp.size(); ++i)
+      for (size_t i=0; i < sp.size(); ++i)
 	sp[i] = exp(bound(logsp[i],lsp,usp));
       if (this->bfgs.trace > 0) {
-	for (int i = 0; i < sp.size(); ++i)
+	for (size_t i = 0; i < sp.size(); ++i)
 	  Rprintf("sp[%i]=%f\t",i,sp[i]);
       }
       this->optimWithConstraint(this->init);
@@ -808,7 +862,7 @@ namespace rstpm2 {
       // simple boundary constraints
       double constraint = 0.0;
       // double kappa = 1.0;
-      for (int i=0; i < sp.size(); ++i) {
+      for (size_t i=0; i < sp.size(); ++i) {
 	if (logsp[i] < lsp)
 	  constraint +=  pow(logsp[i]-lsp,2.0);
 	if (logsp[i] > usp)
@@ -847,6 +901,10 @@ namespace rstpm2 {
       return optim_fixed();
     }
     SEXP optim_multivariate() {
+      if (outer_optim==1) return optim_multivariate_NelderMead(); 
+      else return optim_multivariate_Nlm(); 
+    }
+    SEXP optim_multivariate_NelderMead() {
       this->kappa = 10.0;
       NelderMead2 nm;
       nm.reltol = reltol_outer;
@@ -855,13 +913,13 @@ namespace rstpm2 {
       nm.parscale = this->parscale;
       this->bfgs.reltol = reltol_search;
       NumericVector logsp(sp.size());
-      for (int i=0; i < sp.size(); ++i)
+      for (size_t i=0; i < sp.size(); ++i)
 	logsp[i] = log(sp[i]);
       bool satisfied;
       do {
 	nm.optim(&pstpm2_multivariate_step<This>, logsp, (void *) this);
 	satisfied = true;
-	for (int i=0; i < sp.size(); ++i)
+	for (size_t i=0; i < sp.size(); ++i)
 	  if (logsp[i]< -7.0 || logsp[i] > 7.0) satisfied = false;
 	if (!satisfied) this->kappa *= 2.0;
       } while (!satisfied && this->kappa<1.0e5);
@@ -871,9 +929,34 @@ namespace rstpm2 {
       this->bfgs.reltol = this->reltol;
       return optim_fixed();
     }
-    NumericVector sp;
+    SEXP optim_multivariate_Nlm() {
+      this->kappa = 10.0;
+      Nlm2 nm;
+      nm.gradtl = nm.steptl = reltol_outer;
+      nm.itnlim = 100;
+      // nm.hessianp = false;
+      nm.parscale = this->parscale;
+      this->bfgs.reltol = reltol_search;
+      NumericVector logsp(sp.size());
+      for (size_t i=0; i < sp.size(); ++i)
+  logsp[i] = log(sp[i]);
+      bool satisfied;
+      do {
+  nm.optim(&pstpm2_multivariate_stepNlm<This>, logsp, (void *) this);
+	satisfied = true;
+	for (size_t i=0; i < sp.size(); ++i)
+	  if (logsp[i]< -7.0 || logsp[i] > 7.0) satisfied = false;
+	if (!satisfied) this->kappa *= 2.0;
+      } while (!satisfied && this->kappa<1.0e5);
+      for (int i=0; i < nm.coef.size(); ++i)
+	sp[i] = exp(nm.coef[i]);
+      this->bfgs.coef = this->init;
+      this->bfgs.reltol = this->reltol;
+      return optim_fixed();
+    }
+    vec sp;
     double alpha, reltol_search, reltol_outer; 
-    int criterion;
+    int criterion, outer_optim;
   };
   // template<class Smooth, class Stpm2>
   // void pstpm2_step_multivariate_nlm(int n, double * logsp, double * f, void *ex) {
@@ -893,7 +976,7 @@ namespace rstpm2 {
       List list = as<List>(sexp);
       vec cluster = as<vec>(list["cluster"]);
       // wragged array indexed by a map of vectors
-      for (int id=0; id<cluster.size(); ++id) {
+      for (size_t id=0; id<cluster.size(); ++id) {
 	clusters[cluster[id]].push_back(id);
 	if (this->event[id]==1)
 	  cluster_events[cluster[id]].push_back(id);

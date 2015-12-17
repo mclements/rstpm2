@@ -1030,7 +1030,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=NULL, trace = 0,
                    link.type=c("PH","PO","probit","AH"),
                    frailty=!is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,RandDist=c("Gamma","LogN"),
-                   reltol = list(search = 1.0e-6, final = 1.0e-8, outer=1.0e-2),
+                   reltol = list(search = 1.0e-6, final = 1.0e-8, outer=1.0e-2),outer_optim=1,
                    contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
     link.type <- match.arg(link.type)
@@ -1213,6 +1213,10 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         init <- c(init,logtheta=logtheta)
     }
     ## smoothing parameters
+    ## cases: 
+    ##  (1) sp fixed
+    ##  (2) sp.init
+    ##  (3) use GAM
     if (no.sp <- is.null(sp)) {
         sp <- if(is.null(gam.obj$full.sp)) gam.obj$sp else gam.obj$full.sp
         if (!is.null(sp.init)) sp <- sp.init
@@ -1232,7 +1236,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=control$parscale,
                  smooth=if(penalty == "logH") gam.obj$smooth else design,
                  sp=sp, reltol_search=reltol$search, reltol=reltol$final, reltol_outer=reltol$outer, trace=trace,
-                 kappa=1.0,
+                 kappa=1.0,outer_optim=outer_optim,
                  alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2),
                  cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0=which0 - 1L, link = link.type,
                  penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser="BFGS",
@@ -1329,21 +1333,23 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         }
         return(ll)
     }
-    if(!is.null(gam.obj$full.sp)) gam.obj$sp <- gam.obj$full.sp
-    value <- NULL
-    while(is.na(value <- negllsp(init,gam.obj$sp)) || !attr(value,"feasible")) {
-        gam.call$sp <- gam.obj$sp * 5
-        if (no.sp) sp <- gam.call$sp
-        ## Unresolved: should we change sp.init if the initial values are not feasible?
-        gam.obj <- eval(gam.call)
-        if(!is.null(gam.obj$full.sp)) gam.obj$sp <- gam.obj$full.sp
-        init <- coef(gam.obj)
-        if (frailty)
-            init <- c(init,logtheta=logtheta)
-        if (all(gam.obj$sp > 1e5)) break
-        ## stop("Initial values not valid and revised sp>1e5")
-    }
-    args$sp <- gam.obj$sp
+    if (no.sp && !is.null(sp.init)) {
+      if(!is.null(gam.obj$full.sp)) gam.obj$sp <- gam.obj$full.sp
+      value <- NULL
+      while(is.na(value <- negllsp(init,gam.obj$sp)) || !attr(value,"feasible")) {
+          gam.call$sp <- gam.obj$sp * 5
+          if (no.sp) sp <- gam.call$sp
+          ## Unresolved: should we change sp.init if the initial values are not feasible?
+          gam.obj <- eval(gam.call)
+          if(!is.null(gam.obj$full.sp)) gam.obj$sp <- gam.obj$full.sp
+          init <- coef(gam.obj)
+          if (frailty)
+              init <- c(init,logtheta=logtheta)
+          if (all(gam.obj$sp > 1e5)) break
+          ## stop("Initial values not valid and revised sp>1e5")
+      }
+      args$sp <- gam.obj$sp
+    } else args$sp <- sp
 #     ### Using exterior penalty method for nonlinear constraints: h(t)>=0 or increasing logH(t)
 #     ### Some initial values should be outside the feasible region
 #     while(all(XD%*%init>=0)){
@@ -1366,7 +1372,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     fit$sp <- as.vector(fit$sp)
     names(fit$coef) <- names(init)
     args$init <- init <- fit$coef
-    if (!no.sp) args$sp <- sp <- fit$sp
+    args$sp <- sp <- fit$sp
     edf <- fit$edf
     edf_var<- as.vector(fit$edf_var)
     names(fit$coef) <- rownames(fit$hessian) <- colnames(fit$hessian) <- names(init)
