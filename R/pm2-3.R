@@ -753,7 +753,7 @@ setMethod("predictnl", "stpm2",
 ##
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
   {
@@ -781,7 +781,7 @@ setMethod("predict", "stpm2",
           XD <- matrix(XD,nrow=nrow(X))
           ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
           ## similarly for the derivatives
-          if (type %in% c("hazard","hr","sdiff","hdiff","loghazard")) {
+          if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","or")) {
             ## how to elegantly extract the time variable?
             ## timeExpr <- 
             ##   lhs(object@call.formula)[[length(lhs(object@call.formula))-1]]
@@ -795,9 +795,9 @@ setMethod("predict", "stpm2",
             ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
             ## XD0 <- matrix(XD0,nrow=nrow(X0))
           }
-          if (type %in% c("hr","sdiff","hdiff","meansurvdiff")) {
+          if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or")) {
             if (missing(exposed))
-              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff')")
+              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff','or')")
             newdata2 <- exposed(newdata)
             X2 <- lpmatrix.lm(object@lm, newdata2)
             XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
@@ -832,6 +832,9 @@ setMethod("predict", "stpm2",
         if (type=="surv") {
           return(S)
         }
+        if (type=="odds") { # delayed entry?
+          return(S/(1-S))
+        }
         if (type=="sdiff")
           return(link$ilink(as.vector(X2 %*% beta)) - S)
         if (type=="hazard") {
@@ -852,6 +855,10 @@ setMethod("predict", "stpm2",
             h2 <- link$h(eta2,etaD2)
             return(h2/h)
         }
+        if (type=="or") {
+            S2 <- link$ilink(as.vector(X2 %*% beta)) 
+            return(S2/(1-S2)/S*(1-S))
+        }
         if (type=="meansurv") {
             return(mean(S))
         }
@@ -862,8 +869,8 @@ setMethod("predict", "stpm2",
         }
       }
     ##debug(local)
-    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff"))
-      stop("Prediction using type in ('hr','sdiff','hdiff') requires newdata to be specified.")
+    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or"))
+      stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or') requires newdata to be specified.")
     if (grid) {
       Y <- object@y
       event <- Y[,ncol(Y)]==1 | object@interval
@@ -881,7 +888,7 @@ setMethod("predict", "stpm2",
     else {
       if (is.null(link))
         link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                       hdiff="I",loghazard="I",link="I")
+                       hdiff="I",loghazard="I",link="I",odds="logit",or="logit")
       predictnl(object,local,link=link,newdata=newdata,type=type,
                 exposed=exposed,...) 
     }
@@ -1519,7 +1526,7 @@ setMethod("predictnl", "pstpm2",
 ##
 setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
   {
@@ -1560,13 +1567,13 @@ setMethod("predict", "pstpm2",
             ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
             ## XD0 <- matrix(XD0,nrow=nrow(X0))
           }
-          if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","meansurvdiff")) {
+          if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","meansurvdiff","or")) {
             time <- eval(object@timeExpr,newdata)
             ##
           }
-          if (type %in% c("hr","sdiff","hdiff","meansurvdiff")) {
+          if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or")) {
             if (missing(exposed))
-              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff')")
+              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff','or')")
             newdata2 <- exposed(newdata)
             lpfunc <- function(x,...) {
                 newdata3 <- newdata2
@@ -1598,10 +1605,17 @@ setMethod("predict", "pstpm2",
             return(H)
         }
         if (type=="surv") { # delayed entry?
-          return(exp(-H))
+          return(S)
+        }
+        if (type=="odds") { # delayed entry?
+          return(S/(1-S))
         }
         if (type=="sdiff")
           return(link$ilink(as.vector(X2 %*% beta)) - S)
+        if (type=="or") {
+            S2 <- link$ilink(as.vector(X2 %*% beta)) 
+            return(S2/(1-S2)/S*(1-S))
+        }
         if (type=="hazard") {
           return(h)
         }
@@ -1630,7 +1644,7 @@ setMethod("predict", "pstpm2",
         }
       }
     ##debug(local)
-    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff"))
+    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or"))
       stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff') requires newdata to be specified.")
     if (grid) {
       Y <- object@y
@@ -1649,7 +1663,7 @@ setMethod("predict", "pstpm2",
     else {
       if (is.null(link))
         link <- switch(type,surv="cloglog",density="log",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                       hdiff="I",loghazard="I",link="I")
+                       hdiff="I",loghazard="I",link="I",odds="logit",or="logit")
       predictnl(object,local,link=link,newdata=newdata,type=type,
                 exposed=exposed,...) 
     }

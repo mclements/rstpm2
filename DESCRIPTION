@@ -18,4 +18,4 @@ Description: R implementation of Stata's stpm2 function (flexible link-based sur
 URL: http://github.com/mclements/rstpm2
 BugReports: http://github.com/mclements/rstpm2/issues
 License: GPL-2 | GPL-3
-LazyLoad: yes
+LazyData: yes

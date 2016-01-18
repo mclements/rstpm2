@@ -536,8 +536,6 @@ namespace rstpm2 {
     }
     void optimWithConstraintBFGS(NumericVector init) {
       bool satisfied;
-      if (bfgs.trace > 0) 
-	Rprintf("Starting optimization\n");
       do {
 	bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
 	vec vcoef(&bfgs.coef[0],n);
@@ -765,19 +763,17 @@ namespace rstpm2 {
       this->pre_process();
       this->optimWithConstraint(this->init);
       this->post_process();
-      if (this->bfgs.trace > 0) Rprintf("Calculating Hessian:\n");
       this->bfgs.hessian = this->bfgs.calc_hessian(&optimgradient<This>, (void *) this);
-      if (this->bfgs.trace > 0) Rprintf("Calculating Hessian0:\n");
       NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, (void *) this);
-      if (this->bfgs.trace > 0)  {
+      if (this->bfgs.trace > 1)  {
 	Rprintf("Debug on trace calculation. Coef:\n");
 	Rprint(this->bfgs.coef);
 	if (this->bfgs.trace > 1) {
 	  Rprintf("Hessian0:\n");
 	  Rprint(hessian0);
+	  Rprintf("Hessian:\n");
+	  Rprint(this->bfgs.hessian);
 	}
-	Rprintf("Hessian:\n");
-	Rprint(this->bfgs.hessian);
       }
       double edf = arma::trace(solve(as<mat>(this->bfgs.hessian),as<mat>(hessian0)));
       double negll = this->bfgs.calc_objective(&optimfunction<Stpm2Type>, (void *) this);
@@ -891,7 +887,7 @@ namespace rstpm2 {
     typedef GammaSharedFrailty<Base> This;
     GammaSharedFrailty(SEXP sexp) : Base(sexp) {
       List list = as<List>(sexp);
-      vec cluster = as<vec>(list["cluster"]);
+      ivec cluster = as<ivec>(list["cluster"]);
       // wragged array indexed by a map of vectors
       for (int id=0; id<cluster.size(); ++id) {
 	clusters[cluster[id]].push_back(id);

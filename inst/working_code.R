@@ -19,6 +19,8 @@
 ## }
 
 
+require(rstpm2)
+
 
 require(abind)
 X <- matrix(seq(0,1,length=5*10),nrow=10)
@@ -1263,9 +1265,9 @@ system.time(summary(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer10
 system.time(summary(fit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer10)))
 system.time(summary(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon))))
 
-fit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer10)
+fit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer10,trace=1)
 
-system.time(summary(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon))))
+fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon),trace=1,sp.init=c(1,1), reltol=list(outer=1e-5,search=1e-10,final=1e-10))
 
 system.time(summary(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon),
                                   reltol=list(outer=1e-1,search=1e-4,final=1e-4))))
