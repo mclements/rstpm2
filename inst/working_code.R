@@ -242,11 +242,11 @@ brcancer$recyear <- brcancer$rectime/365
 system.time(fit0 <- stpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,df=5))
 system.time(pfit0 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,sp.init=1))
 system.time(pfit0.1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(log(recyear),k=15),sp.init=10,alpha=2))
+                smooth.formula=~s(log(recyear),k=15),sp.init=10,alpha=2))
 system.time(pfit1.1 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(log(recyear)),sp.init=10,criterion="BIC"))
+                smooth.formula=~s(log(recyear)),sp.init=10,criterion="BIC"))
 system.time(pfit2 <- pstpm2(Surv(recyear,censrec==1)~hormon,data=brcancer,
-                logH.formula=~s(recyear),sp.init=10))
+                smooth.formula=~s(recyear),sp.init=10))
 
 
 plot(pfit0,newdata=data.frame(hormon=1),line.col="red",type="hazard")
@@ -1269,8 +1269,12 @@ fit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer10,trace=1)
 
 fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon),trace=1,sp.init=c(1,1), reltol=list(outer=1e-5,search=1e-10,final=1e-10))
 
-system.time(summary(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon),
-                                  reltol=list(outer=1e-1,search=1e-4,final=1e-4))))
+system.time(summary(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, 
+                                  smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon),
+                                  sp=c(0.006,0.0031),trace=1,outer_optim=2,criterion="GCV",
+                                  reltol=list(outer=1e-5,search=1e-10,final=1e-10))))
+## > fit@sp
+## [1] 0.06104312 0.31430954
 
 system.time(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer10, smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon),sp=c(1,1)))
 

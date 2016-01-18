@@ -168,13 +168,15 @@ namespace rstpm2 {
 	   double gradtl, // cf. epshess
 	   double stepmx,
 	   double steptl,
+     double epshess,
 	   int itrmcd,
 	   int itncnt,
 	   bool hessianp
 	   ) : fscale(fscale), method(method), iexp(iexp), msg(msg),
 	       ndigit(ndigit), itnlim(itnlim), iagflg(iagflg), 
 	       iahflg(iahflg), dlt(dlt), gradtl(gradtl), stepmx(stepmx),
-	       steptl(steptl), itrmcd(itrmcd), itncnt(itncnt), hessianp(hessianp) { }
+	       steptl(steptl), epshess(epshess),
+         itrmcd(itrmcd), itncnt(itncnt), hessianp(hessianp) { }
   void Nlm::optim(fcn_p fcn, fcn_p d1fcn, NumericVector init, void * state) {
       int n;
       n = init.size();
@@ -189,6 +191,7 @@ namespace rstpm2 {
 	norm = sqrt(norm);
 	stepmx = norm < 1.0 ? 1000.0 : norm*1000.0;
       }
+      iagflg = 1; iahflg = 0;
       // call the optimizer
       optif9(n, n, &init[0], fcn, d1fcn, (d2fcn_p) 0, state, &typsize[0], fscale, method, 
 	     iexp, &msg, ndigit, itnlim, iagflg, iahflg,
@@ -198,6 +201,31 @@ namespace rstpm2 {
       coef = clone(xpls);
       if (hessianp)
 	hessian = calc_hessian(d1fcn, state);
+    }
+  void Nlm::optim(fcn_p fcn, NumericVector init, void * state) {
+      int n;
+      n = init.size();
+      std::vector<double> typsize(n,1.0), gpls(n,0.0), a(n*n,0.0), wrk(n*8,0.0);
+      double norm, fpls;
+      NumericVector xpls(n);
+      // stepmax calculations
+      if (stepmx == -1.0) {
+  norm = 0.0;
+	for (int i=0; i<n; ++i)
+	  norm += init[i]*init[i]/typsize[i]/typsize[i];
+	norm = sqrt(norm);
+	stepmx = norm < 1.0 ? 1000.0 : norm*1000.0;
+      }
+      iagflg = iahflg = 0;
+      // call the optimizer
+      optif9(n, n, &init[0], fcn, (fcn_p) 0, (d2fcn_p) 0, state, &typsize[0], fscale, method, 
+	     iexp, &msg, ndigit, itnlim, iagflg, iahflg,
+	     dlt, gradtl, stepmx, steptl,
+	     &xpls[0], &fpls, &gpls[0], &itrmcd, &a[0],
+	     &wrk[0], &itncnt);
+      coef = clone(xpls);
+      //if (hessianp)
+	//hessian = calc_hessian(d1fcn, state);
     }
   double Nlm::calc_objective(fcn_p fn, NumericVector coef, void * ex) {
     double f;
