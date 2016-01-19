@@ -1037,9 +1037,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=NULL, trace = 0,
                    link.type=c("PH","PO","probit","AH"),
                    frailty=!is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,RandDist=c("Gamma","LogN"),
-                   reltol = list(search = 1.0e-6, final = 1.0e-8, outer=1.0e-2),outer_optim=1,
+                   reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-4),outer_optim=1,
                    contrasts = NULL, subset = NULL, ...) {
-    link.type <- match.arg(link.type)
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
     RandDist <- match.arg(RandDist)
@@ -1382,6 +1381,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     args$sp <- sp <- fit$sp
     edf <- fit$edf
     edf_var<- as.vector(fit$edf_var)
+    names(edf_var) <- sapply(gam.obj$smooth,"[[","label")
     names(fit$coef) <- rownames(fit$hessian) <- colnames(fit$hessian) <- names(init)
     negll <- function(beta) negllsp(beta,sp)
     gradnegll <- function(beta) gradnegllsp(beta,sp)
