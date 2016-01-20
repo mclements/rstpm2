@@ -906,7 +906,9 @@ setMethod("plot", signature(x="stpm2", y="missing"),
   if (is.null(xlab)) xlab <- deparse(x@timeExpr)
   if (is.null(ylab))
     ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
-                   sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard")
+                   sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard",
+                   loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
+                   meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio")
   xx <- attr(y,"newdata")
   xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
   if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
@@ -1690,7 +1692,9 @@ setMethod("plot", signature(x="pstpm2", y="missing"),
   if (is.null(xlab)) xlab <- deparse(x@timeExpr)
   if (is.null(ylab))
     ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
-                   sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard")
+                   sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard",
+                   loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
+                   meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio")
   xx <- attr(y,"newdata")
   xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
   if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
