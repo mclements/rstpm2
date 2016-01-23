@@ -703,7 +703,7 @@ stpm2 <- function(formula, data,
   }
 ## summary.mle is not exported from bbmle
 .__C__summary.mle2 <- bbmle:::.__C__summary.mle2 # hack suggested from http://stackoverflow.com/questions/28871632/how-to-resolve-warning-messages-metadata-object-not-found-spatiallinesnull-cla
-setClass("summary.stpm2", representation(frailty="logical",theta="list"), contains="summary.mle2")
+setClass("summary.stpm2", representation(frailty="logical",theta="list",wald="matrix"), contains="summary.mle2")
 ## setAs("summary.stpm2", "summary.mle2",
 ##       function(from,to) new("summary.mle2", call=from@call, coef=from@call, m2logL=from@m2logL))
 ## setMethod("show", "stpm2", function(object) show(as(object,"mle2")))
@@ -720,6 +720,7 @@ setMethod("summary", "stpm2",
                   p.value <- pchisq(test.statistic,df=1,lower.tail=FALSE)/2
                   newobj@theta <- list(theta=theta, se.theta=se.theta, p.value=p.value)
               } else newobj@theta <- list()
+              newobj@wald <- matrix(NA,1,1) # needed by summary.pstpm2
               newobj })
 setMethod("show", "summary.stpm2",
           function(object) {
@@ -888,7 +889,7 @@ setMethod("predict", "stpm2",
     else {
       if (is.null(link))
         link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                       hdiff="I",loghazard="I",link="I",odds="logit",or="logit")
+                       hdiff="I",loghazard="I",link="I",odds="log",or="log")
       predictnl(object,local,link=link,newdata=newdata,type=type,
                 exposed=exposed,...) 
     }
@@ -1439,10 +1440,12 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         out@vcov <- sandwich.stpm2(out)
     return(out)
 }
-setClass("summary.pstpm2", representation(frailty="logical",theta="list"), contains="summary.mle2")
+## Could this inherit from summary.stpm2?
+setClass("summary.pstpm2", representation(pstpm2="pstpm2",frailty="logical",theta="list",wald="matrix"), contains="summary.mle2")
 setMethod("summary", "pstpm2",
           function(object) {
-              newobj <- as(summary(as(object,"mle2")),"summary.stpm2")
+              newobj <- as(summary(as(object,"mle2")),"summary.pstpm2")
+              newobj@pstpm2 <- object
               newobj@frailty <- object@frailty
               if (object@frailty) {
                   coef <- coef(newobj)
@@ -1453,16 +1456,114 @@ setMethod("summary", "pstpm2",
                   p.value <- pchisq(test.statistic,df=1,lower.tail=FALSE)/2
                   newobj@theta <- list(theta=theta, se.theta=se.theta, p.value=p.value)
               } else newobj@theta <- list()
+              vcov1 <- vcov(object)
+              coef1 <- coef(object)
+              ## Wald test for the smoothers
+              wald <- t(sapply(names(object@edf_var), function(name) {
+                  i <- grep(name,colnames(vcov1),fixed=TRUE)
+                  statistic <- as.vector(coef1[i] %*% solve(vcov1[i,i]) %*% coef1[i])
+                  edf <- object@edf_var[name]
+                  c(statistic=statistic,ncoef=length(i),edf=edf,p.value=pchisq(statistic, edf, lower.tail=FALSE))
+              }))
+              colnames(wald) <- c("Wald statistic","Number of coef","Effective df","P value")
+              newobj@wald <- wald
               newobj })
 setMethod("show", "summary.pstpm2",
           function(object) {
               show(as(object,"summary.mle2"))
-              cat(sprintf("\nedf=%g\n",object@edf))
-              cat(sprintf("\nedf_var=%g\n",object@edf_var)) ## how to get the names??di
+              cat(sprintf("\nEffective df=%g\n",object@pstpm2@edf))
+              printCoefmat(object@wald)
               if (object@frailty)
                   cat(sprintf("\ntheta=%g\tse=%g\tp=%g\n",
                               object@theta$theta,object@theta$se.theta,object@theta$p.value))
           })
+
+setMethod("AICc", "pstpm2",
+          function (object, ..., nobs=NULL, k=2)  {
+              L <- list(...)
+              if (length(L)) {
+                  L <- c(list(object),L)
+                  if (is.null(nobs)) {
+                      nobs <- sapply(L,nobs)
+                  }
+                  if (length(unique(nobs))>1)
+                      stop("nobs different: must have identical data for all objects")
+                  val <- sapply(L, AICc, nobs=nobs, k=k)
+                  df <- sapply(L,attr,"edf")
+                  data.frame(AICc=val,df=df)
+              } else {
+                  df <- attr(object,"edf")
+                  if (is.null(nobs)) nobs <- object@nevent
+                  c(-2*logLik(object)+k*df+k*df*(df+1)/(nobs-df-1))
+              }
+          })
+
+setMethod("qAICc", "pstpm2",
+          function (object, ..., nobs = NULL, dispersion = 1, k = 2)  {
+              L <- list(...)
+              if (length(L)) {
+                  L <- c(list(object),L)
+                  if (is.null(nobs)) {
+                      nobs <- sapply(L,nobs)
+                  }
+                  if (length(unique(nobs))>1)
+                      stop("nobs different: must have identical data for all objects")
+                  val <- sapply(L, qAICc, nobs=nobs,dispersion=dispersion,k=k)
+                  df <- sapply(L,attr,"edf")
+                  data.frame(qAICc=val,df=df)
+              } else {
+                  df <- attr(object,"edf")
+                  if (is.null(nobs)) nobs <- object@nevent
+                  c(-2*logLik(object)/dispersion+k*df+k*df*(df+1)/(nobs-df-1))
+              }
+          })
+
+setMethod("qAIC", "pstpm2",
+          function (object, ..., dispersion = 1, k = 2)  {
+              L <- list(...)
+              if (length(L)) {
+                  L <- c(list(object),L)
+                  if (is.null(nobs)) {
+                      nobs <- sapply(L,nobs)
+                  }
+                  if (length(unique(nobs))>1)
+                      stop("nobs different: must have identical data for all objects")
+                  val <- sapply(L, qAIC, dispersion=disperson, k=k)
+                  df <- sapply(L,attr,"edf")
+                  data.frame(qAICc=val,df=df)
+              } else {
+                  df <- attr(object,"edf")
+                  c(-2*logLik(object)/dispersion+k*df)
+              }
+          })
+
+setMethod("AIC", "pstpm2",
+          function (object, ..., k = 2) {
+              L <- list(...)
+              if (length(L)) {
+                  L <- c(list(object),L)
+                  if (!all(sapply(L,class)=="pstpm2")) stop("all objects in list must be class pstpm2")
+                  val <- sapply(L,AIC,k=k)
+                  df <- sapply(L,attr,"edf")
+                  data.frame(AIC=val,df=df)
+              } else -2 * as.numeric(logLik(object)) + k * attr(object, "edf")
+          })
+
+setMethod("BIC", "pstpm2",
+          function (object, ..., nobs = NULL) {
+              L <- list(...)
+              if (length(L)) {
+                  L <- c(list(object),L)
+                  if (!all(sapply(L,class)=="pstpm2")) stop("all objects in list must be class pstpm2")
+                  val <- sapply(L,BIC,nobs=nobs)
+                  df <- sapply(L,attr,"edf")
+                  data.frame(BIC=val,df=df)
+              } else {
+                  if (is.null(nobs)) nobs <- object@nevent
+                  -2 * as.numeric(logLik(object)) + log(nobs) * attr(object, "edf")
+              }
+          })
+
 
 ########GCV##############
 ##require(numDeriv)
@@ -1508,6 +1609,54 @@ gcvc<-function(pstpm2.fit,nn){
   ll<-like(coef(pstpm2.fit))
 return(-2*ll-2*nn*log(1-trace/nn))
 }
+
+## Revised from bbmle:
+## changed the calculation of the degrees of freedom in the third statement of the .local function
+setMethod("anova", signature(object="pstpm2"),
+          function (object, ...) 
+{
+    .local <- function (object, ..., width = getOption("width"), 
+        exdent = 10) 
+    {
+        mlist <- c(list(object), list(...))
+        mnames <- sapply(sys.call(sys.parent())[-1], deparse)
+        ltab <- as.matrix(do.call("rbind", lapply(mlist, function(x) {
+            c(`Tot Df` = x@edf, Deviance = -2 * logLik(x)) # changed to x@edf
+        })))
+        terms = sapply(mlist, function(obj) {
+            if (is.null(obj@formula) || obj@formula == "") {
+                mfun <- obj@call$minuslogl
+                mfun <- paste("[", if (is.name(mfun)) {
+                  as.character(mfun)
+                }
+                else {
+                  "..."
+                }, "]", sep = "")
+                paste(mfun, ": ", paste(names(obj@coef), collapse = "+"), 
+                  sep = "")
+            }
+            else {
+                as.character(obj@formula)
+            }
+        })
+        mterms <- paste("Model ", 1:length(mnames), ": ", mnames, 
+            ", ", terms, sep = "")
+        mterms <- bbmle:::strwrapx(mterms, width = width, exdent = exdent, 
+            wordsplit = "[ \n\t]")
+        heading <- paste("Likelihood Ratio Tests", paste(mterms, 
+            collapse = "\n"), sep = "\n")
+        ltab <- cbind(ltab, Chisq = abs(c(NA, diff(ltab[, "Deviance"]))), 
+            Df = abs(c(NA, diff(ltab[, "Tot Df"]))))
+        ltab <- cbind(ltab, `Pr(>Chisq)` = c(NA, pchisq(ltab[, 
+            "Chisq"][-1], ltab[, "Df"][-1], lower.tail = FALSE)))
+        rownames(ltab) <- 1:nrow(ltab)
+        attr(ltab, "heading") <- heading
+        class(ltab) <- "anova"
+        ltab
+    }
+    .local(object, ...)
+})
+
 
 setMethod("predictnl", "pstpm2",
           function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"),...)
@@ -1671,7 +1820,7 @@ setMethod("predict", "pstpm2",
     else {
       if (is.null(link))
         link <- switch(type,surv="cloglog",density="log",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                       hdiff="I",loghazard="I",link="I",odds="logit",or="logit")
+                       hdiff="I",loghazard="I",link="I",odds="log",or="log")
       predictnl(object,local,link=link,newdata=newdata,type=type,
                 exposed=exposed,...) 
     }
