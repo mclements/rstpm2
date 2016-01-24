@@ -1269,7 +1269,20 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
         localargs <- args
         localargs$sp <- sp
         localargs$kappa <- kappa
+        localargs$init <- beta
         localargs$return_type <- "objective"
+        negll <- .Call("model_output", localargs, package="rstpm2")
+        localargs$return_type <- "feasible"
+        feasible <- .Call("model_output", localargs, package="rstpm2")
+        attr(negll,"feasible") <- feasible
+        return(negll)
+    }
+    negll0sp <- function(beta,sp,kappa=10) {
+        localargs <- args
+        localargs$sp <- sp
+        localargs$kappa <- kappa
+        localargs$init <- beta
+        localargs$return_type <- "objective0"
         negll <- .Call("model_output", localargs, package="rstpm2")
         localargs$return_type <- "feasible"
         feasible <- .Call("model_output", localargs, package="rstpm2")
@@ -1323,7 +1336,15 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     gradnegllsp <- function(beta,sp,kappa=10) {
         localargs <- args
         localargs$kappa <- kappa
+        localargs$init <- beta
         localargs$return_type <- "gradient"
+        .Call("model_output", localargs, package="rstpm2")
+      }
+    gradnegll0sp <- function(beta,sp,kappa=10) {
+        localargs <- args
+        localargs$kappa <- kappa
+        localargs$init <- beta
+        localargs$return_type <- "gradient0"
         .Call("model_output", localargs, package="rstpm2")
       }
     logli <- function(beta) {

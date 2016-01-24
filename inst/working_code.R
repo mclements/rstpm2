@@ -19,9 +19,6 @@
 ## }
 
 
-require(rstpm2)
-
-
 require(abind)
 X <- matrix(seq(0,1,length=5*10),nrow=10)
 beta <- seq(0,1,length=5)
@@ -48,7 +45,7 @@ data(brcancer)
 ## PO:     -.474102
 ## Probit: -.2823338
 system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
-system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
+system.time(print(pfit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
 ##
 system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO")))
 system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO")))
@@ -56,6 +53,15 @@ system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO"
 system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
 system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit"))) # slow
 
+if (FALSE) {
+    debug(pstpm2)
+    pfit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,sp=1)
+    ## towards the end of the pstpm2 function...
+    sum(diag(solve(optimHess(coef(mle2),negllsp,sp=1)) %*% optimHess(coef(mle2),negll0sp,sp=1)))
+    sum(diag(solve(optimHess(coef(mle2),negllsp,sp=fit$sp)) %*% optimHess(coef(mle2),negll0sp,sp=fit$sp)))
+    negllsp(coef(mle2),sp=1)
+    negll0sp(coef(mle2),sp=1)
+}
 
 ## delayed entry
 ## Stata estimated coef for hormon (PH): -1.162504

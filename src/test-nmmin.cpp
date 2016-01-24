@@ -784,7 +784,7 @@ namespace rstpm2 {
   template<class Stpm2Type = Stpm2<LogLogLink>, class Smooth = SmoothLogH>
   class Pstpm2 : public Stpm2Type, public Smooth {
   public:
-    typedef Pstpm2<Stpm2Type> This;
+    typedef Pstpm2<Stpm2Type,Smooth> This;
     Pstpm2(SEXP sexp) : Stpm2Type(sexp), Smooth(sexp) {
       List list = as<List>(sexp);
       sp = as<vec>(list["sp"]);
@@ -797,8 +797,14 @@ namespace rstpm2 {
     double objective(vec beta) {
       return Stpm2Type::objective(beta) + Smooth::penalty(beta,sp);
     }
+    double objective0(vec beta) {
+      return Stpm2Type::objective(beta);
+    }
     vec gradient(vec beta) {
       return Stpm2Type::gradient(beta) + Smooth::penalty_gradient(beta,sp);
+    }
+    vec gradient0(vec beta) {
+      return Stpm2Type::gradient(beta);
     }
     // is the following strictly needed - or even correct?
     void optimWithConstraint(NumericVector init) {
@@ -816,7 +822,6 @@ namespace rstpm2 {
       sp[0] = exp(logsp);
       this->pre_process();
       this->optimWithConstraint(this->init);
-      this->post_process();
       this->bfgs.hessian = this->bfgs.calc_hessian(&optimgradient<This>, (void *) this);
       NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, (void *) this);
       if (this->bfgs.trace > 1)  {
@@ -836,6 +841,7 @@ namespace rstpm2 {
       this->init = this->bfgs.coef;
       if (this->bfgs.trace > 0)
 	Rprintf("sp=%f\tedf=%f\tnegll=%f\tgcv=%f\tbic=%f\talpha=%f\n",sp[0],edf,negll,gcv,bic,alpha);
+      this->post_process();
       return criterion==1 ? gcv : bic;
     }
     double multivariate_step(vec logsp) {
@@ -1370,8 +1376,12 @@ vec gradient_new(vec beta) {
       return(model.optim_multivariate());
     else if (return_type == "objective")
       return wrap(model.objective(beta));
+    else if (return_type == "objective0")
+      return wrap(model.objective0(beta));
     else if (return_type == "gradient")
       return wrap(model.gradient(beta));
+    else if (return_type == "gradient0")
+      return wrap(model.gradient0(beta));
     else if (return_type == "constraint")
       return wrap(model.feasible(beta));
     else if (return_type == "feasible")
