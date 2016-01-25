@@ -1037,7 +1037,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    bhazard = NULL, timeVar = "", time0Var = "",
                    sp=NULL, use.gr = TRUE, use.rcpp = TRUE,
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
-                   alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=NULL, trace = 0,
+                   alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=1, trace = 0,
                    link.type=c("PH","PO","probit","AH"),
                    frailty=!is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,RandDist=c("Gamma","LogN"),
                    reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-4),outer_optim=1,
@@ -1152,11 +1152,16 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     lhs(gam.formula) <- quote(logHhat) # new response
     gam.call$formula <- gam.formula
     gam.call$sp <- sp
-    if (is.null(sp) && !is.null(sp.init))
+    if (is.null(sp) && !is.null(sp.init) && (length(sp.init)>1 || sp.init!=1))
         gam.call$sp <- sp.init
     dataEvents <- data[event,]
     gam.call$data <- quote(dataEvents) # events only
     gam.obj <- eval(gam.call)
+    ## re-run gam if sp.init==1 (default)
+    if (is.null(sp) && !is.null(sp.init) && length(sp.init)==1 && sp.init==1) {
+        sp.init <- gam.call$sp <- rep(sp.init,length=length(gam.obj$sp))
+        gam.obj <- eval(gam.call)
+    }
     ##
     ## set up X, mf and wt
     mt <- terms(gam.obj)
