@@ -1836,42 +1836,6 @@ setMethod("plot", signature(x="pstpm2", y="missing"),
     }
   return(invisible(y))
 })
-#######Optimal fitting#######
-###GCV,AICC,BIC or GCVC to choose smoothing parameters###
-opt.val<-function(pstpm2.fit,nn){
-  like<-pstpm2.fit@like
-  Hl<-numDeriv::hessian(like,coef(pstpm2.fit))
-  Hinv<-vcov(pstpm2.fit)
-  trace<-sum(diag(Hinv%*%Hl))
-  loglike<-(like(coef(pstpm2.fit)))/nn
-  gcv<-(trace-loglike)/nn
-  aicc<-(-2*loglike+2*trace*nn/(nn-trace-1))/nn
-  bic<-(-2*loglike+trace*log(nn))/nn
-  gcvc<-(-2*loglike-2*nn*log(1-trace/nn))/nn
-  out<-c(loglike,gcv,aicc,bic,gcvc)
-  return(out)
-}
-# ###methods for Plot ###
-# setMethod(
-#   f= "plot",
-#   signature(x="opt.fit", y="missing"),
-#   definition=function (x,y,...){
-#     matplot(x@sps,x@tops[,-1],type="l",col=1:4,lty=1:4,xlab="",ylab="")
-#     points(x@sp.opt,x@fun.min,pch=4,lwd=2,cex=1.2)
-#     lines(x@sp.opt,x@fun.min,err=-1,col=1:4,lty=1:4)
-#   }
-# )
-# ####methods for print####
-# setMethod ("print",signature(x="opt.fit", y="missing"),
-#            function(x,...){
-#              cat("*** Class opt.fit, method Print *** \n")
-#              cat("* Optimal SP ="); print (x@sp.opt)
-#              cat("* GCV = \n"); print (x@fun.min[1])
-#              cat("******* End Print (opt.fit) ******* \n")
-#            }
-# )
-##########################
-
 
 ## sandwich variance estimator (from the sandwich package)
 
