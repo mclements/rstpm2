@@ -758,6 +758,7 @@ setMethod("predict", "stpm2",
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
   {
+    type <- match.arg(type)
     ## exposed is a function that takes newdata and returns the revised newdata
     ## var is a string for a variable that defines a unit change in exposure
     local <-  function (object, newdata=NULL, type="surv", exposed)
@@ -1667,6 +1668,7 @@ setMethod("predict", "pstpm2",
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
   {
+    type <- match.arg(type)
     ## exposed is a function that takes newdata and returns the revised newdata
     ## var is a string for a variable that defines a unit change in exposure
     local <-  function (object, newdata=NULL, type="surv", exposed)

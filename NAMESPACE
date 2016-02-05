@@ -6,7 +6,7 @@ S3method(makepredictcall, nsx)
 S3method(predict, nsx)
 ## All methods for imported generics:
 exportMethods(plot,predict,predictnl,coef,confint,summary,update,anova,vcov,formula,anova,
-              AIC,AICc,qAICc,simulate)
+              BIC,AIC,AICc,qAICc,simulate)
 
 importFrom(graphics,plot,lines,matplot,par,polygon)
 ## importFrom(splines,bs,ns,spline.des,splineDesign)
