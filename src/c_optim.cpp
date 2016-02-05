@@ -58,7 +58,7 @@ namespace rstpm2 {
       f0 = fn(n,&coef[0],ex);
       for(int i=0; i<n; ++i) {
 	tmpi = coef[i];
-	hi = epshess*(1.0+abs(tmpi));
+	hi = epshess*(1.0+std::abs(tmpi));
 	coef[i] = tmpi + hi;
 	f1=fn(n, &coef[0], ex);
 	coef[i] = tmpi - hi;
@@ -69,7 +69,7 @@ namespace rstpm2 {
 	for (int j=i; j<n; ++j) {
 	  if (i != j) {
 	    tmpj = coef[j];
-	    hj = epshess*(1.0+abs(tmpj));
+	    hj = epshess*(1.0+std::abs(tmpj));
 	    coef[i] = tmpi + hi;
 	    coef[j] = tmpj + hj;
 	    fij=fn(n, &coef[0], ex);

@@ -834,7 +834,7 @@ setMethod("predict", "stpm2",
           return(S)
         }
         if (type=="odds") { # delayed entry?
-          return(S/(1-S))
+          return((1-S)/S)
         }
         if (type=="sdiff")
           return(link$ilink(as.vector(X2 %*% beta)) - S)
@@ -858,7 +858,7 @@ setMethod("predict", "stpm2",
         }
         if (type=="or") {
             S2 <- link$ilink(as.vector(X2 %*% beta)) 
-            return(S2/(1-S2)/S*(1-S))
+            return((1-S2)/S2/((1-S)/S))
         }
         if (type=="meansurv") {
             return(mean(S))
@@ -1590,52 +1590,6 @@ setMethod("BIC", "pstpm2",
               }
           })
 
-
-########GCV##############
-##require(numDeriv)
-## now fit a penalised stpm2 model
-##pstpm2.fit <- pstpm2(formula,data)
-## log likelihood and penalized log likelihood
-##
-##GCV###
-gcv<-function(pstpm2.fit){
-  like<-pstpm2.fit@like
-  Hl<-numDeriv::hessian(like,coef(pstpm2.fit))
-  if (any(is.na(Hl)))
-      Hl <- optimHess(coef(pstpm2.fit), like)
-  Hinv<- -vcov(pstpm2.fit)
-  trace<-sum(diag(Hinv%*%Hl))
-  l<-like(coef(pstpm2.fit))
-  structure(-l+trace,negll=-l,trace=trace)
-}
-###AICC
-aicc<-function(pstpm2.fit,nn){
-  like<-pstpm2.fit@like
-  Hl<-numDeriv::hessian(like,coef(pstpm2.fit))
-  Hinv<--vcov(pstpm2.fit)
-  trace<-sum(diag(Hinv%*%Hl))
-  ll<-like(coef(pstpm2.fit))
-return(-2*ll+2*trace*nn/(nn-trace-1))
-}
-###BIC
-bic<-function(pstpm2.fit,nn){
-  like<-pstpm2.fit@like
-  Hl<-numDeriv::hessian(like,coef(pstpm2.fit))
-  Hinv<--vcov(pstpm2.fit)
- trace<-sum(diag(Hinv%*% Hl))
-ll<-like(coef(pstpm2.fit))
-return(-2*ll+trace*log(nn))
-}
-###GCVC
-gcvc<-function(pstpm2.fit,nn){
-  like<-pstpm2.fit@like
-  Hl<-numDeriv::hessian(like,coef(pstpm2.fit))
-  Hinv<--vcov(pstpm2.fit)
-  trace<-sum(diag(Hinv %*% Hl))
-  ll<-like(coef(pstpm2.fit))
-return(-2*ll-2*nn*log(1-trace/nn))
-}
-
 ## Revised from bbmle:
 ## changed the calculation of the degrees of freedom in the third statement of the .local function
 setMethod("anova", signature(object="pstpm2"),
@@ -1791,13 +1745,13 @@ setMethod("predict", "pstpm2",
           return(S)
         }
         if (type=="odds") { # delayed entry?
-          return(S/(1-S))
+          return((1-S)/S)
         }
         if (type=="sdiff")
           return(link$ilink(as.vector(X2 %*% beta)) - S)
         if (type=="or") {
             S2 <- link$ilink(as.vector(X2 %*% beta)) 
-            return(S2/(1-S2)/S*(1-S))
+            return((1-S2)/S2/((1-S)/S))
         }
         if (type=="hazard") {
           return(h)
