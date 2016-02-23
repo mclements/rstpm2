@@ -10,13 +10,14 @@ This implements the Royston-Parmar model.
 \usage{
 stpm2(formula, data, df = 3, cure = FALSE, logH.args = NULL,
       logH.formula = NULL, tvc = NULL, tvc.formula =
-      NULL, control = list(parscale = 0.1, maxit = 300),
+      NULL, control = list(parscale = 1, maxit = 300),
       init = NULL, coxph.strata = NULL, weights = NULL,
       robust = FALSE, baseoff = FALSE, bhazard = NULL,
       timeVar = "", time0Var = "", use.gr = TRUE,
-      use.rcpp= TRUE, reltol=1.0e-8, trace = 0,
-      type=c("PH","PO","probit","AH"), frailty = FALSE,
-      cluster = NULL, logtheta=0, contrasts = NULL,
+      reltol=1.0e-8, trace = 0,
+      link.type=c("PH","PO","probit","AH"), 
+      frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"), 
+      contrasts = NULL,
       subset = NULL, ...)
 }
 %- maybe also 'usage' for other objects documented here.
@@ -76,7 +77,6 @@ using \code{tvc.formula} rather than combining \code{logH.formula} and \code{tvc
 \item{timeVar}{variable defining the time variable. By default, this is
 determined from the survival object, however this may be ambiguous if
 two variables define the time}
-\item{use.gr}{Boolean to determine whether to use the gradient in the optimisation}
 \item{contrasts}{an optional list. See the \code{contrasts.arg}
     of \code{\link{model.matrix.default}}.
 }
@@ -85,15 +85,17 @@ two variables define the time}
 \item{cure}{logical for whether to estimate a cure model.}
 \item{time0Var}{string variable to determine the entry variable; useful
   for when more than one data variable is used in the entry time.}
-\item{type}{type of link function.}
-\item{use.rcpp}{logical for whether to use C++/Rcpp for estimation}
+\item{use.gr}{logical indicating whether to use gradients in the calculation}
+\item{link.type}{type of link function.}
 \item{reltol}{relative tolerance for the model convergence}
 \item{trace}{logical for whether to provide trace information}
-\item{frailty}{logical for whether to fit a shared frailty model (experimental)}
+\item{frailty}{logical for whether to fit a shared frailty model}
 \item{cluster}{string for the data variable that determines the cluster
-  for the frailty (experimental)}
+  for the frailty}
+\item{nodes}{number of integration points for Gaussian quadrature}
+\item{RandDist}{type of distribution for the random effect or frailty}
 \item{logtheta}{initial value for log-theta used in the gamma shared frailty
-  model (experimental)}
+  model}
 \item{\dots}{
   additional arguments to be passed to the \code{\link{mle2}} .
 }

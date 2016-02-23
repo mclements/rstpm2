@@ -16,6 +16,6 @@ importFrom(stats, quantile, lm, as.formula, coef, makepredictcall, na.fail, pred
            terms, terms.formula, .checkMFClasses, .getXlevels)
 importFrom(mgcv,gam,s)
 importFrom(Rcpp,sourceCpp)
-import(bbmle,methods,survival,splines)
+import(bbmle,methods,survival,splines,numDeriv)
 
 

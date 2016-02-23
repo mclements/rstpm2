@@ -5,6 +5,12 @@
 \alias{plot,pstpm2,missing-method}
 %\alias{predict,pstpm2-method}
 \alias{predictnl,pstpm2-method}
+\alias{AIC,pstpm2-method}
+\alias{AICc,pstpm2-method}
+\alias{BIC,pstpm2-method}
+\alias{anova,pstpm2-method}
+\alias{qAICc,pstpm2-method}
+\alias{summary,pstpm2-method}
 
 \title{Class "pstpm2" }
 \description{Regression object for \code{pstpm2}.}
@@ -26,6 +32,7 @@ Objects can be created by calls of the form \code{new("pstpm2", ...)} and
     \item{\code{model.frame}:}{Object of class \code{"list"} ~~ }
     \item{\code{fullformula}:}{Object of class \code{"formula"} ~~ }
     \item{\code{delayed}:}{Object of class \code{"logical"} ~~ }
+    \item{\code{frailty}:}{Object of class \code{"logical"} ~~ }
     \item{\code{x}:}{Object of class \code{"matrix"} ~~ }
     \item{\code{xd}:}{Object of class \code{"matrix"} ~~ }
     \item{\code{termsd}:}{Object of class \code{"terms"} ~~ }
@@ -35,6 +42,7 @@ Objects can be created by calls of the form \code{new("pstpm2", ...)} and
     \item{\code{nevent}:}{Object of class \code{"numeric"} ~~ }
     \item{\code{link}:}{Object of class \code{"list"} ~~ }
     \item{\code{edf}:}{Object of class \code{"numeric"} ~~ }
+    \item{\code{edf_var}:}{Object of class \code{"numeric"} ~~ }
     \item{\code{df}:}{Object of class \code{"numeric"} ~~ }
     \item{\code{call}:}{Object of class \code{"language"} ~~ }
     \item{\code{call.orig}:}{Object of class \code{"language"} ~~ }
@@ -48,6 +56,7 @@ Objects can be created by calls of the form \code{new("pstpm2", ...)} and
     \item{\code{data}:}{Object of class \code{"list"} ~~ }
     \item{\code{formula}:}{Object of class \code{"character"} ~~ }
     \item{\code{optimizer}:}{Object of class \code{"character"} ~~ }
+    \item{\code{args}:}{Object of class \code{"list"} ~~ }
   }
 }
 \section{Extends}{
@@ -57,6 +66,13 @@ Class \code{"\linkS4class{mle2}"}, directly.
   \describe{
     \item{plot}{\code{signature(x = "pstpm2", y = "missing")}: ... }
     %\item{predict}{\code{signature(object = "pstpm2")}: ... }
+    \item{anova}{\code{signature(object = "pstpm2",...)}: ... }
+    \item{AIC}{\code{signature(object = "pstpm2",...,k=2)}: ... }
+    \item{AICc}{\code{signature(object = "pstpm2",...,nobs=NULL, k=2)}: ... }
+    \item{BIC}{\code{signature(object = "pstpm2",..., nobs = NULL)}: ... }
+    \item{qAICc}{\code{signature(object = "pstpm2",..., nobs = NULL, dispersion = 1, k = 2)}: ... }
+    \item{qAIC}{\code{signature(object = "pstpm2",..., dispersion = 1, k = 2)}: ... }
+    \item{summary}{\code{signature(object = "pstpm2",...)}: ... }
     \item{predictnl}{\code{signature(object = "pstpm2",...)}: ... }
 	 }
 }

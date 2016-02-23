@@ -436,14 +436,13 @@ stpm2 <- function(formula, data,
                      coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE, 
                      bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE,
                      reltol=1.0e-8, trace = 0,
-                     link.type=c("PH","PO","probit","AH"), optimiser=c("BFGS","NelderMead"),
+                     link.type=c("PH","PO","probit","AH"), 
                      frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"),
                      contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
     RandDist <- match.arg(RandDist)
-    optimiser <- match.arg(optimiser)
-    use.gr <- (optimiser == "BFGS")
+    use.gr <- TRUE # old code
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
@@ -625,7 +624,7 @@ stpm2 <- function(formula, data,
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
                  kappa=1, trace = trace, cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
-                 RandDist=RandDist, optimiser=optimiser,
+                 RandDist=RandDist, optimiser="BFGS",
                  type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", return_type="optim")
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
@@ -1036,7 +1035,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
                    coxph.strata = NULL, coxph.formula = NULL,
                    weights = NULL, robust = FALSE, 
                    bhazard = NULL, timeVar = "", time0Var = "",
-                   sp=NULL, use.gr = TRUE, use.rcpp = TRUE,
+                   sp=NULL, use.gr = TRUE, 
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=1, trace = 0,
                    link.type=c("PH","PO","probit","AH"),
@@ -1555,7 +1554,7 @@ setMethod("qAIC", "pstpm2",
                   }
                   if (length(unique(nobs))>1)
                       stop("nobs different: must have identical data for all objects")
-                  val <- sapply(L, qAIC, dispersion=disperson, k=k)
+                  val <- sapply(L, qAIC, dispersion=dispersion, k=k)
                   df <- sapply(L,attr,"edf")
                   data.frame(qAICc=val,df=df)
               } else {
@@ -1622,7 +1621,7 @@ setMethod("anova", signature(object="pstpm2"),
         })
         mterms <- paste("Model ", 1:length(mnames), ": ", mnames, 
             ", ", terms, sep = "")
-        mterms <- bbmle:::strwrapx(mterms, width = width, exdent = exdent, 
+        mterms <- strwrapx(mterms, width = width, exdent = exdent, 
             wordsplit = "[ \n\t]")
         heading <- paste("Likelihood Ratio Tests", paste(mterms, 
             collapse = "\n"), sep = "\n")
@@ -1877,3 +1876,97 @@ setMethod("plot", signature(x="pstpm2", y="missing"),
 ##         wts
 ##     else napredict(object@na.action, wts)
 ## }
+
+## copy of bbmle:::strwrapx
+strwrapx <-
+function (x, width = 0.9 * getOption("width"), indent = 0, exdent = 0, 
+          prefix = "", simplify = TRUE, parsplit = "\n[ \t\n]*\n", 
+          wordsplit = "[ \t\n]") 
+{
+  if (!is.character(x)) 
+    x <- as.character(x)
+  indentString <- paste(rep.int(" ", indent), collapse = "")
+  exdentString <- paste(rep.int(" ", exdent), collapse = "")
+  y <- list()
+  plussplit = function(w) {
+    lapply(w, function(z) {
+      plusloc = which(strsplit(z, "")[[1]] == "+")
+      plussplit = apply(cbind(c(1, plusloc + 1), c(plusloc, 
+                                                   nchar(z, type = "width"))), 1, function(b) substr(z, 
+                                                                                                     b[1], b[2]))
+      plussplit
+    })
+  }
+  z <- lapply(strsplit(x, parsplit), function(z) {
+    lapply(strsplit(z, wordsplit), function(x) unlist(plussplit(x)))
+  })
+  for (i in seq_along(z)) {
+    yi <- character(0)
+    for (j in seq_along(z[[i]])) {
+      words <- z[[i]][[j]]
+      nc <- nchar(words, type = "w")
+      if (any(is.na(nc))) {
+        nc0 <- nchar(words)
+        nc[is.na(nc)] <- nc0[is.na(nc)]
+      }
+      if (any(nc == 0)) {
+        zLenInd <- which(nc == 0)
+        zLenInd <- zLenInd[!(zLenInd %in% (grep("\\.$", 
+                                                words) + 1))]
+        if (length(zLenInd) > 0) {
+          words <- words[-zLenInd]
+          nc <- nc[-zLenInd]
+        }
+      }
+      if (length(words) == 0) {
+        yi <- c(yi, "", prefix)
+        next
+      }
+      currentIndex <- 0
+      lowerBlockIndex <- 1
+      upperBlockIndex <- integer(0)
+      lens <- cumsum(nc + 1)
+      first <- TRUE
+      maxLength <- width - nchar(prefix, type = "w") - 
+        indent
+      while (length(lens) > 0) {
+        k <- max(sum(lens <= maxLength), 1)
+        if (first) {
+          first <- FALSE
+          maxLength <- maxLength + indent - exdent
+        }
+        currentIndex <- currentIndex + k
+        if (nc[currentIndex] == 0) 
+          upperBlockIndex <- c(upperBlockIndex, currentIndex - 
+                                 1)
+        else upperBlockIndex <- c(upperBlockIndex, currentIndex)
+        if (length(lens) > k) {
+          if (nc[currentIndex + 1] == 0) {
+            currentIndex <- currentIndex + 1
+            k <- k + 1
+          }
+          lowerBlockIndex <- c(lowerBlockIndex, currentIndex + 
+                                 1)
+        }
+        if (length(lens) > k) 
+          lens <- lens[-(1:k)] - lens[k]
+        else lens <- NULL
+      }
+      nBlocks <- length(upperBlockIndex)
+      s <- paste(prefix, c(indentString, rep.int(exdentString, 
+                                                 nBlocks - 1)), sep = "")
+      for (k in (1:nBlocks)) {
+        s[k] <- paste(s[k], paste(words[lowerBlockIndex[k]:upperBlockIndex[k]], 
+                                  collapse = " "), sep = "")
+      }
+      s = gsub("\\+ ", "+", s)
+      yi <- c(yi, s, prefix)
+    }
+    y <- if (length(yi)) 
+      c(y, list(yi[-length(yi)]))
+    else c(y, "")
+  }
+  if (simplify) 
+    y <- unlist(y)
+  y
+}

@@ -1021,7 +1021,7 @@ namespace rstpm2 {
 	  uvec ind00 = as<uvec>(wrap(cluster_events[it->first]));
 	  sumHenter = sum(H0(ind00));
 	}
-	ll += -(1.0/theta+mi)*log(1.0+theta*(sumH)) + 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
+	 ll += -(1.0/theta+mi)*log(1.0+theta*(sumH)) + 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
 	// ll -= (1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // conditional (Gutierrez 2002)
 	if (mi>0) {
 	  for (int k=1; k<=mi; ++k)
@@ -1078,7 +1078,7 @@ namespace rstpm2 {
 	}
 	for (int k=0; k<n-1; ++k) {
 	  // gr(k) += gradi(k) - (1+mi*theta)*(gradHi(k)-gradH0i(k))/(1+theta*(sumH-sumHenter)) - grconstraint(k); // Gu tierrez
-	  gr(k) += gradi(k) - (1+mi*theta)*gradHi(k)/(1+theta*(sumH)) + 1.0/(1+theta*sumHenter)*gradH0i(k) - grconstraint(k); // Rondeau et al
+	   gr(k) += gradi(k) - (1+mi*theta)*gradHi(k)/(1+theta*(sumH)) + 1.0/(1+theta*sumHenter)*gradH0i(k) - grconstraint(k); // Rondeau et al
 	}
 	double lastterm = 0.0;
 	if (mi>0) {
