@@ -1303,7 +1303,7 @@ vec gradient_new(vec beta) {
       coef.resize(beta.size()-1);
       return Base::feasible(coef);
     }
-    void optimWithConstraintBFGS(NumericVector init) {
+    void optimWithConstraint(NumericVector init) {
       bool satisfied;
       int n = init.size();
       if (this->bfgs.trace > 0) 

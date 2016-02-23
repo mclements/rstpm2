@@ -86,12 +86,12 @@ summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
 require(rstpm2)
 require(frailtypack)
 data(dataAdditive)
-system.time(mod2n <- stpm2(Surv(t1,t2,event)~var1,
+system.time(mod2n <- pstpm2(Surv(t1,t2,event)~var1,
                            data=dataAdditive,
                            RandDist="LogN",
-                           optimiser="NelderMead",
-                           logH.formula=~ns(t2,df=7),
+                           smooth.formula=~s(t2),
                            cluster=dataAdditive$group, nodes=20))
+
 system.time(mod2nb <- stpm2(Surv(t1,t2,event)~var1,
                            data=dataAdditive,
                            RandDist="LogN",
