@@ -1593,10 +1593,8 @@ setMethod("BIC", "pstpm2",
 ## Revised from bbmle:
 ## changed the calculation of the degrees of freedom in the third statement of the .local function
 setMethod("anova", signature(object="pstpm2"),
-          function (object, ...) 
-{
-    .local <- function (object, ..., width = getOption("width"), 
-        exdent = 10) 
+          function (object, ..., width = getOption("width"), 
+                    exdent = 10) 
     {
         mlist <- c(list(object), list(...))
         mnames <- sapply(sys.call(sys.parent())[-1], deparse)
@@ -1633,9 +1631,7 @@ setMethod("anova", signature(object="pstpm2"),
         attr(ltab, "heading") <- heading
         class(ltab) <- "anova"
         ltab
-    }
-    .local(object, ...)
-})
+    })
 
 
 setMethod("predictnl", "pstpm2",
