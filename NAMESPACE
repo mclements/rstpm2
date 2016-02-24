@@ -5,7 +5,7 @@ exportClasses(stpm2,pstpm2) # tvcCoxph
 S3method(makepredictcall, nsx)
 S3method(predict, nsx)
 ## All methods for imported generics:
-exportMethods(plot,predict,predictnl,coef,confint,summary,update,anova,vcov,formula,anova,
+exportMethods(plot,predict,predictnl,coef,confint,summary,update,anova,vcov,formula,
               BIC,AIC,AICc,qAICc,simulate)
 
 importFrom(graphics,plot,lines,matplot,par,polygon)
@@ -13,7 +13,8 @@ importFrom(graphics,plot,lines,matplot,par,polygon)
 importFrom(stats, quantile, lm, as.formula, coef, makepredictcall, na.fail, predict,
            contrasts,delete.response, get_all_vars, model.extract, model.frame, 
            model.matrix, model.weights, na.pass, optimHess, pweibull, 
-           terms, terms.formula, .checkMFClasses, .getXlevels)
+           terms, terms.formula, .checkMFClasses, .getXlevels, pchisq, printCoefmat,
+           anova)
 importFrom(mgcv,gam,s)
 importFrom(Rcpp,sourceCpp)
 import(bbmle,methods,survival,splines,numDeriv)
