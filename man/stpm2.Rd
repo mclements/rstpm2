@@ -2,10 +2,16 @@
 \alias{stpm2}
 %- Also NEED an '\alias' for EACH other topic documented here.
 \title{
-Flexible parametric survival model.
+Fully parametric generalised survival model
 }
 \description{
-This implements the Royston-Parmar model.
+  This implements the generalised survival model g(S(t|x)) = eta, where
+g is a link function, S is survival, t is time, x are covariates and eta
+is a linear predictor. The main model assumption is that the time
+effects in the linear predictor are smooth. This extends the class of
+flexible parametric survival models developed by Royston and
+colleagues. The model has been extended to include relative survival,
+Gamma frailties and normal random effects.
 }
 \usage{
 stpm2(formula, data, 
@@ -113,14 +119,12 @@ two variables define the time}
 }
 \details{
   
-  
   The implementation extends the \code{mle2} object from the
-  \code{bbmle} package.
+  \code{bbmle} package. The model inherits all of the methods from the
+  \code{mle2} class.
 
-  Note that the default baseline log-cumulative hazard function uses
-  natural splines for log of time with three degrees of freedom. The
-  design matrix is calculated for the event times rather than all
-  observations.
+  The default linear predictor includes a time effect modelled using
+  natural splines for log(time) with three degrees of freedom.
   
 }
 \value{
@@ -134,9 +138,9 @@ An \code{stpm2-class} object that inherits from \code{mle2-class}.
 %% \references{
 %% %% ~put references to the literature/web site here ~
 %% }
-%% \author{
-%% %%  ~~who you are~~
-%% }
+\author{
+ Mark Clements, Xing-Rong Liu.
+}
 %% \note{
 %% %%  ~~further notes~~
 %% }

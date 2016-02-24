@@ -3,11 +3,18 @@
 \alias{pstpm2}
 %- Also NEED an '\alias' for EACH other topic documented here.
 \title{
-Flexible semi-parametric survival model.
+Penalised generalised survival model
 }
 \description{
-This implements a penalised Royston-Parmar model using generalized
-additive models.
+  This implements the generalised survival model g(S(t|x)) = eta, where
+g is a link function, S is survival, t is time, x are covariates and eta
+is a linear predictor. The linear predictor can include penalised
+smoothers for the time effects, for time:covariate interactions and for
+covariate effects using the mgcv smoothers. The main model assumption is that the time
+effects in the linear predictor are smooth. This extends the class of
+flexible parametric survival models developed by Royston and
+colleagues. The model has been extended to include relative survival,
+Gamma frailties and normal random effects.
 }
 \usage{
 pstpm2(formula, data, smooth.formula = NULL, smooth.args = NULL,
@@ -106,9 +113,10 @@ two variables define the time}
 }
 \details{
   
-  
   The implementation extends the \code{mle2} object from the
   \code{bbmle} package.
+
+  The default smoother for time on the linear predictor scale is s(log(time)).
 }
 \value{
 A \code{pstpm2-class} object. 
