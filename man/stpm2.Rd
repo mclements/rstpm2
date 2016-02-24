@@ -16,7 +16,8 @@ stpm2(formula, data, df = 3, cure = FALSE, logH.args = NULL,
       timeVar = "", time0Var = "", use.gr = TRUE,
       reltol=1.0e-8, trace = 0,
       link.type=c("PH","PO","probit","AH"), 
-      frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"), 
+      frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,
+      RandDist=c("Gamma","LogN"), 
       contrasts = NULL,
       subset = NULL, ...)
 }

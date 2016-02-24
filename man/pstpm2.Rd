@@ -23,7 +23,8 @@ pstpm2(formula, data, smooth.formula = NULL,
        alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1,
        sp.init=1, trace = 0,
        link.type=c("PH","PO","probit","AH"), 
-       frailty=!is.null(cluster),cluster = NULL, logtheta=-6, nodes=9,RandDist=c("Gamma","LogN"),
+       frailty=!is.null(cluster),cluster = NULL, logtheta=-6, nodes=9,
+       RandDist=c("Gamma","LogN"),
        reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-4),outer_optim=1,
        contrasts = NULL, subset = NULL, ...)
 }
