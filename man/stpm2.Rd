@@ -8,7 +8,9 @@ Flexible parametric survival model.
 This implements the Royston-Parmar model.
 }
 \usage{
-stpm2(formula, data, df = 3, cure = FALSE, logH.args = NULL,
+stpm2(formula, data, df = 3,
+      smooth.formula = NULL, smooth.args = NULL,
+      cure = FALSE, logH.args = NULL,
       logH.formula = NULL, tvc = NULL, tvc.formula =
       NULL, control = list(parscale = 1, maxit = 300),
       init = NULL, coxph.strata = NULL, weights = NULL,
@@ -33,20 +35,28 @@ terms for any time-varying coefficients. [required]
 a data.frame in which to interpret the variables named in
 the \code{formula} argument. [at present: required]
 }
+  \item{smooth.formula}{
+a formula for describing the time effects for the linear predictor,
+including the baseline and the time-dependent effects
+(default=NULL). Only one of \code{df}, \code{smooth.formula},
+\code{smooth.args}, \code{logH.args} or
+\code{logH.formula} is required. The default model is equal to \code{nsx(log(time),df=3)}.
+}
+  \item{smooth.args}{
+a list describing the arguments for the \code{nsx} function for modelling
+the baseline time effect on the linear predictor scale (default=NULL). Use this or
+smooth.formula for
+changing the knot placement and specifying cure models.
+}
   \item{df}{
 an integer that describes the degrees of freedom for the \code{ns}
 function for modelling the baseline log-cumulative hazard (default=3). 
 }
   \item{logH.args}{
-a list describing the arguments for the \code{nsx} function for modelling
-the baseline log-cumulative hazard (default=NULL). Use this or
-logH.formula for
-changing the knot placement and specifying cure models.
+as per \code{smooth.args}. Deprecated.
 }
-  \item{logH.formula}{
-a formula for describing the baseline log-cumulative hazard function
-(default=NULL). Only one of \code{df}, \code{logH.args} or
-\code{logH.formula} is required. The default model is equal to \code{nsx(log(time),df=3)}.
+\item{logH.formula}{
+  as per \code{smooth.formula}. Deprecated.
 }
   \item{tvc}{
 a list with the names of the time-varying coefficients and the degrees

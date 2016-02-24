@@ -10,7 +10,7 @@ This implements a penalised Royston-Parmar model using generalized
 additive models.
 }
 \usage{
-pstpm2(formula, data, smooth.formula = NULL,
+pstpm2(formula, data, smooth.formula = NULL, smooth.args = NULL,
        logH.args = NULL, 
        tvc = NULL, 
        control = list(parscale = 1, maxit = 300), init = NULL,
@@ -40,14 +40,18 @@ a data.frame in which to interpret the variables named in
 the \code{formula} argument.
 }
   \item{smooth.formula}{
-a \code{mgcv::gam} formula for describing the baseline log-cumulative
-hazard function, time.varying effects and smoothed covariate effects
+a \code{mgcv::gam} formula for describing the time effects and
+time-dependent effects and smoothed covariate effects on the linear
+predictor scale
 (default=NULL). The default model is equal to \code{~s(log(time),k=-1)}
 where \code{time} is the time variable.
 }
-  \item{logH.args}{
+  \item{smooth.args}{
 a list describing the arguments for the \code{s} function for modelling
-the baseline log-cumulative hazard (default=NULL). 
+the baseline time effect on the linear predictor scale (default=NULL). 
+}
+  \item{logH.args}{
+as per \code{smooth.args}. Deprecated.
 }
   \item{tvc}{
 a list with the names of the time-varying coefficients

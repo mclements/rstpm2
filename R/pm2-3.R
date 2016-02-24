@@ -429,7 +429,7 @@ setClass("stpm2", representation(xlevels="list",
                                  args="list"
                                  ),
          contains="mle2")
-stpm2 <- function(formula, data,
+stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                      df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
                      tvc = NULL, tvc.formula = NULL,
                      control = list(parscale = 1, maxit = 300), init = NULL,
@@ -443,6 +443,11 @@ stpm2 <- function(formula, data,
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
     RandDist <- match.arg(RandDist)
     use.gr <- TRUE # old code
+    ## logH.formula and logH.args are deprecated
+    if (!is.null(smooth.formula) && is.null(logH.formula))
+        logH.formula <- smooth.formula
+    if (!is.null(smooth.args) && is.null(logH.args))
+        logH.args <- smooth.args
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
@@ -1028,7 +1033,7 @@ setClass("pstpm2", representation(xlevels="list",
                                   df="numeric",
                                   args="list"),
          contains="mle2")
-pstpm2 <- function(formula, data, smooth.formula = NULL,
+pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                    logH.args = NULL, 
                    tvc = NULL, 
                    control = list(parscale = 1, maxit = 300), init = NULL,
@@ -1045,6 +1050,9 @@ pstpm2 <- function(formula, data, smooth.formula = NULL,
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
     RandDist <- match.arg(RandDist)
+    ## logH.args is deprecated
+    if (!is.null(smooth.args) && is.null(logH.args))
+        logH.args <- smooth.args
     ## set up the data
     ## ensure that data is a data frame
     temp.formula <- formula
