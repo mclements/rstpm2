@@ -8,9 +8,9 @@ Flexible parametric survival model.
 This implements the Royston-Parmar model.
 }
 \usage{
-stpm2(formula, data, df = 3,
+stpm2(formula, data, 
       smooth.formula = NULL, smooth.args = NULL,
-      cure = FALSE, logH.args = NULL,
+      df = 3, cure = FALSE, logH.args = NULL,
       logH.formula = NULL, tvc = NULL, tvc.formula =
       NULL, control = list(parscale = 1, maxit = 300),
       init = NULL, coxph.strata = NULL, weights = NULL,
