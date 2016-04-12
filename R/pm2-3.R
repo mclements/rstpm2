@@ -758,7 +758,7 @@ setMethod("predictnl", "stpm2",
 ##
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
   {
@@ -787,7 +787,7 @@ setMethod("predict", "stpm2",
           XD <- matrix(XD,nrow=nrow(X))
           ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
           ## similarly for the derivatives
-          if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","or")) {
+          if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","or","marghaz","marghr")) {
             ## how to elegantly extract the time variable?
             ## timeExpr <- 
             ##   lhs(object@call.formula)[[length(lhs(object@call.formula))-1]]
@@ -801,9 +801,9 @@ setMethod("predict", "stpm2",
             ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
             ## XD0 <- matrix(XD0,nrow=nrow(X0))
           }
-          if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or")) {
+          if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr")) {
             if (missing(exposed))
-              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff','or')")
+              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr')")
             newdata2 <- exposed(newdata)
             X2 <- lpmatrix.lm(object@lm, newdata2)
             XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
@@ -811,8 +811,10 @@ setMethod("predict", "stpm2",
           }
         }
         beta <- coef(object)
-        if (object@frailty)
+        if (object@frailty) {
+            theta <- exp(beta[length(beta)])
             beta <- beta[-length(beta)]
+        }
         eta <- as.vector(X %*% beta)
         etaD <- as.vector(XD %*% beta)
         S <- link$ilink(eta)
@@ -873,10 +875,34 @@ setMethod("predict", "stpm2",
             S2 <- link$ilink(eta2)
             return(mean(S2-S))
         }
+        if (type=="margsurv") {
+            ## currently only valid for Gamma frailty
+            stopifnot(object@frailty)
+            return((1+theta*H)^(-1/theta))
+        }
+        if (type=="marghaz") {
+            ## currently only valid for Gamma frailty
+            stopifnot(object@frailty)
+            margsurv <- (1+theta*H)^(-1/theta)
+            return(h*margsurv^theta)
+        }
+        if (type=="marghr") {
+            ## currently only valid for Gamma frailty
+            stopifnot(object@frailty)
+            margsurv <- (1+theta*H)^(-1/theta)
+            marghaz <- h*margsurv^theta
+            eta2 <- as.vector(X2 %*% beta)
+            etaD2 <- as.vector(XD2 %*% beta)
+            H2 <- link$H(eta2)
+            margsurv2 <- (1+theta*H2)^(-1/theta)
+            h2 <- link$h(eta2,etaD2)
+            marghaz2 <- h2*margsurv2^theta
+            return(marghaz2/marghaz)
+        }
       }
     ##debug(local)
-    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or"))
-      stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or') requires newdata to be specified.")
+    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr"))
+      stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr') requires newdata to be specified.")
     if (grid) {
       Y <- object@y
       event <- Y[,ncol(Y)]==1 | object@interval
@@ -894,7 +920,7 @@ setMethod("predict", "stpm2",
     else {
       if (is.null(link))
         link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                       hdiff="I",loghazard="I",link="I",odds="log",or="log")
+                       hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log")
       predictnl(object,local,link=link,newdata=newdata,type=type,
                 exposed=exposed,...) 
     }
@@ -914,7 +940,8 @@ setMethod("plot", signature(x="stpm2", y="missing"),
     ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
                    sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard",
                    loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
-                   meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio")
+                   meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
+                   margsurv="Marginal survival",marghaz="Marginal hazard",marghr="Marginal hazard ratio")
   xx <- attr(y,"newdata")
   xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
   if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
