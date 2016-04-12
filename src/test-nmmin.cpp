@@ -1012,13 +1012,13 @@ namespace rstpm2 {
       }
       double ll = 0.0;
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
-	uvec index = as<uvec>(wrap(it->second));
+	uvec index = conv_to<uvec>::from(it->second);
 	int mi = sum(this->event(index));
 	double sumH = sum(H(index));
 	double sumHenter = 0.0;
 	ll += sum(log(h(index)) % this->event(index));
 	if (this->delayed && cluster_events.count(it->first) > 0) {
-	  uvec ind00 = as<uvec>(wrap(cluster_events[it->first]));
+	  uvec ind00 = conv_to<uvec>::from(cluster_events[it->first]);
 	  sumHenter = sum(H0(ind00));
 	}
 	 ll += -(1.0/theta+mi)*log(1.0+theta*(sumH)) + 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
@@ -1181,7 +1181,7 @@ namespace rstpm2 {
       }
       double ll = 0.0;
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
-	uvec index = as<uvec>(wrap(it->second));
+	uvec index = conv_to<uvec>::from(it->second);
 	double Li = dot(exp(sum(lijk.rows(index),0)),wstar);
 	ll += log(Li);
       }
@@ -1232,7 +1232,7 @@ vec gradient_new(vec beta) {
 	// Iteration in each cluster and get vec Li(g) and mat gradLi(g,n)
 	int g = 0;
 	for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it, ++g) {
-		uvec index = as<uvec>(wrap(it->second));
+	  uvec index = conv_to<uvec>::from(it->second);
 		vec likeli_k = exp(sum(likeli_jk.rows(index),0)).t(); // sum  index components at all nodes for cluster i
 		for(int k=0; k<K; ++k){
 			grad_kn.row(k) = sum(grad_jk.slice(k).rows(index),0);
@@ -1284,7 +1284,7 @@ vec gradient_new(vec beta) {
 	dconstraint += sum(gradlik.constraint,0); // ignores clustering??
 	int g = 0;
 	for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it, ++g) {
-	  uvec index = as<uvec>(wrap(it->second));
+	  uvec index = conv_to<uvec>::from(it->second);
 	  double Lgk = exp(sum(lik.li(index)));
 	  Li(g) += Lgk*wstar[k];
 	  gradLi.row(g) += wstar[k]*Lgk*sum(gradlik.gradli.rows(index),0);
