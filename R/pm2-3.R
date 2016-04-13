@@ -807,13 +807,15 @@ setMethod("predict", "stpm2",
             newdata2 <- exposed(newdata)
             X2 <- lpmatrix.lm(object@lm, newdata2)
             XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
-            XD2 <- matrix(XD,nrow=nrow(X))
+            XD2 <- matrix(XD2,nrow=nrow(X))
           }
         }
         beta <- coef(object)
         if (object@frailty) {
             theta <- exp(beta[length(beta)])
             beta <- beta[-length(beta)]
+            gauss_x <- object@args$gauss_x
+            gauss_w <- object@args$gauss_w
         }
         eta <- as.vector(X %*% beta)
         etaD <- as.vector(XD %*% beta)
@@ -876,30 +878,50 @@ setMethod("predict", "stpm2",
             return(mean(S2-S))
         }
         if (type=="margsurv") {
-            ## currently only valid for Gamma frailty
-            stopifnot(object@frailty)
-            return((1+theta*H)^(-1/theta))
+            stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
+            if (object@args$RandDist=="Gamma")
+                return((1+theta*H)^(-1/theta))
+            if (object@args$RandDist=="LogN") {
+                return(sapply(1:length(gauss_x),
+                              function(i) link$ilink(eta+sqrt(theta)*gauss_x[i])) %*%
+                       gauss_w / sum(gauss_w))
+            }
         }
         if (type=="marghaz") {
-            ## currently only valid for Gamma frailty
-            stopifnot(object@frailty)
-            margsurv <- (1+theta*H)^(-1/theta)
-            return(h*margsurv^theta)
+            stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
+            if (object@args$RandDist=="Gamma") {
+                margsurv <- (1+theta*H)^(-1/theta)
+                return(h*margsurv^theta)
+            }
+            if (object@args$RandDist=="LogN") {
+                return(sapply(1:length(gauss_x),
+                              function(i) link$h(eta+sqrt(theta)*gauss_x[i],etaD)) %*%
+                       gauss_w / sum(gauss_w))
+            }
         }
         if (type=="marghr") {
-            ## currently only valid for Gamma frailty
-            stopifnot(object@frailty)
-            margsurv <- (1+theta*H)^(-1/theta)
-            marghaz <- h*margsurv^theta
+            stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
             eta2 <- as.vector(X2 %*% beta)
             etaD2 <- as.vector(XD2 %*% beta)
-            H2 <- link$H(eta2)
-            margsurv2 <- (1+theta*H2)^(-1/theta)
-            h2 <- link$h(eta2,etaD2)
-            marghaz2 <- h2*margsurv2^theta
+            if (object@args$RandDist=="Gamma") {
+                H2 <- link$H(eta2)
+                h2 <- link$h(eta2,etaD2)
+                margsurv <- (1+theta*H)^(-1/theta)
+                marghaz <- h*margsurv^theta
+                margsurv2 <- (1+theta*H2)^(-1/theta)
+                marghaz2 <- h2*margsurv2^theta
+            }
+            if (object@args$RandDist=="LogN") {
+                marghaz <- sapply(1:length(gauss_x),
+                                  function(i) as.vector(link$h(eta+sqrt(theta)*gauss_x[i],etaD))) %*%
+                                  gauss_w / sum(gauss_w)
+                marghaz2 <- sapply(1:length(gauss_x),
+                                   function(i) as.vector(link$h(eta2+sqrt(theta)*gauss_x[i],etaD2))) %*%
+                                       gauss_w / sum(gauss_w)
+            }
             return(marghaz2/marghaz)
         }
-      }
+    }
     ##debug(local)
     if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr"))
       stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr') requires newdata to be specified.")
@@ -1752,7 +1774,7 @@ setMethod("predict", "pstpm2",
             X2 <- predict(object@gam, newdata2, type="lpmatrix")
             XD2 <- grad1(lpfunc,newdata2[[object@timeVar]])    
             ## XD2 <- grad(lpfunc,0,object@gam,newdata2,object@timeVar)
-            ## XD2 <- matrix(XD,nrow=nrow(X))
+            ## XD2 <- matrix(XD2,nrow=nrow(X))
           }
         }
         beta <- coef(object)
