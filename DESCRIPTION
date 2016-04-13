@@ -7,7 +7,7 @@ Authors@R: c(person("Mark", "Clements", role = c("aut", "cre"),
 		     email = "xingrong.liu@ki.se"),
 	      person("Paul", "Lambert", role = "ctb", email="pl4@leicester.ac.uk"))
 Version: 1.3.2
-Date: 2016-02-24
+Date: 2016-04-13
 Depends: R (>= 2.10), methods, survival, splines
 Imports: graphics, Rcpp (>= 0.10.2), numDeriv, stats, mgcv, bbmle (>= 1.0.3), fastGHQuad
 Suggests: RUnit, gaussquad
