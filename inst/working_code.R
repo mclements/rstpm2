@@ -65,12 +65,14 @@ if (FALSE) {
 
 ## delayed entry
 ## Stata estimated coef for hormon (PH): -1.162504
-data(brcancer)
-brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime*0.5,0))
+require(rstpm2)
+brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime/2,0))
 ## debug(stpm2)
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
       logH.formula=~nsx(log(rectime),df=3,stata=TRUE)))
-head(predict(fit,se.fit=TRUE))
+plot(fit,newdata=data.frame(hormon=1))
+head(predict(fit)) # OK
+head(predict(fit,se.fit=TRUE)) # FAILS
 ## delayed entry and tvc
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
                      logH.formula=~nsx(rectime,df=3),

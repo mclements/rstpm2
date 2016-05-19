@@ -756,6 +756,7 @@ setMethod("predictnl", "stpm2",
     return(out)
   })
 ##
+
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr"),
@@ -794,13 +795,13 @@ setMethod("predict", "stpm2",
             time <- eval(object@timeExpr,newdata)
             ##
           }
-          if (object@delayed && !object@interval) {
-            newdata0 <- newdata
-            newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
-            X0 <- lpmatrix.lm(object@lm, newdata0)
-            ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
-            ## XD0 <- matrix(XD0,nrow=nrow(X0))
-          }
+          ## if (object@delayed && !object@interval) {
+          ##   newdata0 <- newdata
+          ##   newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
+          ##   X0 <- lpmatrix.lm(object@lm, newdata0)
+          ##   ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
+          ##   ## XD0 <- matrix(XD0,nrow=nrow(X0))
+          ## }
           if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr")) {
             if (missing(exposed))
               stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr')")
