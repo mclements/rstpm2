@@ -387,6 +387,7 @@ namespace rstpm2 {
       ind0 = as<uvec>(list["ind0"]); // length N boolean
       map0 = as<uvec>(list["map0"]); // length N map from individuals to row of X0
       which0 = as<uvec>(list["which0"]); // length N0 indicator for X0
+      ttype = as<vec>(list["ttype"]); 
       kappa = as<double>(list["kappa"]);
       optimiser = as<std::string>(list["optimiser"]);
       bfgs.trace = as<int>(list["trace"]);
@@ -518,15 +519,15 @@ namespace rstpm2 {
       mat li(N,n,fill::zeros);
       uvec index;
       index = find(ttype == 0); // right censored
-      if (any(index)) li(index) -= rmult(gradH.rows(index),wt(index));
+      if (any(index)) li.rows(index) -= rmult(gradH.rows(index),wt(index));
       index = find(ttype == 1); // exact
-      if (any(index)) li(index) += rmult(gradh.rows(index),wt(index) / h(index)) - rmult(gradH.rows(index),wt(index));
+      if (any(index)) li.rows(index) += rmult(gradh.rows(index),wt(index) / h(index)) - rmult(gradH.rows(index),wt(index));
       index = find(ttype == 2); // left censored
-      if (any(index)) li(index) += rmult(-gradH.rows(index),-exp(-H(index)) / (1-exp(-H(index))) % wt(index));
+      if (any(index)) li.rows(index) += rmult(-gradH.rows(index),-exp(-H(index)) / (1-exp(-H(index))) % wt(index));
       index = find(ttype == 3); // interval censored
       if (any(index)) {
 	vec V = wt(index) / (exp(-H(index)) - exp(-H1(index)));
-	li(index) += rmult(gradH1.rows(index),V % exp(-H1(index))) - 
+	li.rows(index) += rmult(gradH1.rows(index),V % exp(-H1(index))) - 
 	  rmult(gradH.rows(index),V % exp(-H(index)));
       }
       gradli_constraint out = {li, Xconstraint};

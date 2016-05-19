@@ -149,7 +149,6 @@ fit1 <- stpm2(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2)
 estimate <- ickde(ICHemophiliac, m=200, h=0.9)
 plot(estimate, type="l", ylim=c(0,0.20))
 tt <- seq(0,20,length=301)[-1]
-## plot(fit1,newdata=data.frame(x=1),type="density",add=TRUE,line.col="blue")
 lines(tt,predict(fit1,newdata=data.frame(right=tt),type="density"),col="blue")
 
 ## reg1 <- survreg(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2)
