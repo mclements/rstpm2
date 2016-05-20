@@ -1130,7 +1130,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
     eventExpr <- lhs(formula)[[length(lhs(formula))]]
-    delayed <- length(lhs(formula))==4
+    delayed <- length(lhs(formula))>=4
     surv.type <- attr(eventInstance,"type")
     if (surv.type %in% c("interval2","left","mstate"))
         stop("stpm2 not implemented for Surv type ",surv.type,".")
@@ -1181,28 +1181,40 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
 	  tf <- terms.formula(smooth.formula, specials = c("s", "te"))
 		terms <- attr(tf, "term.labels")
 		right <- paste0(terms, collapse = "+")
-		fullformula <- as.formula(paste0(left, "+", right), env = parent.frame())
-    ## Cox regression
-    coxph.call <- mf
-    coxph.call[[1L]] <- as.name("coxph")
-    coxph.strata <- substitute(coxph.strata)
-    coxph.call$data <- quote(coxph.data)
-    coxph.data <- data
-    if (!is.null(coxph.formula)) {
-        coxph.formula2 <- coxph.call$formula
-        rhs(coxph.formula2) <- rhs(formula) %call+% rhs(coxph.formula)
-        coxph.call$formula <- coxph.formula2
+    fullformula <- as.formula(paste0(left, "+", right), env = parent.frame())
+    if (!interval) {
+        ## Cox regression
+        coxph.call <- mf
+        coxph.call[[1L]] <- as.name("coxph")
+        coxph.strata <- substitute(coxph.strata)
+        coxph.call$data <- quote(coxph.data)
+        coxph.data <- data
+        if (!is.null(coxph.formula)) {
+            coxph.formula2 <- coxph.call$formula
+            rhs(coxph.formula2) <- rhs(formula) %call+% rhs(coxph.formula)
+            coxph.call$formula <- coxph.formula2
+        }
+        if (!is.null(coxph.strata)) {
+            coxph.formula2 <- coxph.call$formula
+            rhs(coxph.formula2) <- rhs(formula) %call+% call("strata",coxph.strata)
+            coxph.call$formula <- coxph.formula2
+        }
+        coxph.call$model <- TRUE
+        ## coxph.obj <- eval(coxph.call, envir=parent.frame())
+        coxph.obj <- eval(coxph.call, coxph.data)
+        y <- model.extract(model.frame(coxph.obj),"response")
+        data$logHhat <- pmax(-18,link$link(Shat(coxph.obj)))
     }
-    if (!is.null(coxph.strata)) {
-        coxph.formula2 <- coxph.call$formula
-        rhs(coxph.formula2) <- rhs(formula) %call+% call("strata",coxph.strata)
-        coxph.call$formula <- coxph.formula2
+    if (interval) {
+        ## survref regression
+        survreg.call <- mf
+        survreg.call[[1L]] <- as.name("survreg")
+        survreg.obj <- eval(survreg.call, envir=parent.frame())
+        weibullShape <- 1/survreg.obj$scale
+        weibullScale <- predict(survreg.obj)
+        y <- model.extract(model.frame(survreg.obj),"response")
+        data$logHhat <- pmax(-18,link$link(pweibull(time,weibullShape,weibullScale,lower.tail=FALSE)))
     }
-    coxph.call$model <- TRUE
-    ## coxph.obj <- eval(coxph.call, envir=parent.frame())
-    coxph.obj <- eval(coxph.call, coxph.data)
-    y <- model.extract(model.frame(coxph.obj),"response")
-    data$logHhat <- pmax(-18,link$link(Shat(coxph.obj)))
     ##
     ## initial values and object for lpmatrix predictions
     gam.call <- mf
@@ -1214,6 +1226,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     if (is.null(sp) && !is.null(sp.init) && (length(sp.init)>1 || sp.init!=1))
         gam.call$sp <- sp.init
     dataEvents <- data[event,]
+    if (interval)
+        dataEvents <- data
     gam.call$data <- quote(dataEvents) # events only
     gam.obj <- eval(gam.call)
     ## re-run gam if sp.init==1 (default)
@@ -1241,6 +1255,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     which0 <- 0
     wt0 <- 0
     ttype <- 0
+    ## browser()
     if (!interval) { # surv.type %in% c("right","counting")
         X <- predict(gam.obj,data,type="lpmatrix")
         XD <- grad1(lpfunc,data[[timeVar]])    
@@ -1753,13 +1768,13 @@ setMethod("predict", "pstpm2",
           XD <- grad1(lpfunc,newdata[[object@timeVar]])    
           ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
           ## similarly for the derivatives
-          if (object@delayed) {
-            newdata0 <- newdata
-            newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
-            X0 <- lpmatrix.lm(object@lm, newdata0)
-            ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
-            ## XD0 <- matrix(XD0,nrow=nrow(X0))
-          }
+          ## if (object@delayed) {
+          ##   newdata0 <- newdata
+          ##   newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
+          ##   X0 <- predict(object@gam, newdata0,type="lpmatrix")
+          ##   ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
+          ##   ## XD0 <- matrix(XD0,nrow=nrow(X0))
+          ## }
           if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","meansurvdiff","or",
                           "marghaz","marghr")) {
             time <- eval(object@timeExpr,newdata)

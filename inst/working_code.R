@@ -80,6 +80,53 @@ summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
 head(predict(fit,se.fit=TRUE)) 
 pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)
 
+
+## code for the SAS PROC ICPHREG examples
+read.textConnection <- function(text, ...) {
+    conn <-  textConnection(text)
+    on.exit(close(conn))
+    read.table(conn, ...)
+}
+hiv <- read.textConnection("0 16 0 0 0 1
+15 26 0 0 0 1
+12 26 0 0 0 1
+17 26 0 0 0 1
+13 26 0 0 0 1
+0 24 0 0 1 0
+6 26 0 1 1 0
+0 15 0 1 1 0
+14 26 0 1 1 0
+12 26 0 1 1 0
+13 26 0 1 0 1
+12 26 0 1 1 0
+12 26 0 1 1 0
+0 18 0 1 0 1
+0 14 0 1 0 1
+0 17 0 1 1 0
+0 15 0 1 1 0
+3 26 1 0 0 1
+4 26 1 0 0 1
+1 11 1 0 0 1
+13 19 1 0 0 1
+0 6 1 0 0 1
+0 11 1 1 0 0
+6 26 1 1 0 0
+0 6 1 1 0 0
+2 12 1 1 0 0
+1 17 1 1 1 0
+0 14 1 1 0 0
+0 25 1 1 0 1
+2 11 1 1 0 0
+0 14 1 1 0 0")
+names(hiv) <- c("Left","Right","Stage","Dose","CdLow","CdHigh")
+##hiv <- transform(hiv, Left=pmax(1e-5,Left))
+hiv <- transform(hiv,Event = ifelse(Left==0,2,ifelse(Right>=26,0,3)))
+require(rstpm2)
+## stpm2(Surv(Left,Right,Event,type="interval")~Stage, data=hiv, df=2) # FAILS
+## survreg(Surv(Left, Right, Event, type = "interval")~Stage, data=hiv) # FAILS
+## require(rms)
+## psm(Surv(Left, Right, Event, type = "interval")~Stage, data=hiv) # FAILS
+
 ## additive model
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
                      logH.formula=~nsx(rectime,df=3),
@@ -147,7 +194,7 @@ require(rstpm2)
 require(ICE)
 data(ICHemophiliac)
 ICHemophiliac2 <- transform(as.data.frame(ICHemophiliac),event=3)
-fit1 <- stpm2(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2)
+fit1 <- pstpm2(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2)
 estimate <- ickde(ICHemophiliac, m=200, h=0.9)
 plot(estimate, type="l", ylim=c(0,0.20))
 tt <- seq(0,20,length=301)[-1]
