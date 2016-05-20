@@ -720,7 +720,7 @@ setMethod("summary", "stpm2",
                   theta <- exp(coef[nrow(coef),1])
                   se.logtheta <- coef[nrow(coef),2]
                   se.theta <- theta*se.logtheta
-                  test.statistic <- 1/se.logtheta
+                  test.statistic <- (1/se.logtheta)^2
                   p.value <- pchisq(test.statistic,df=1,lower.tail=FALSE)/2
                   newobj@theta <- list(theta=theta, se.theta=se.theta, p.value=p.value)
               } else newobj@theta <- list()
@@ -1552,7 +1552,7 @@ setMethod("summary", "pstpm2",
                   theta <- exp(coef[nrow(coef),1])
                   se.logtheta <- coef[nrow(coef),2]
                   se.theta <- theta*se.logtheta
-                  test.statistic <- 1/se.logtheta
+                  test.statistic <- (1/se.logtheta)^2
                   p.value <- pchisq(test.statistic,df=1,lower.tail=FALSE)/2
                   newobj@theta <- list(theta=theta, se.theta=se.theta, p.value=p.value)
               } else newobj@theta <- list()
