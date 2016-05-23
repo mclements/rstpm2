@@ -317,7 +317,7 @@ estfun.stpm2 <- function(obj, weighted=FALSE, ...) {
     rr <- rr * obj@weights
   rr
 }
-meat.stpm2 <- 
+meat.stpm2 <-
 function (x, adjust = FALSE, ...) 
 {
     psi <- estfun.stpm2(x, ...)
@@ -434,7 +434,8 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                      tvc = NULL, tvc.formula = NULL,
                      control = list(parscale = 1, maxit = 300), init = NULL,
                      coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE, 
-                     bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE,
+                  bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE,
+                  optimiser=c("BFGS","NelderMead"),
                      reltol=1.0e-8, trace = 0,
                      link.type=c("PH","PO","probit","AH"), 
                      frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"),
@@ -442,6 +443,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
     RandDist <- match.arg(RandDist)
+    optimiser <- match.arg(optimiser)
     use.gr <- TRUE # old code
     ## logH.formula and logH.args are deprecated
     if (!is.null(smooth.formula) && is.null(logH.formula))
@@ -458,9 +460,6 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         stop("stpm2 not implemented for Surv type ",surv.type,".")
     counting <- attr(eventInstance,"type") == "counting"
     interval <- attr(eventInstance,"type") == "interval"
-    if (interval) { # early code
-        use.gr <- FALSE
-    }
     timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
     if (timeVar == "")
         timeVar <- all.vars(timeExpr)
@@ -495,7 +494,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ##
     ## set up the data
     ## ensure that data is a data frame
-    data <- get_all_vars(full.formula, data)
+    ## data <- get_all_vars(full.formula, data) # but this loses the other design information
     ## restrict to non-missing data (assumes na.action=na.omit)
     .include <- Reduce(`&`,
                        lapply(model.frame(formula, data, na.action=na.pass),
@@ -511,13 +510,13 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     mf <- mf[c(1L, m)]
     ##
     ## get variables
-    time <- eval(timeExpr, data)
+    time <- eval(timeExpr, data, parent.frame())
     time0Expr <- NULL # initialise
     if (delayed) {
       time0Expr <- lhs(formula)[[2]]
       if (time0Var == "")
         time0Var <- all.vars(time0Expr)
-      time0 <- eval(time0Expr, data)
+      time0 <- eval(time0Expr, data, parent.frame())
     }
     event <- eval(eventExpr,data)
     event <- event > min(event) ## ???
@@ -566,8 +565,8 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ## set up mf and wt
     mt <- terms(lm.obj)
     mf <- model.frame(lm.obj)
-    wt <- model.weights(lm.obj$model)
-    if (is.null(wt)) wt <- rep(1,nrow(data))
+    ## wt <- model.weights(lm.obj$model)
+    wt <- if (is.null(substitute(weights))) rep(1,nrow(data)) else eval(substitute(weights),data,parent.frame())
     ##
     ## XD matrix
     lpfunc <- function(delta,fit,dataset,var) {
@@ -595,10 +594,9 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             map0[ind0] <- as.integer(1:sum(ind0))
             which0 <- which(ind0)
             data0 <- data[ind0,,drop=FALSE] # data for delayed entry times
-            .timeVar <- data0[[timeVar]] <- data0[[time0Var]]
+            data0[[timeVar]] <- data0[[time0Var]]
             X0 <- lpmatrix.lm(lm.obj, data0)
             wt0 <- wt[ind0]
-            data0[[timeVar]] <- .timeVar
             rm(data0)
         }
     } else { ## interval-censored
@@ -607,11 +605,10 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         ttype <- eventInstance[,3]
         X1 <- lpmatrix.lm(lm.obj,data)
         data0 <- data
-        .timeVar <- data0[[timeVar]] <- data0[[time0Var]]
+        data0[[timeVar]] <- data0[[time0Var]]
         X <- lpmatrix.lm(lm.obj, data0)
         XD <- grad(lpfunc,0,lm.obj,data0,timeVar)
         XD <- matrix(XD,nrow=nrow(X))
-        ## data0[[timeVar]] <- .timeVar
         X0 <- matrix(0,1,ncol(X))
         rm(data0)
     } 
@@ -629,37 +626,34 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
                  kappa=1, trace = trace, cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
-                 RandDist=RandDist, optimiser="BFGS",
+                 RandDist=RandDist, optimiser=optimiser,
                  type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", return_type="optim")
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x
         args$gauss_w <- rule$w
     }
-    negll <- function(beta,kappa=1) {
+    negll <- function(beta) {
         localargs <- args
-        localargs$kappa <- kappa
         localargs$return_type <- "objective"
         return(.Call("model_output", localargs, package="rstpm2"))
     }
-    gradnegll <- function(beta,kappa=1) {
-        if (interval) stop("Gradient not implemented for interval-censored data.")
+    gradnegll <- function(beta) {
         localargs <- args
-        localargs$kappa <- kappa
         localargs$return_type <- "gradient"
         return(.Call("model_output", localargs, package="rstpm2"))
     }
     logli <- function(beta) {
-        ## localargs <- args
-        ## localargs$kappa <- kappa
-        ## localargs$return_type <- "li"
-        ## return(.Call("model_output", localargs, package="rstpm2"))
-        stop("logli not implemented")
+        localargs <- args
+        localargs$init <- beta
+        localargs$return_type <- "li"
+        return(.Call("model_output", localargs, package="rstpm2"))
     }
     parnames(negll) <- parnames(gradnegll) <- names(init)
     ## MLE
     fit <- .Call("model_output", args, package="rstpm2")
     args$init <- coef <- as.vector(fit$coef)
+    args$kappa.final <- fit$kappa
     hessian <- fit$hessian
     names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
     mle2 <- if (use.gr) mle2(negll, coef, vecpar=TRUE, control=control, gr=gradnegll, ..., eval.only=TRUE) else mle2(negll, coef, vecpar=TRUE, control=control, ..., eval.only=TRUE)
@@ -988,7 +982,6 @@ if (FALSE) {
     #
     XD <- grad1(lpfunc,data[[timeVar]])    
 }
-
 derivativeDesign <- 
 function (functn, lower = -1, upper = 1, rule = NULL,
     ...) 
@@ -1066,6 +1059,7 @@ setClass("pstpm2", representation(xlevels="list",
                                   timeVar="character",
                                   time0Var="character",
                                   timeExpr="nameOrcall",
+                                  time0Expr="nameOrcallOrNULL",
                                   like="function",
 	                          model.frame="list",
 	                          fullformula="formula",
@@ -1095,12 +1089,14 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=1, trace = 0,
                    link.type=c("PH","PO","probit","AH"),
+                  optimiser=c("BFGS","NelderMead","Nlm"),
                    frailty=!is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,RandDist=c("Gamma","LogN"),
                    reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-4),outer_optim=1,
                    contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
     RandDist <- match.arg(RandDist)
+    optimiser <- match.arg(optimiser)
     ## logH.args is deprecated
     if (!is.null(smooth.args) && is.null(logH.args))
         logH.args <- smooth.args
@@ -1109,7 +1105,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     temp.formula <- formula
     if (!is.null(smooth.formula)) rhs(temp.formula) <-rhs(temp.formula) %call+% rhs(smooth.formula)
     raw.data <- data
-    data <- get_all_vars(temp.formula, raw.data)
+    ## data <- get_all_vars(temp.formula, raw.data)
     criterion <- match.arg(criterion)
     penalty <- match.arg(penalty)
     ## restrict to non-missing data (assumes na.action=na.omit)
@@ -1138,14 +1134,15 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
     if (timeVar == "")
       timeVar <- all.vars(timeExpr)
-    time <- eval(timeExpr, data)
+    time <- eval(timeExpr, data, parent.frame())
+    time0Expr <- NULL # initialise
     if (delayed) {
       time0Expr <- lhs(formula)[[2]]
       if (time0Var == "")
         time0Var <- all.vars(time0Expr)
-      time0 <- eval(time0Expr, data)
+      time0 <- eval(time0Expr, data, parent.frame())
     }
-    event <- eval(eventExpr,data)
+    event <- eval(eventExpr,data,parent.frame())
     event <- event > min(event)
     nevent <- sum(event)
     ##
@@ -1239,8 +1236,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ## set up X, mf and wt
     mt <- terms(gam.obj)
     mf <- model.frame(gam.obj)
-    wt <- model.weights(gam.obj$model)
-    if (is.null(wt)) wt <- rep(1,nrow(data))
+    wt <- if (is.null(substitute(weights))) rep(1,nrow(data)) else eval(substitute(weights),data,parent.frame())
     lpfunc <- function(x,...) {
       newdata <- data
       newdata[[timeVar]] <- x
@@ -1260,8 +1256,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         X <- predict(gam.obj,data,type="lpmatrix")
         XD <- grad1(lpfunc,data[[timeVar]])    
         XD <- matrix(XD,nrow=nrow(X))
-        X0 <- matrix(0,1,ncol(X))
-        X1 <- matrix(0,1,ncol(X))
+        X1 <- X0 <- matrix(0,1,ncol(X))
         if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
         if (delayed) {
             ind0 <- time0>0
@@ -1269,10 +1264,9 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             map0[ind0] <- as.integer(1:sum(ind0))
             which0 <- which(ind0)
             data0 <- data[ind0,,drop=FALSE] # data for delayed entry times
-            .timeVar <- data0[[timeVar]] <- data0[[time0Var]]
+            data0[[timeVar]] <- data0[[time0Var]]
             X0 <- predict(gam.obj,data0,type="lpmatrix")
             wt0 <- wt[ind0]
-            data0[[timeVar]] <- .timeVar
             rm(data0)
         }
     } else { ## interval-censored
@@ -1281,7 +1275,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         ttype <- eventInstance[,3]
         X1 <- predict(gam.obj,data,type="lpmatrix")
         data0 <- data
-        .timeVar <- data0[[timeVar]] <- data0[[time0Var]]
+        data0[[timeVar]] <- data0[[time0Var]]
         lpfunc <- function(x,...) {
             newdata <- data0
             newdata[[timeVar]] <- x
@@ -1327,7 +1321,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  kappa=1.0,outer_optim=outer_optim,
                  alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2),
                  cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0=which0 - 1L, link = link.type,
-                 penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser="BFGS",
+                 penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser=optimiser,
                  type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2",
                  return_type="optim")
     if (frailty) {
@@ -1344,10 +1338,9 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                      sp[i]/2 * betai %*% smoother$S[[1]] %*% betai
                    }))
     }
-    negllsp <- function(beta,sp,kappa=10) {
+    negllsp <- function(beta,sp) {
         localargs <- args
         localargs$sp <- sp
-        localargs$kappa <- kappa
         localargs$init <- beta
         localargs$return_type <- "objective"
         negll <- .Call("model_output", localargs, package="rstpm2")
@@ -1356,10 +1349,9 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         attr(negll,"feasible") <- feasible
         return(negll)
     }
-    negll0sp <- function(beta,sp,kappa=10) {
+    negll0sp <- function(beta,sp) {
         localargs <- args
         localargs$sp <- sp
-        localargs$kappa <- kappa
         localargs$init <- beta
         localargs$return_type <- "objective0"
         negll <- .Call("model_output", localargs, package="rstpm2")
@@ -1412,22 +1404,23 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             deriv
         }
     }
-    gradnegllsp <- function(beta,sp,kappa=10) {
+    gradnegllsp <- function(beta,sp) {
         localargs <- args
-        localargs$kappa <- kappa
         localargs$init <- beta
         localargs$return_type <- "gradient"
         .Call("model_output", localargs, package="rstpm2")
       }
-    gradnegll0sp <- function(beta,sp,kappa=10) {
+    gradnegll0sp <- function(beta,sp) {
         localargs <- args
-        localargs$kappa <- kappa
         localargs$init <- beta
         localargs$return_type <- "gradient0"
         .Call("model_output", localargs, package="rstpm2")
       }
     logli <- function(beta) {
-        stop("Not currently defined.")
+        localargs <- args
+        localargs$init <- beta
+        localargs$return_type <- "li"
+        return(.Call("model_output", localargs, package="rstpm2"))
     }
     like <- function(beta) {
         eta <- as.vector(X %*% beta)
@@ -1486,6 +1479,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     edf_var<- as.vector(fit$edf_var)
     names(edf_var) <- sapply(gam.obj$smooth,"[[","label")
     names(fit$coef) <- rownames(fit$hessian) <- colnames(fit$hessian) <- names(init)
+    args$kappa.final <- fit$kappa
     negll <- function(beta) negllsp(beta,sp)
     gradnegll <- function(beta) gradnegllsp(beta,sp)
     parnames(negll) <- parnames(gradnegll) <- names(init)
@@ -1521,6 +1515,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                timeVar = timeVar,
                time0Var = time0Var,
                timeExpr = timeExpr,
+               time0Expr = time0Expr,
                like = like,
                fullformula = fullformula,
                delayed=delayed,

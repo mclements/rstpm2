@@ -351,7 +351,6 @@ namespace rstpm2 {
     vec parscale;
   };
 
-
   // Main class for Stpm2 (fully parametric)
   template<class Link = LogLogLink>
   class Stpm2 : public Link {
@@ -388,7 +387,7 @@ namespace rstpm2 {
       map0 = as<uvec>(list["map0"]); // length N map from individuals to row of X0
       which0 = as<uvec>(list["which0"]); // length N0 indicator for X0
       ttype = as<vec>(list["ttype"]); 
-      kappa = as<double>(list["kappa"]);
+      kappa_init = kappa = as<double>(list["kappa"]);
       optimiser = as<std::string>(list["optimiser"]);
       bfgs.trace = as<int>(list["trace"]);
       reltol = bfgs.reltol = as<double>(list["reltol"]);
@@ -412,8 +411,8 @@ namespace rstpm2 {
     }
     li_constraint li_left_truncated(vec eta0) {
       vec H0 = Link::H(eta0);
+      vec eps = H0*0.0 + 1.0e-16; 
       double constraint = kappa/2.0 * sum(H0 % H0 % (H0<0));
-      vec eps = H0*0.0 + 1e-16;
       vec li = wt0 % max(H0,eps);
       li_constraint out = {li, constraint};
       return out;
@@ -480,14 +479,15 @@ namespace rstpm2 {
     gradli_constraint gradli_right_censored(vec eta, vec etaD, mat X, mat XD) {
       vec h = Link::h(eta,etaD) + bhazard;
       vec H = Link::H(eta);
-      vec eps = h*0.0 + 1.0e-16; // hack
+      vec eps = h*0.0 + 1.0e-16;
       mat gradH = Link::gradH(eta,X);
       mat gradh = Link::gradh(eta,etaD,X,XD);
-      mat Xconstraint = kappa * (rmult(gradh,h%(h<eps)) +
-				 rmult(gradH,H % (H<eps)));
-      H = max(H,eps);
-      h = max(h,eps);
-      mat Xgrad = -rmult(gradH, wt) + rmult(gradh, event / h % wt);
+      mat Xgrad = -rmult(gradH, wt) + rmult(gradh, event / max(eps,h) % wt);
+      mat XgradEps = rmult(X, -eps%wt + event%wt); // approximation
+      uvec invalid = (H<eps) || (h<eps);
+      Xgrad.rows(invalid) = XgradEps.rows(invalid);
+      mat Xconstraint = kappa * (rmult(gradh*0+1, h % (h<0)) +
+				 rmult(gradH*0+1, H % (H<0)));
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
     }
@@ -495,9 +495,11 @@ namespace rstpm2 {
       mat gradH0 = Link::gradH(eta0, X0); 
       vec H0 = Link::H(eta0); 
       vec eps = H0*0.0 + 1.0e-16; // hack
-      mat Xconstraint = kappa * rmult(gradH0, H0 % (H0<eps));
-      H0 = max(H0,eps);
+      uvec invalid = (H0<eps);
+      mat Xconstraint = kappa * rmult(gradH0*0+1, H0 % (H0<eps));
       mat Xgrad = rmult(gradH0, wt0);
+      mat XgradEps = rmult(X0, eps%wt0); // approximation
+      Xgrad.rows(invalid) = XgradEps.rows(invalid);
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
     }
@@ -583,6 +585,7 @@ namespace rstpm2 {
     }
     void optimWithConstraintBFGS(NumericVector init) {
       bool satisfied;
+      this->kappa = this->kappa_init;
       do {
 	bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
 	vec vcoef(&bfgs.coef[0],n);
@@ -595,6 +598,7 @@ namespace rstpm2 {
       NelderMead2 nm;
       nm.hessianp = false;
       nm.parscale = parscale;
+      this->kappa = this->kappa_init;
       do {
 	nm.optim(&optimfunction<This>, init, (void *) this);
 	vec vcoef(&nm.coef[0],n);
@@ -617,33 +621,13 @@ namespace rstpm2 {
     NumericVector init;
     mat X, XD, X0, X1; 
     vec bhazard,wt,wt0,event,time,parscale,ttype;
-    double kappa, reltol;
+    double kappa_init, kappa, reltol;
     bool delayed, interval;
     int n, N;
     BFGS2 bfgs;
     uvec ind0, map0, which0;
     std::string optimiser;
   };
-
-  // RcppExport SEXP optim_stpm2_nlm(SEXP args) {
-  //   stpm2 data(args);
-  //   data.init = ew_div(data.init,data.parscale);
-  //   int n = data.init.size();
-  //   Nlm nlm;
-  //   nlm.gradtl = nlm.steptl = data.reltol;
-  //   //nlm.method=2; nlm.stepmx=0.0;
-  //   bool satisfied;
-  //   do {
-  //     nlm.optim(& fminfn_nlm<stpm2>, & grfn<stpm2>, data.init, (void *) &data);
-  //     satisfied = fminfn_constraint<stpm2>(n,&nlm.coef[0],(void *) &data);
-  //     if (!satisfied) data.kappa *= 2.0;
-  //   } while (!satisfied && data.kappa<1.0e5);
-  //   nlm.coef = ew_mult(nlm.coef, data.parscale);
-  //   return List::create(_("itrmcd")=wrap(nlm.itrmcd),
-  // 			_("niter")=wrap(nlm.itncnt),
-  // 			_("coef")=wrap(nlm.coef),
-  // 			_("hessian")=wrap(nlm.hessian));
-  // }
 
   // penalised smoothers 
   // _Not_ sub-classes of Pstpm2, hence the longer function signatures
@@ -808,16 +792,60 @@ namespace rstpm2 {
       return Stpm2Type::gradient(beta);
     }
     // is the following strictly needed - or even correct?
-    void optimWithConstraint(NumericVector init) {
+    void optimWithConstraintBFGS(NumericVector init) {
       bool satisfied;
       if (this->bfgs.trace > 0) 
 	Rprintf("Starting optimization\n");
+      this->kappa = this->kappa_init;
       do {
 	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
 	vec vcoef(&this->bfgs.coef[0],this->n);
 	satisfied = Stpm2Type::feasible(vcoef % this->parscale);
 	if (!satisfied) this->kappa *= 2.0;   
       } while ((!satisfied) && this->kappa < 1.0e3);
+      if (this->bfgs.trace > 0 && this->kappa>1.0) Rprintf("kappa=%f\n",this->kappa);
+    }
+    void optimWithConstraintNM(NumericVector init) {
+      bool satisfied;
+      NelderMead2 nm;
+      nm.hessianp = false;
+      nm.parscale = this->parscale;
+      this->kappa = this->kappa_init;
+      do {
+	nm.optim(&optimfunction<This>, init, (void *) this);
+	vec vcoef(&nm.coef[0],this->n);
+	satisfied = Stpm2Type::feasible(vcoef % this->parscale);
+	if (!satisfied) this->kappa *= 2.0;   
+      } while ((!satisfied) && this->kappa < 1.0e3);
+      nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this);
+      this->bfgs.coef = nm.coef;
+      this->bfgs.hessian = nm.hessian;
+    }
+    
+    void optimWithConstraintNlm(NumericVector init) {
+      bool satisfied;
+      Nlm2 nm;
+      nm.gradtl = nm.steptl = this->reltol;
+      nm.parscale = this->parscale;
+      this->kappa = this->kappa_init;
+      do {
+	nm.optim(&optimfunction_nlm<This>, init, (void *) this);
+	vec vcoef(&nm.coef[0],this->n);
+	satisfied = Stpm2Type::feasible(vcoef % this->parscale);
+	if (!satisfied) this->kappa *= 2.0;   
+      } while ((!satisfied) && this->kappa < 1.0e3);
+      nm.hessian = nm.calc_hessian(&optimfunction_nlm<This>, (void *) this);
+      this->bfgs.coef = nm.coef;
+      this->bfgs.hessian = nm.hessian;
+    }
+    
+    void optimWithConstraint(NumericVector init) {
+      if (this->optimiser == "NelderMead")
+	optimWithConstraintNM(init);
+      else if (this->optimiser == "Nlm")
+	optimWithConstraintNlm(init);
+      else 
+	optimWithConstraintBFGS(init);
     }
     double first_step(double logsp) {
       sp[0] = exp(logsp);
@@ -893,7 +921,8 @@ namespace rstpm2 {
 			  _("coef")=wrap(this->bfgs.coef),
 			  _("hessian")=wrap(this->bfgs.hessian),
 			  _("edf")=wrap(edf),
-			  _("edf_var")=wrap(edf_var)
+			  _("edf_var")=wrap(edf_var),
+			  _("kappa")=wrap(this->kappa)
 			  );
     }
     SEXP optim_first() { 
@@ -933,7 +962,7 @@ namespace rstpm2 {
       return optim_fixed();
     }
     SEXP optim_multivariate_Nlm() {
-      this->kappa = 10.0;
+      this->kappa = this->kappa_init;
       Nlm2 nm;
       nm.gradtl = nm.steptl = reltol_outer;
       nm.itnlim = 100;
@@ -1109,6 +1138,7 @@ namespace rstpm2 {
       bool satisfied;
       if (this->bfgs.trace > 0) 
 	Rprintf("Starting optimization\n");
+      this->kappa = this->kappa_init;
       do {
 	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, this->init, (void *) this);
 	vec vcoef(&this->bfgs.coef[0],this->n); 
@@ -1121,6 +1151,7 @@ namespace rstpm2 {
       NelderMead2 nm;
       nm.hessianp = false;
       nm.parscale = this->parscale;
+      this->kappa = this->kappa_init;
       do {
 	nm.optim(&optimfunction<This>, this->init, (void *) this);
 	vec vcoef(&this->bfgs.coef[0],this->n); 
@@ -1350,7 +1381,8 @@ vec gradient_new(vec beta) {
       model.post_process();
       return List::create(_("fail")=model.bfgs.fail, 
 			  _("coef")=wrap(model.bfgs.coef),
-			  _("hessian")=wrap(model.bfgs.hessian));
+			  _("hessian")=wrap(model.bfgs.hessian),
+			  _("kappa")=wrap(model.kappa));
     }
     else if (return_type == "objective")
       return wrap(model.objective(beta));
@@ -1358,6 +1390,8 @@ vec gradient_new(vec beta) {
       return wrap(model.gradient(beta));
     else if (return_type == "feasible")
       return wrap(model.feasible(beta));
+    else if (return_type == "li")
+      return wrap(model.li(model.X*beta, model.XD*beta, model.X0*beta, model.X1*beta).li);
     else {
       REprintf("Unknown return_type.\n");
       return wrap(-1);
@@ -1387,6 +1421,8 @@ vec gradient_new(vec beta) {
       return wrap(model.feasible(beta));
     else if (return_type == "feasible")
       return wrap(model.feasible(beta));
+    else if (return_type == "li")
+      return wrap(model.li(model.X*beta, model.XD*beta, model.X0*beta, model.X1*beta).li);
     else {
       REprintf("Unknown return_type.\n");
       return wrap(-1);
@@ -1486,6 +1522,26 @@ vec gradient_new(vec beta) {
     }
   }
 
+  // RcppExport SEXP optim_stpm2_nlm(SEXP args) {
+  //   stpm2 data(args);
+  //   data.init = ew_div(data.init,data.parscale);
+  //   int n = data.init.size();
+  //   Nlm nlm;
+  //   nlm.gradtl = nlm.steptl = data.reltol;
+  //   //nlm.method=2; nlm.stepmx=0.0;
+  //   bool satisfied;
+  //   do {
+  //     nlm.optim(& fminfn_nlm<stpm2>, & grfn<stpm2>, data.init, (void *) &data);
+  //     satisfied = fminfn_constraint<stpm2>(n,&nlm.coef[0],(void *) &data);
+  //     if (!satisfied) data.kappa *= 2.0;
+  //   } while (!satisfied && data.kappa<1.0e5);
+  //   nlm.coef = ew_mult(nlm.coef, data.parscale);
+  //   return List::create(_("itrmcd")=wrap(nlm.itrmcd),
+  // 			_("niter")=wrap(nlm.itncnt),
+  // 			_("coef")=wrap(nlm.coef),
+  // 			_("hessian")=wrap(nlm.hessian));
+  // }
+  
 
   // Proof of concept for a Weibull cure model
   

@@ -62,23 +62,89 @@ if (FALSE) {
     negllsp(coef(mle2),sp=1)
     negll0sp(coef(mle2),sp=1)
 }
+update.list <- function(list,...) {
+    args <- list(...)
+    for (name in names(args))
+        list[[name]] <- args[[name]]
+    list
+}
+
+## right censored
+## Stata estimated coef for hormon (PH): -.3614357
+refresh
+require(rstpm2)
+summary(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
+      smooth.formula=~nsx(log(rectime),df=3,stata=TRUE),trace=0))
+summary(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
+      smooth.formula=~nsx(log(rectime),df=3,stata=TRUE),trace=0,optimiser="NelderMead"))
+summary(fit2 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer))
+summary(fit2 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,optimiser="NelderMead"))
 
 ## delayed entry
 ## Stata estimated coef for hormon (PH): -1.162504
+refresh
 require(rstpm2)
 brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime/2,0))
-## debug(stpm2)
+##debug(rstpm2:::meat.stpm2)
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
-      logH.formula=~nsx(log(rectime),df=3,stata=TRUE)))
+      smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
+summary(fit2 <- pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,optimiser="BFGS")) # WRONG
+summary(fit2 <- pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,optimiser="NelderMead")) # OK
 plot(fit,newdata=data.frame(hormon=1))
+plot(fit2,newdata=data.frame(hormon=1),add=TRUE,lty=2)
 head(predict(fit)) # OK
-head(predict(fit,se.fit=TRUE)) # FAILS
-## delayed entry and tvc
+head(predict(fit,se.fit=TRUE))
+## delayed entry and tvc (problems?)
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
                      logH.formula=~nsx(rectime,df=3),
                      tvc.formula=~hormon:nsx(rectime,df=3,stata=TRUE)))
 head(predict(fit,se.fit=TRUE)) 
 pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)
+
+## weighted estimates
+refresh
+require(rstpm2)
+## unequal weights
+brcancer2 <- transform(brcancer,w=ifelse(hormon==0,10,1))
+## unweighted 
+summary(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
+      smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
+## weighted estimates
+## stpm2
+summary(stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w,
+              smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
+## stpm2 robust
+summary(stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w,robust=TRUE,
+      smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
+summary(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2))
+## pstpm2
+summary(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w))
+summary(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w,robust=TRUE))
+##
+## equal weights
+brcancer2 <- transform(brcancer,w=4)
+## unweighted
+summary(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
+      smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
+## weighted estimates
+## stpm2
+summary(stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w,
+      smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
+summary(stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w,robust=TRUE,
+      smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
+## pstpm2
+summary(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2))
+summary(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w))
+summary(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w,robust=TRUE))
+
+refresh
+require(rstpm2)
+brcancer2 <- transform(brcancer,w=ifelse(hormon==0,10,1))
+##debug(rstpm2:::meat.stpm2)
+summary(fit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w,robust=TRUE,
+      smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
+summary(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
+      logH.formula=~nsx(log(rectime),df=3,stata=TRUE)))
 
 
 ## code for the SAS PROC ICPHREG examples
@@ -194,7 +260,8 @@ require(rstpm2)
 require(ICE)
 data(ICHemophiliac)
 ICHemophiliac2 <- transform(as.data.frame(ICHemophiliac),event=3)
-fit1 <- pstpm2(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2)
+fit1 <- pstpm2(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2,
+               smooth.formula=~s(right,k=7))
 estimate <- ickde(ICHemophiliac, m=200, h=0.9)
 plot(estimate, type="l", ylim=c(0,0.20))
 tt <- seq(0,20,length=301)[-1]

@@ -1,9 +1,7 @@
 
 * stata
-*cd c:\Users\marcle\Documents\Home\
 clear
 webuse brcancer
-*use brcancer
 stset rectime, f(censrec==1)
 cap program drop dopredictions
 program define dopredictions
@@ -61,6 +59,16 @@ preserve
   stpm2 hormon, df(3) scale(h) bhazard(rate0)
   dopredictions
 restore
+
+* robust variance
+preserve
+  gen wt = 1
+  replace wt = 10 if hormon==0
+  stset rectime [pw=wt], f(censrec==1)
+  stpm2 hormon, df(3) scale(h) vce(robust)
+  dopredictions
+restore
+
 
 * test speed
 clear all
