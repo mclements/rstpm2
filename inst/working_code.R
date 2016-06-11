@@ -38,14 +38,13 @@ numder(dnorm,2)
 
 refresh
 require(rstpm2)
-data(brcancer)
 
 ## Stata estimated coef for hormon
 ## PH:     -.3614357
 ## PO:     -.474102
 ## Probit: -.2823338
 system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
-system.time(print(pfit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
+system.time(print(pfit <- pstpm2(Surv(rectime,censrec==1)~hormon,smooth.formula=~s(log(rectime))+s(x1),data=brcancer)))
 ##
 system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO")))
 system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO")))
@@ -85,11 +84,12 @@ summary(fit2 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,optimiser="
 refresh
 require(rstpm2)
 brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime/2,0))
+## brcancer2 <- transform(brcancer,startTime=0.1)
 ##debug(rstpm2:::meat.stpm2)
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
       smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
-summary(fit2 <- pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,optimiser="BFGS")) # WRONG
 summary(fit2 <- pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,optimiser="NelderMead")) # OK
+summary(fit2 <- pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,optimiser="BFGS",trace=0))
 plot(fit,newdata=data.frame(hormon=1))
 plot(fit2,newdata=data.frame(hormon=1),add=TRUE,lty=2)
 head(predict(fit)) # OK
@@ -100,6 +100,18 @@ summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
                      tvc.formula=~hormon:nsx(rectime,df=3,stata=TRUE)))
 head(predict(fit,se.fit=TRUE)) 
 pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)
+
+require(rstpm2)
+require(mgcv)
+x=seq(0,1,length=5001)
+set.seed(12345)
+y=rnorm(length(x),sin(2*pi*x))
+i <- x>0.65
+d=data.frame(x=x[i],y=y[i])
+fit <- gam(y~s(x),data=d)
+## plot(fit)
+plot(x,predict(fit,newdata=data.frame(x=x)),type="l")
+plot(x,y)
 
 ## weighted estimates
 refresh
@@ -213,10 +225,17 @@ system.time(mod2nb <- stpm2(Surv(t1,t2,event)~var1,
                            logH.formula=~ns(t2,df=7),
                            cluster=dataAdditive$group, nodes=20))
 
+system.time(mod2g <- pstpm2(Surv(t1,t2,event)~var1,
+                           data=dataAdditive,
+                           RandDist="Gamma",
+                           smooth.formula=~s(t2),
+                           cluster=dataAdditive$group))
+
+
 mod1 <- frailtyPenal(Surv(t1,t2,event)~cluster(group)+var1,data=dataAdditive,
-                     n.knots=8,kappa1=0.1,cross.validation=TRUE)
+                     n.knots=8,kappa=0.1,cross.validation=TRUE)
 mod1n <- frailtyPenal(Surv(t1,t2,event)~cluster(group)+var1,data=dataAdditive,
-                     n.knots=8,kappa1=0.1,cross.validation=TRUE, RandDist="LogN")
+                     n.knots=8,kappa=0.1,cross.validation=TRUE, RandDist="LogN")
 
 system.time(mod2 <- stpm2(Surv(t1,t2,event)~var1, # Gamma
                           data=dataAdditive,

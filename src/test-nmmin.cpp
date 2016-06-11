@@ -105,7 +105,6 @@ namespace rstpm2 {
     }
     return wrap(out);
   }
-
   // Various link objects
   class LogLogLink {
   public:
@@ -185,6 +184,16 @@ namespace rstpm2 {
 	rmult(X, dnorm01(eta) % dnorm01(eta) / pnorm01(-eta) / pnorm01(-eta) % etaD) +
 	rmult(XD,dnorm01(eta) / pnorm01(-eta));
     }
+    // incomplete implementation
+    cube hessianh(vec beta, mat X, mat XD) { 
+      cube c(beta.size(), beta.size(), X.n_rows, fill::zeros);
+      return c;
+    }
+    // incomplete implementation
+    cube hessianH(vec beta, mat X) { 
+      cube c(beta.size(), beta.size(), X.n_rows, fill::zeros);
+      return c;
+    }
   };
   class LogLink {
   public:
@@ -194,8 +203,15 @@ namespace rstpm2 {
     vec H(vec eta) { return eta; }
     mat gradh(vec eta, vec etaD, mat X, mat XD) { return XD; }
     mat gradH(vec eta, mat X) { return X;  }
+    cube hessianh(vec beta, mat X, mat XD) { 
+      cube c(beta.size(), beta.size(), X.n_rows, fill::zeros);
+      return c;
+    }
+    cube hessianH(vec beta, mat X) { 
+      cube c(beta.size(), beta.size(), X.n_rows, fill::zeros);
+      return c;
+    }
   };
-
   // wrappers to call class methods from C
   template<class T>
   double optimfunction(int n, double * beta, void * void_obj) {
@@ -305,7 +321,6 @@ namespace rstpm2 {
     }
     vec parscale;
   };
-
   class Nlm2 : public Nlm {
   public:
     NumericMatrix calc_hessian(fcn_p fn, void * ex) {
@@ -411,8 +426,8 @@ namespace rstpm2 {
     }
     li_constraint li_left_truncated(vec eta0) {
       vec H0 = Link::H(eta0);
-      vec eps = H0*0.0 + 1.0e-16; 
       double constraint = kappa/2.0 * sum(H0 % H0 % (H0<0));
+      vec eps = H0*0.0 + 1.0e-16; 
       vec li = wt0 % max(H0,eps);
       li_constraint out = {li, constraint};
       return out;
@@ -482,24 +497,19 @@ namespace rstpm2 {
       vec eps = h*0.0 + 1.0e-16;
       mat gradH = Link::gradH(eta,X);
       mat gradh = Link::gradh(eta,etaD,X,XD);
-      mat Xgrad = -rmult(gradH, wt) + rmult(gradh, event / max(eps,h) % wt);
-      mat XgradEps = rmult(X, -eps%wt + event%wt); // approximation
-      uvec invalid = (H<eps) || (h<eps);
-      Xgrad.rows(invalid) = XgradEps.rows(invalid);
-      mat Xconstraint = kappa * (rmult(gradh*0+1, h % (h<0)) +
-				 rmult(gradH*0+1, H % (H<0)));
+      mat Xconstraint = kappa * (rmult(gradh, h % (h<0)) +
+				 rmult(gradH, H % (H<0)));
+      // h = max(h,eps);
+      mat Xgrad = -rmult(gradH, wt) + rmult(gradh, event / h % wt);
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
     }
     gradli_constraint gradli_left_truncated(vec eta0, mat X0) {
       mat gradH0 = Link::gradH(eta0, X0); 
       vec H0 = Link::H(eta0); 
-      vec eps = H0*0.0 + 1.0e-16; // hack
-      uvec invalid = (H0<eps);
-      mat Xconstraint = kappa * rmult(gradH0*0+1, H0 % (H0<eps));
+      vec eps = H0*0.0 + 1.0e-16;
+      mat Xconstraint = kappa * rmult(gradH0, H0 % (H0<0));
       mat Xgrad = rmult(gradH0, wt0);
-      mat XgradEps = rmult(X0, eps%wt0); // approximation
-      Xgrad.rows(invalid) = XgradEps.rows(invalid);
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
     }
@@ -556,7 +566,7 @@ namespace rstpm2 {
       rowvec vgr = sum(gc.gradli,0);
       vec gr(n);
       for (size_t i = 0; i<beta.size(); ++i) {
-	gr[i] = vgr[i] - dconstraint[i];
+	gr[i] = vgr[i];// - dconstraint[i];
       }
       return -gr;
     }
@@ -614,6 +624,24 @@ namespace rstpm2 {
 	optimWithConstraintNM(init);
       else
 	optimWithConstraintBFGS(init);
+    }
+    NumericMatrix calcHessian(NumericVector nvbeta) {
+      // not defined for interval-censored or probit link
+      vec beta(&nvbeta[0],n);
+      vec eta = X * beta;
+      vec etaD = XD * beta;
+      vec h = Link::h(eta,etaD);
+      mat gradh = Link::gradh(eta,etaD,X,XD);
+      cube hessianh = Link::hessianh(beta,X,XD);
+      cube hessianH = Link::hessianH(beta,X);
+      cube hessianH0 = Link::hessianH(beta,X0);
+      mat hessian = -sum(hessianH,2);
+      if (delayed)
+	hessian += sum(hessianH0,2);
+      for (int i=0; i<N; ++i) 
+	hessian += event(i)/h(i)*hessianh.slice(i) -
+	  event(i)/h(i)/h(i)*gradh.row(i).t()*gradh.row(i);
+      return wrap(-hessian);
     }
     // find the left truncated values for a given index
     uvec find0() { return map0(find(ind0)); }
@@ -743,7 +771,6 @@ namespace rstpm2 {
   // }
   //   std::vector<Smoother> smooth;
   // };
-
   template<class T>
   double pstpm2_multivariate_step(int n, double * logsp_ptr, void * model_ptr) {
     T * model = static_cast<T *>(model_ptr);
@@ -847,6 +874,14 @@ namespace rstpm2 {
       else 
 	optimWithConstraintBFGS(init);
     }
+    double calc_edf(NumericMatrix hessian0) {
+      double max_edf = this->bfgs.hessian.ncol();
+      mat m;
+      bool flag = arma::solve(m, as<mat>(this->bfgs.hessian), as<mat>(hessian0));
+      double edf = flag ? arma::trace(m) : (max_edf*2.0);
+      if (edf<0.0) edf = max_edf*2.0;
+      return edf;
+    }
     double first_step(double logsp) {
       sp[0] = exp(logsp);
       this->pre_process();
@@ -863,7 +898,7 @@ namespace rstpm2 {
 	  Rprint(this->bfgs.hessian);
 	}
       }
-      double edf = arma::trace(solve(as<mat>(this->bfgs.hessian),as<mat>(hessian0)));
+      double edf = calc_edf(hessian0);
       double negll = this->bfgs.calc_objective(&optimfunction<Stpm2Type>, (void *) this);
       double gcv =  negll + alpha*edf;
       double bic =  negll + alpha*edf*log(sum(this->event));
@@ -885,7 +920,7 @@ namespace rstpm2 {
       this->optimWithConstraint(this->init);
       this->bfgs.hessian = this->bfgs.calc_hessian(&optimgradient<This>, (void *) this);
       NumericMatrix hessian0 = this->bfgs.calc_hessian(&optimgradient<Stpm2Type>, (void *) this);
-      double edf = arma::trace(solve(as<mat>(this->bfgs.hessian),as<mat>(hessian0)));
+      double edf = calc_edf(hessian0);
       double negll = this->bfgs.calc_objective(&optimfunction<Stpm2Type>, (void *) this);
       double gcv =  negll + alpha*edf;
       double bic =  2.0*negll + alpha*edf*log(sum(this->event));
@@ -1378,6 +1413,7 @@ vec gradient_new(vec beta) {
       model.pre_process();
       model.optimWithConstraint(model.init);
       model.bfgs.hessian = model.bfgs.calc_hessian(&optimgradient<T>, (void *) &model);
+      // model.bfgs.hessian = model.calcHessian(model.bfgs.coef);
       model.post_process();
       return List::create(_("fail")=model.bfgs.fail, 
 			  _("coef")=wrap(model.bfgs.coef),
@@ -1438,9 +1474,9 @@ vec gradient_new(vec beta) {
       else if (link == "PO")
 	return stpm2_model_output_<Stpm2<LogitLink> >(args);
       else if (link == "AH")
-	return stpm2_model_output_<Stpm2<LogLink> >(args);
+      	return stpm2_model_output_<Stpm2<LogLink> >(args);
       else if (link == "probit")
-	return stpm2_model_output_<Stpm2<ProbitLink> >(args);
+      	return stpm2_model_output_<Stpm2<ProbitLink> >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
@@ -1452,9 +1488,9 @@ vec gradient_new(vec beta) {
       else if (link == "PO")
 	return pstpm2_model_output_<Pstpm2<Stpm2<LogitLink>,SmoothLogH> >(args);
       else if (link == "AH")
-	return pstpm2_model_output_<Pstpm2<Stpm2<LogLink>,SmoothLogH> >(args);
+      	return pstpm2_model_output_<Pstpm2<Stpm2<LogLink>,SmoothLogH> >(args);
       else if (link == "probit")
-	return pstpm2_model_output_<Pstpm2<Stpm2<ProbitLink>,SmoothLogH> >(args);
+      	return pstpm2_model_output_<Pstpm2<Stpm2<ProbitLink>,SmoothLogH> >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
@@ -1466,9 +1502,9 @@ vec gradient_new(vec beta) {
       else if (link == "PO")
 	return stpm2_model_output_<GammaSharedFrailty<Stpm2<LogitLink> > >(args);
       else if (link == "AH")
-	return stpm2_model_output_<GammaSharedFrailty<Stpm2<LogLink> > >(args);
+      	return stpm2_model_output_<GammaSharedFrailty<Stpm2<LogLink> > >(args);
       else if (link == "probit")
-	return stpm2_model_output_<GammaSharedFrailty<Stpm2<ProbitLink> > >(args);
+      	return stpm2_model_output_<GammaSharedFrailty<Stpm2<ProbitLink> > >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
@@ -1480,9 +1516,9 @@ vec gradient_new(vec beta) {
       else if (link == "PO")
 	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<LogitLink> >,SmoothLogH> >(args);
       else if (link == "AH")
-	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<LogLink> >,SmoothLogH> >(args);
+      	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<LogLink> >,SmoothLogH> >(args);
       else if (link == "probit")
-	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<ProbitLink> >,SmoothLogH> >(args);
+      	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<ProbitLink> >,SmoothLogH> >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
@@ -1493,10 +1529,10 @@ vec gradient_new(vec beta) {
 	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogLogLink> > >(args);
       else if (link == "PO")
 	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogitLink> > >(args);
-      else if (link == "AH")
-	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogLink> > >(args);
-      else if (link == "probit")
-	return stpm2_model_output_<NormalSharedFrailty<Stpm2<ProbitLink> > >(args);
+      // else if (link == "AH")
+      // 	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogLink> > >(args);
+      // else if (link == "probit")
+      // 	return stpm2_model_output_<NormalSharedFrailty<Stpm2<ProbitLink> > >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
@@ -1508,9 +1544,9 @@ vec gradient_new(vec beta) {
       else if (link == "PO")
 	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<LogitLink> >,SmoothLogH> >(args);
       else if (link == "AH")
-	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<LogLink> >,SmoothLogH> >(args);
+      	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<LogLink> >,SmoothLogH> >(args);
       else if (link == "probit")
-	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<ProbitLink> >,SmoothLogH> >(args);
+      	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<ProbitLink> >,SmoothLogH> >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
