@@ -22,6 +22,7 @@ stpm2(formula, data,
       init = NULL, coxph.strata = NULL, weights = NULL,
       robust = FALSE, baseoff = FALSE, bhazard = NULL,
       timeVar = "", time0Var = "", use.gr = TRUE,
+      optimiser=c("BFGS","NelderMead"),
       reltol=1.0e-8, trace = 0,
       link.type=c("PH","PO","probit","AH"), 
       frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,
@@ -103,6 +104,7 @@ two variables define the time}
 \item{time0Var}{string variable to determine the entry variable; useful
   for when more than one data variable is used in the entry time.}
 \item{use.gr}{logical indicating whether to use gradients in the calculation}
+\item{optimiser}{select which optimiser is used}
 \item{link.type}{type of link function.}
 \item{reltol}{relative tolerance for the model convergence}
 \item{trace}{logical for whether to provide trace information}

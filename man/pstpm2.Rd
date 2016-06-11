@@ -29,10 +29,10 @@ pstpm2(formula, data, smooth.formula = NULL, smooth.args = NULL,
        smoother.parameters = NULL,
        alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1,
        sp.init=1, trace = 0,
-       link.type=c("PH","PO","probit","AH"), 
+       link.type=c("PH","PO","probit","AH"), optimiser = c("BFGS", "NelderMead", "Nlm"),
        frailty=!is.null(cluster),cluster = NULL, logtheta=-6, nodes=9,
        RandDist=c("Gamma","LogN"),
-       reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-4),outer_optim=1,
+       reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-5),outer_optim=1,
        contrasts = NULL, subset = NULL, ...)
 }
 %- maybe also 'usage' for other objects documented here.
@@ -99,6 +99,7 @@ two variables define the time}
   for when more than one data variable is used in the entry time.}
 \item{reltol}{list with components for search and final relative tolerances.}
 \item{link.type}{type of link function.}
+\item{optimiser}{select which optimiser is used}
 \item{frailty}{logical for whether to fit a shared frailty model}
 \item{cluster}{string for the data variable that determines the cluster
   for the frailty}

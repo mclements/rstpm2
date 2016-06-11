@@ -27,6 +27,7 @@ Objects can be created by calls of the form \code{new("pstpm2", ...)} and
     \item{\code{logli}:}{Object of class \code{"function"} ~~ }
     \item{\code{timeVar}:}{Object of class \code{"character"} ~~ }
     \item{\code{time0Var}:}{Object of class \code{"character"} ~~ }
+    \item{\code{time0Expr}:}{Object of class \code{"nameOrcall"} ~~ }
     \item{\code{timeExpr}:}{Object of class \code{"nameOrcall"} ~~ }
     \item{\code{like}:}{Object of class \code{"function"} ~~ }
     \item{\code{model.frame}:}{Object of class \code{"list"} ~~ }

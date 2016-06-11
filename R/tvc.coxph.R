@@ -1,5 +1,5 @@
 setClass("tvcCoxph", contains="mle2")
-setClass("tvcCoxphList", contains="list")
+## setClass("tvcCoxphList", contains="list")
 
 cox.tvc <- function(obj,var=NULL,method="logt") {
     stopifnot(attr(obj$y,"type") == "right")
