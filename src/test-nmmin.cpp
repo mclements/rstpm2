@@ -625,24 +625,24 @@ namespace rstpm2 {
       else
 	optimWithConstraintBFGS(init);
     }
-    NumericMatrix calcHessian(NumericVector nvbeta) {
-      // not defined for interval-censored or probit link
-      vec beta(&nvbeta[0],n);
-      vec eta = X * beta;
-      vec etaD = XD * beta;
-      vec h = Link::h(eta,etaD);
-      mat gradh = Link::gradh(eta,etaD,X,XD);
-      cube hessianh = Link::hessianh(beta,X,XD);
-      cube hessianH = Link::hessianH(beta,X);
-      cube hessianH0 = Link::hessianH(beta,X0);
-      mat hessian = -sum(hessianH,2);
-      if (delayed)
-	hessian += sum(hessianH0,2);
-      for (int i=0; i<N; ++i) 
-	hessian += event(i)/h(i)*hessianh.slice(i) -
-	  event(i)/h(i)/h(i)*gradh.row(i).t()*gradh.row(i);
-      return wrap(-hessian);
-    }
+    // NumericMatrix calcHessian(NumericVector nvbeta) {
+    //   // not defined for interval-censored or probit link
+    //   vec beta(&nvbeta[0],n);
+    //   vec eta = X * beta;
+    //   vec etaD = XD * beta;
+    //   vec h = Link::h(eta,etaD);
+    //   mat gradh = Link::gradh(eta,etaD,X,XD);
+    //   cube hessianh = Link::hessianh(beta,X,XD);
+    //   cube hessianH = Link::hessianH(beta,X);
+    //   cube hessianH0 = Link::hessianH(beta,X0);
+    //   mat hessian = -arma::sum(hessianH,2);
+    //   if (delayed)
+    // 	hessian += arma::sum(hessianH0,2);
+    //   for (int i=0; i<N; ++i) 
+    // 	hessian += event(i)/h(i)*hessianh.slice(i) -
+    // 	  event(i)/h(i)/h(i)*gradh.row(i).t()*gradh.row(i);
+    //   return wrap(-hessian);
+    // }
     // find the left truncated values for a given index
     uvec find0() { return map0(find(ind0)); }
     uvec find0(vec index) { return (map0(index))(find(ind0(index))); }
