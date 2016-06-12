@@ -210,14 +210,22 @@ summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
                      logH.formula=~nsx(rectime,df=3),
                      tvc.formula=~hormon:nsx(rectime,df=3,stata=TRUE)))
 
+
 require(rstpm2)
 require(frailtypack)
 data(dataAdditive)
+debug(pstpm2)
 system.time(mod2n <- pstpm2(Surv(t1,t2,event)~var1,
                            data=dataAdditive,
                            RandDist="LogN",
                            smooth.formula=~s(t2),
-                           cluster=dataAdditive$group, nodes=20))
+                           cluster=dataAdditive$group, nodes=20, trace=1))
+
+localargs <- mod2n@args
+localargs$return_type <- "variances"
+.Call("model_output", localargs, package="rstpm2")
+localargs$return_type <- "modes"
+.Call("model_output", localargs, package="rstpm2")
 
 system.time(mod2nb <- stpm2(Surv(t1,t2,event)~var1,
                            data=dataAdditive,

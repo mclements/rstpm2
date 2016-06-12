@@ -366,13 +366,137 @@ namespace rstpm2 {
     vec parscale;
   };
 
+  /** @brief Curiously recurring template pattern for optimisation with constraints
+   **/
+  template<class That>
+  class OptimWithConstraint {
+  public:
+    void optimWithConstraintBFGS(NumericVector init) {
+      That* that = static_cast<That *>(this); 
+      bool satisfied;
+      that->kappa = that->kappa_init;
+      do {
+	that->bfgs.optim(&optimfunction<That>, &optimgradient<That>, init, (void *) that); 
+	vec vcoef(&that->bfgs.coef[0],that->n);
+	satisfied = that->feasible(vcoef % that->parscale);
+	if (!satisfied) that->kappa *= 2.0;
+      } while ((!satisfied) && that->kappa < 1.0e3);
+      if (that->bfgs.trace > 0 && that->kappa>1.0) Rprintf("kappa=%f\n",that->kappa); 
+    }
+    void optimWithConstraintNM(NumericVector init) {
+      That* that = static_cast<That *>(this); 
+      bool satisfied;
+      NelderMead2 nm;
+      nm.hessianp = false;
+      nm.parscale = that->parscale;
+      that->kappa = that->kappa_init;
+      do {
+	nm.optim(&optimfunction<That>, init, (void *) that);
+	vec vcoef(&nm.coef[0],that->n);
+	satisfied = that->feasible(vcoef % that->parscale);
+	if (!satisfied) that->kappa *= 2.0;
+      } while ((!satisfied) && that->kappa < 1.0e3);
+      nm.hessian = nm.calc_hessian(&optimfunction<That>, (void *) that); 
+      that->bfgs.coef = nm.coef;
+      that->bfgs.hessian = nm.hessian;
+    }
+    void optimWithConstraintNlm(NumericVector init) {
+      That* that = static_cast<That *>(this); 
+      bool satisfied;
+      Nlm2 nm;
+      nm.gradtl = nm.steptl = that->reltol;
+      nm.parscale = that->parscale;
+      that->kappa = that->kappa_init;
+      do {
+	nm.optim(&optimfunction_nlm<That>, init, (void *) that);
+	vec vcoef(&nm.coef[0],that->n);
+	satisfied = that->feasible(vcoef % that->parscale);
+	if (!satisfied) that->kappa *= 2.0;
+      } while ((!satisfied) && that->kappa < 1.0e3);
+      if (that->bfgs.trace > 0 && that->kappa>1.0) Rprintf("kappa=%f\n",that->kappa); 
+      nm.hessian = nm.calc_hessian(&optimfunction_nlm<That>, (void *) that); 
+      that->bfgs.coef = nm.coef;
+      that->bfgs.hessian = nm.hessian;
+    }
+    void optimWithConstraint(NumericVector init) {
+      That* that = static_cast<That *>(this); 
+      if (that->bfgs.trace > 0) Rprintf("Starting optimization\n");
+      if (that->optimiser == "NelderMead")
+	optimWithConstraintNM(init);
+      else if (that->optimiser == "Nlm")
+	optimWithConstraintNlm(init);
+      else
+	optimWithConstraintBFGS(init);
+    }
+  };
+
+  /** @brief Macro to define the optimisation functions. Defined as a macro
+      because the C API needs to pass a 'This' template parameter
+      which varies for the different classes (alternatively, this
+      could be defined using the curiously recurring template
+      pattern).
+  **/
+#define OPTIM_FUNCTIONS							\
+    void optimWithConstraintBFGS(NumericVector init) {			\
+      bool satisfied;							\
+      this->kappa = this->kappa_init;					\
+      do {								\
+	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this); \
+	vec vcoef(&this->bfgs.coef[0],this->n);				\
+	satisfied = this->feasible(vcoef % this->parscale);		\
+	if (!satisfied) this->kappa *= 2.0;				\
+      } while ((!satisfied) && this->kappa < 1.0e3);			\
+      if (this->bfgs.trace > 0 && this->kappa>1.0) Rprintf("kappa=%f\n",this->kappa); \
+    }									\
+    void optimWithConstraintNM(NumericVector init) {			\
+      bool satisfied;							\
+      NelderMead2 nm;							\
+      nm.hessianp = false;						\
+      nm.parscale = this->parscale;					\
+      this->kappa = this->kappa_init;					\
+      do {								\
+	nm.optim(&optimfunction<This>, init, (void *) this);		\
+	vec vcoef(&nm.coef[0],this->n);					\
+	satisfied = this->feasible(vcoef % this->parscale);		\
+	if (!satisfied) this->kappa *= 2.0;				\
+      } while ((!satisfied) && this->kappa < 1.0e3);			\
+      nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this); \
+      this->bfgs.coef = nm.coef;					\
+      this->bfgs.hessian = nm.hessian;					\
+    }									\
+    void optimWithConstraintNlm(NumericVector init) {			\
+      bool satisfied;							\
+      Nlm2 nm;								\
+      nm.gradtl = nm.steptl = this->reltol;				\
+      nm.parscale = this->parscale;					\
+      this->kappa = this->kappa_init;					\
+      do {								\
+	nm.optim(&optimfunction_nlm<This>, init, (void *) this);	\
+	vec vcoef(&nm.coef[0],this->n);					\
+	satisfied = this->feasible(vcoef % this->parscale);		\
+	if (!satisfied) this->kappa *= 2.0;				\
+      } while ((!satisfied) && this->kappa < 1.0e3);			\
+      if (this->bfgs.trace > 0 && this->kappa>1.0) Rprintf("kappa=%f\n",this->kappa); \
+      nm.hessian = nm.calc_hessian(&optimfunction_nlm<This>, (void *) this); \
+      this->bfgs.coef = nm.coef;					\
+      this->bfgs.hessian = nm.hessian;					\
+    }									\
+    void optimWithConstraint(NumericVector init) {			\
+      if (this->bfgs.trace > 0) Rprintf("Starting optimization\n");	\
+      if (this->optimiser == "NelderMead")				\
+	optimWithConstraintNM(init);					\
+      else if (this->optimiser == "Nlm")				\
+	optimWithConstraintNlm(init);					\
+      else								\
+	optimWithConstraintBFGS(init);					\
+    }
+    
   // struct for data
   struct BaseData {
     mat X, XD, X0, X1; 
     vec bhazard,wt,wt0,event,time;
     uvec ind0, map0, which0;
   };
-
   
   // Main class for Stpm2 (fully parametric)
   template<class Link = LogLogLink>
@@ -601,38 +725,7 @@ namespace rstpm2 {
 	init[i] *= parscale[i];
       }
     }
-    void optimWithConstraintBFGS(NumericVector init) {
-      bool satisfied;
-      this->kappa = this->kappa_init;
-      do {
-	bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
-	vec vcoef(&bfgs.coef[0],n);
-	satisfied = feasible(vcoef % parscale);
-	if (!satisfied) kappa *= 2.0;   
-      } while ((!satisfied) && kappa < 1.0e3);
-    }
-    void optimWithConstraintNM(NumericVector init) {
-      bool satisfied;
-      NelderMead2 nm;
-      nm.hessianp = false;
-      nm.parscale = parscale;
-      this->kappa = this->kappa_init;
-      do {
-	nm.optim(&optimfunction<This>, init, (void *) this);
-	vec vcoef(&nm.coef[0],n);
-	satisfied = feasible(vcoef % parscale);
-	if (!satisfied) kappa *= 2.0;   
-      } while ((!satisfied) && kappa < 1.0e3);
-      nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this);
-      bfgs.coef = nm.coef;
-      bfgs.hessian = nm.hessian;
-    }
-    void optimWithConstraint(NumericVector init) {
-      if (this->optimiser == "NelderMead")
-	optimWithConstraintNM(init);
-      else
-	optimWithConstraintBFGS(init);
-    }
+    OPTIM_FUNCTIONS;
     // NumericMatrix calcHessian(NumericVector nvbeta) {
     //   // not defined for interval-censored or probit link
     //   vec beta(&nvbeta[0],n);
@@ -654,6 +747,8 @@ namespace rstpm2 {
     // find the left truncated values for a given index
     uvec find0() { return map0(find(ind0)); }
     uvec find0(vec index) { return (map0(index))(find(ind0(index))); }
+    SEXP return_modes() { return wrap(-1); } // used in NormalSharedFrailties
+    SEXP return_variances() { return wrap(-1); } // used in NormalSharedFrailties
     NumericVector init;
     // mat X, XD, X0, X1; 
     // vec bhazard,wt,wt0,event,time;
@@ -800,7 +895,7 @@ namespace rstpm2 {
     R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
     *objective = model->multivariate_step(logsp);
   }    
-
+  
   // Penalised link-based models
   template<class Stpm2Type = Stpm2<LogLogLink>, class Smooth = SmoothLogH>
   class Pstpm2 : public Stpm2Type, public Smooth {
@@ -827,60 +922,7 @@ namespace rstpm2 {
     vec gradient0(vec beta) {
       return Stpm2Type::gradient(beta);
     }
-    // is the following strictly needed - or even correct?
-    void optimWithConstraintBFGS(NumericVector init) {
-      bool satisfied;
-      if (this->bfgs.trace > 0) 
-	Rprintf("Starting optimization\n");
-      this->kappa = this->kappa_init;
-      do {
-	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
-	vec vcoef(&this->bfgs.coef[0],this->n);
-	satisfied = Stpm2Type::feasible(vcoef % this->parscale);
-	if (!satisfied) this->kappa *= 2.0;   
-      } while ((!satisfied) && this->kappa < 1.0e3);
-      if (this->bfgs.trace > 0 && this->kappa>1.0) Rprintf("kappa=%f\n",this->kappa);
-    }
-    void optimWithConstraintNM(NumericVector init) {
-      bool satisfied;
-      NelderMead2 nm;
-      nm.hessianp = false;
-      nm.parscale = this->parscale;
-      this->kappa = this->kappa_init;
-      do {
-	nm.optim(&optimfunction<This>, init, (void *) this);
-	vec vcoef(&nm.coef[0],this->n);
-	satisfied = Stpm2Type::feasible(vcoef % this->parscale);
-	if (!satisfied) this->kappa *= 2.0;   
-      } while ((!satisfied) && this->kappa < 1.0e3);
-      nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this);
-      this->bfgs.coef = nm.coef;
-      this->bfgs.hessian = nm.hessian;
-    }
-    void optimWithConstraintNlm(NumericVector init) {
-      bool satisfied;
-      Nlm2 nm;
-      nm.gradtl = nm.steptl = this->reltol;
-      nm.parscale = this->parscale;
-      this->kappa = this->kappa_init;
-      do {
-	nm.optim(&optimfunction_nlm<This>, init, (void *) this);
-	vec vcoef(&nm.coef[0],this->n);
-	satisfied = Stpm2Type::feasible(vcoef % this->parscale);
-	if (!satisfied) this->kappa *= 2.0;   
-      } while ((!satisfied) && this->kappa < 1.0e3);
-      nm.hessian = nm.calc_hessian(&optimfunction_nlm<This>, (void *) this);
-      this->bfgs.coef = nm.coef;
-      this->bfgs.hessian = nm.hessian;
-    }
-    void optimWithConstraint(NumericVector init) {
-      if (this->optimiser == "NelderMead")
-	optimWithConstraintNM(init);
-      else if (this->optimiser == "Nlm")
-	optimWithConstraintNlm(init);
-      else 
-	optimWithConstraintBFGS(init);
-    }
+    OPTIM_FUNCTIONS;
     double calc_edf(NumericMatrix hessian0) {
       double max_edf = this->bfgs.hessian.ncol();
       mat m;
@@ -1176,37 +1218,20 @@ namespace rstpm2 {
       coef.resize(this->n-1);
       return Base::feasible(coef);
     }
-    void optimWithConstraint(NumericVector init) {
-      bool satisfied;
-      if (this->bfgs.trace > 0) 
-	Rprintf("Starting optimization\n");
-      this->kappa = this->kappa_init;
-      do {
-	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, this->init, (void *) this);
-	vec vcoef(&this->bfgs.coef[0],this->n); 
-	satisfied = feasible(vcoef % this->parscale);
-	if (!satisfied) this->kappa *= 2.0;   
-      } while ((!satisfied) && this->kappa < 1.0e3);
-    }
-    void optimWithConstraintNM(NumericVector init) {
-      bool satisfied;
-      NelderMead2 nm;
-      nm.hessianp = false;
-      nm.parscale = this->parscale;
-      this->kappa = this->kappa_init;
-      do {
-	nm.optim(&optimfunction<This>, this->init, (void *) this);
-	vec vcoef(&this->bfgs.coef[0],this->n); 
-	satisfied = feasible(vcoef % this->parscale);
-	if (!satisfied) this->kappa *= 2.0;   
-      } while ((!satisfied) && this->kappa < 1.0e3);
-      nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this);
-      this->bfgs.coef = nm.coef;
-      this->bfgs.hessian = nm.hessian;
-    }
+    OPTIM_FUNCTIONS;
     IndexMap clusters, cluster_events;
   };
 
+
+  /** @brief Wrapper for calling an objective_cluster method
+   **/
+  template<class T>
+  double call_objective_cluster(double bi, void * model_ptr) {
+    T * model = static_cast<T *>(model_ptr);
+    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
+    return model->objective_cluster(bi);
+  }    
+  
   /** 
       Extension of stpm2 and pstpm2 to include log-normal shared frailties with a cluster variable
   **/
@@ -1216,6 +1241,7 @@ namespace rstpm2 {
     typedef std::vector<int> Index;
     typedef std::map<int,Index> IndexMap;
     typedef NormalSharedFrailty<Base> This;
+    typedef std::map<int,double> Doubles;
     NormalSharedFrailty(SEXP sexp) : Base(sexp) {
       List list = as<List>(sexp);
       const BaseData fullTmp = {this->X, this->XD, this->X0, this->X1, this->bhazard,
@@ -1278,8 +1304,8 @@ namespace rstpm2 {
       double sigma = exp(0.5*beta[n-1]); // standard deviation
       int K = gauss_x.size(); // number of nodes
       vec wstar = gauss_w/sqrt(datum::pi);
-      double ll = 0.0;
       double constraint = 0.0;
+      double ll = 0.0;
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
 	uvec index = conv_to<uvec>::from(it->second);
 	this->X = full.X.rows(index);
@@ -1299,15 +1325,77 @@ namespace rstpm2 {
 	  eta0 = this->X0 * vbeta;
 	  eta1 = this->X1 * vbeta;
 	}
+	double Lj = 0.0;
 	for (int k=0; k<K; ++k) {
-	  double bi = sqrt(2.0)*sigma*this->gauss_x[k];
+	  double bi = sqrt(2.0)*sigma*this->gauss_x(k);
 	  li_constraint lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
-	  ll += log(dot(exp(lik.li),wstar));
+	  Lj += exp(sum(lik.li))*wstar(k);
 	  constraint += lik.constraint;
 	}
+	ll += log(Lj);
       }
+      resetDesign();
       return -ll;
     }
+    void resetDesign() {
+      this->X = full.X;
+      this->XD = full.XD;
+      this->bhazard = full.bhazard;
+      this->wt = full.wt;
+      this->event = full.event;
+      this->time = full.time;
+      this->X1 = full.X1;
+      this->X0 = full.X0;
+      this->wt0 = full.wt0;
+    }
+
+    double objective_cluster(double bi) {
+      int n = this->bfgs.coef.size();
+      vec beta(&this->bfgs.coef[0],n);
+      vec vbeta(beta); // nu=log(variance) is the last parameter in beta; exp(nu)=sigma^2
+      vbeta.resize(n - 1);
+      vec eta = this->X * vbeta;
+      vec etaD = this->XD * vbeta;
+      vec eta0(1,fill::zeros);
+      vec eta1(1,fill::zeros);
+      if (this->delayed) {
+	eta0 = this->X0 * vbeta;
+	eta1 = this->X1 * vbeta;
+      }
+      li_constraint lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
+      double ll = sum(lik.li);
+      return -ll;
+    }
+    void calculate_modes_and_variances() {
+      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+	uvec index = conv_to<uvec>::from(it->second);
+	this->X = full.X.rows(index);
+	this->XD = full.XD.rows(index);
+	this->bhazard = full.bhazard(index);
+	this->wt = full.wt(index);
+	this->event = full.event(index);
+	this->time = full.time(index);
+	if (this->delayed) {
+	  this->X1 = full.X1.rows(index);
+	  this->X0 = full.X0.rows(full.which0(index)); 
+	  this->wt0 = full.wt0(full.which0(index));
+	}
+	modes[it->first] = Brent_fmin(-100.0,100.0,&(call_objective_cluster<This>),(void *) this,
+				      this->reltol);
+	// Abramowitz and Stegun 1972, p. 884
+	double bi = modes[it->first];
+	double eps = 1e-6;
+	double f1 = objective_cluster(bi+2*eps);
+	double f2 = objective_cluster(bi+eps);
+	double f3 = objective_cluster(bi);
+	double f4 = objective_cluster(bi-eps);
+	double f5 = objective_cluster(bi-2*eps);
+	double hessian = (-f1+16*f2-30*f3+16*f4-f5)/12.0/eps/eps;
+	variances[it->first] = 1.0/hessian;
+      }
+      resetDesign();
+    }
+    
     /// Another way for gradients
     /// gradient of objective
     vec gradient_new(vec beta) {
@@ -1411,9 +1499,9 @@ namespace rstpm2 {
 	}
       }
       rowvec grad = sum(rmult(gradLi,1/Li),0);
-      if (this->bfgs.trace>0) {
-	Rprintf("fdgradient="); Rprint(this->fdgradient(beta)); 
-      }
+      // if (this->bfgs.trace>0) {
+      // 	Rprintf("fdgradient="); Rprint(this->fdgradient(beta)); 
+      // }
       vec gr(n,fill::zeros);
       for (int i=0; i<n; i++) gr(i) = grad(i); // - dconstraint(i);
       return -gr;  
@@ -1423,39 +1511,20 @@ namespace rstpm2 {
       coef.resize(beta.size()-1);
       return Base::feasible(coef);
     }
-    void optimWithConstraint(NumericVector init) {
-      bool satisfied;
-      int n = init.size();
-      if (this->bfgs.trace > 0) 
-	Rprintf("Starting optimization\n");
-      do {
-	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this);
-	vec vcoef(&this->bfgs.coef[0],n); 
-	satisfied = feasible(vcoef % this->parscale);
-	if (!satisfied) this->kappa *= 2.0;   
-      } while ((!satisfied) && this->kappa < 1.0e3);
+    SEXP return_modes() {
+      calculate_modes_and_variances();
+      return wrap(modes);
     }
-    void optimWithConstraintNM(NumericVector init) {
-      bool satisfied;
-      NelderMead2 nm;
-      nm.hessianp = false;
-      nm.parscale = this->parscale;
-      do {
-	nm.optim(&optimfunction<This>, this->init, (void *) this);
-	vec vcoef(&this->bfgs.coef[0],this->n); 
-	satisfied = feasible(vcoef % this->parscale);
-	if (!satisfied) this->kappa *= 2.0;   
-      } while ((!satisfied) && this->kappa < 1.0e3);
-      nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this);
-      this->bfgs.coef = nm.coef;
-      this->bfgs.hessian = nm.hessian;
+    SEXP return_variances() {
+      calculate_modes_and_variances();
+      return wrap(variances);
     }
+    OPTIM_FUNCTIONS;
     IndexMap clusters, cluster_events, cluster_event_indices;
     vec gauss_x, gauss_w;
     BaseData full;
+    Doubles modes, variances;
   };
-
-
 
   template<class T>
   SEXP stpm2_model_output_(SEXP args) {
@@ -1480,6 +1549,10 @@ namespace rstpm2 {
       return wrap(model.gradient(beta));
     else if (return_type == "feasible")
       return wrap(model.feasible(beta));
+    else if (return_type == "modes")
+      return model.return_modes();
+    else if (return_type == "variances")
+      return model.return_variances();
     else if (return_type == "li")
       return wrap(model.li(model.X*beta, model.XD*beta, model.X0*beta, model.X1*beta).li);
     else {
@@ -1513,6 +1586,10 @@ namespace rstpm2 {
       return wrap(model.feasible(beta));
     else if (return_type == "li")
       return wrap(model.li(model.X*beta, model.XD*beta, model.X0*beta, model.X1*beta).li);
+    else if (return_type == "modes")
+      return model.return_modes();
+    else if (return_type == "variances")
+      return model.return_variances();
     else {
       REprintf("Unknown return_type.\n");
       return wrap(-1);
@@ -1583,16 +1660,17 @@ namespace rstpm2 {
 	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogLogLink> > >(args);
       else if (link == "PO")
 	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogitLink> > >(args);
-      // else if (link == "AH")
-      // 	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogLink> > >(args);
-      // else if (link == "probit")
-      // 	return stpm2_model_output_<NormalSharedFrailty<Stpm2<ProbitLink> > >(args);
+      else if (link == "AH")
+      	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogLink> > >(args);
+      else if (link == "probit")
+      	return stpm2_model_output_<NormalSharedFrailty<Stpm2<ProbitLink> > >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
       }
     }
     else if (type=="pstpm2_normal_frailty") {
+      // order is important here
       if (link == "PH")
 	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<LogLogLink> >,SmoothLogH> >(args);
       else if (link == "PO")
@@ -1612,35 +1690,12 @@ namespace rstpm2 {
     }
   }
 
-  // RcppExport SEXP optim_stpm2_nlm(SEXP args) {
-  //   stpm2 data(args);
-  //   data.init = ew_div(data.init,data.parscale);
-  //   int n = data.init.size();
-  //   Nlm nlm;
-  //   nlm.gradtl = nlm.steptl = data.reltol;
-  //   //nlm.method=2; nlm.stepmx=0.0;
-  //   bool satisfied;
-  //   do {
-  //     nlm.optim(& fminfn_nlm<stpm2>, & grfn<stpm2>, data.init, (void *) &data);
-  //     satisfied = fminfn_constraint<stpm2>(n,&nlm.coef[0],(void *) &data);
-  //     if (!satisfied) data.kappa *= 2.0;
-  //   } while (!satisfied && data.kappa<1.0e5);
-  //   nlm.coef = ew_mult(nlm.coef, data.parscale);
-  //   return List::create(_("itrmcd")=wrap(nlm.itrmcd),
-  // 			_("niter")=wrap(nlm.itncnt),
-  // 			_("coef")=wrap(nlm.coef),
-  // 			_("hessian")=wrap(nlm.hessian));
-  // }
-  
-
   // Proof of concept for a Weibull cure model
-  
   struct CureModel {
     int n0, n1, n2;
     mat Xshape, Xscale, Xcure;
     vec time, status;
   };
-
   double fminfn_cureModel(int n, double * beta, void *ex) {
     double ll = 0.0;
     CureModel * data = (CureModel *) ex;
@@ -1656,7 +1711,6 @@ namespace rstpm2 {
     R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
     return -ll;
   }
-
   RcppExport SEXP fitCureModel(SEXP stime, SEXP sstatus, SEXP sXshape,
 			  SEXP sXscale, SEXP sXcure, SEXP sbeta) {
     mat Xshape = as<mat>(sXshape);
@@ -1669,22 +1723,16 @@ namespace rstpm2 {
     int n1=n0+Xscale.n_cols;
     int n2=n1+Xcure.n_cols;
     CureModel data = {n0,n1,n2,Xshape,Xscale,Xcure,time,status};
-    
     NelderMead nm;
     nm.reltol = 1.0e-8;
     nm.maxit = 1000;
     nm.optim(& fminfn_cureModel, init, (void *) &data);
-
     for (int i = 0; i<nm.coef.size(); ++i)
       init[i] = nm.coef[i]; // clone
-    
     return List::create(_("Fmin")=nm.Fmin, 
 			_("coef")=wrap(init),
 			_("fail")=nm.fail,
 			_("hessian")=wrap(nm.hessian));
   }
-
-  // R CMD INSTALL ~/src/R/microsimulation
-  // R -q -e "require(microsimulation); .Call('test_nmmin',1:2,PACKAGE='microsimulation')"
 
 } // anonymous namespace
