@@ -89,7 +89,7 @@ brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime/2,0))
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
       smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
 summary(fit2 <- pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,optimiser="NelderMead")) # OK
-summary(fit2 <- pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,optimiser="BFGS",trace=0))
+summary(fit2 <- pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,optimiser="BFGS",trace=0)) # OK!!
 plot(fit,newdata=data.frame(hormon=1))
 plot(fit2,newdata=data.frame(hormon=1),add=TRUE,lty=2)
 head(predict(fit)) # OK

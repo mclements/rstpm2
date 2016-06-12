@@ -366,9 +366,17 @@ namespace rstpm2 {
     vec parscale;
   };
 
+  // struct for data
+  struct BaseData {
+    mat X, XD, X0, X1; 
+    vec bhazard,wt,wt0,event,time;
+    uvec ind0, map0, which0;
+  };
+
+  
   // Main class for Stpm2 (fully parametric)
   template<class Link = LogLogLink>
-  class Stpm2 : public Link {
+  class Stpm2 : public BaseData, Link {
   public:
     typedef Stpm2<Link> This;
     using Link::h;
@@ -647,13 +655,14 @@ namespace rstpm2 {
     uvec find0() { return map0(find(ind0)); }
     uvec find0(vec index) { return (map0(index))(find(ind0(index))); }
     NumericVector init;
-    mat X, XD, X0, X1; 
-    vec bhazard,wt,wt0,event,time,parscale,ttype;
+    // mat X, XD, X0, X1; 
+    // vec bhazard,wt,wt0,event,time;
+    vec parscale, ttype;
     double kappa_init, kappa, reltol;
     bool delayed, interval;
     int n, N;
     BFGS2 bfgs;
-    uvec ind0, map0, which0;
+    // uvec ind0, map0, which0;
     std::string optimiser;
   };
 
@@ -848,7 +857,6 @@ namespace rstpm2 {
       this->bfgs.coef = nm.coef;
       this->bfgs.hessian = nm.hessian;
     }
-    
     void optimWithConstraintNlm(NumericVector init) {
       bool satisfied;
       Nlm2 nm;
@@ -865,7 +873,6 @@ namespace rstpm2 {
       this->bfgs.coef = nm.coef;
       this->bfgs.hessian = nm.hessian;
     }
-    
     void optimWithConstraint(NumericVector init) {
       if (this->optimiser == "NelderMead")
 	optimWithConstraintNM(init);
@@ -1211,6 +1218,10 @@ namespace rstpm2 {
     typedef NormalSharedFrailty<Base> This;
     NormalSharedFrailty(SEXP sexp) : Base(sexp) {
       List list = as<List>(sexp);
+      const BaseData fullTmp = {this->X, this->XD, this->X0, this->X1, this->bhazard,
+				this->wt, this->wt0, this->event, this->time,
+				this->ind0, this->map0, this->which0};
+      full = fullTmp;
       IntegerVector cluster = as<IntegerVector>(list["cluster"]);
       gauss_x = as<vec>(list["gauss_x"]); // node values
       gauss_w = as<vec>(list["gauss_w"]); // probability weights
@@ -1255,9 +1266,51 @@ namespace rstpm2 {
       // ll -= constraint;
       return -ll;  
     }
-/// Another way for gradients
-/// gradient of objective
-vec gradient_new(vec beta) {
+    // struct BaseData {
+    //   mat X, XD, X0, X1; 
+    //   vec bhazard,wt,wt0,event,time;
+    //   uvec ind0, map0, which0;
+    // };
+    double objective_new(vec beta) {
+      int n = beta.size();
+      vec vbeta(beta); // nu=log(variance) is the last parameter in beta; exp(nu)=sigma^2
+      vbeta.resize(n-1);
+      double sigma = exp(0.5*beta[n-1]); // standard deviation
+      int K = gauss_x.size(); // number of nodes
+      vec wstar = gauss_w/sqrt(datum::pi);
+      double ll = 0.0;
+      double constraint = 0.0;
+      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+	uvec index = conv_to<uvec>::from(it->second);
+	this->X = full.X.rows(index);
+	this->XD = full.XD.rows(index);
+	this->bhazard = full.bhazard(index);
+	this->wt = full.wt(index);
+	this->event = full.event(index);
+	this->time = full.time(index);
+	vec eta = this->X * vbeta;
+	vec etaD = this->XD * vbeta;
+	vec eta0(1,fill::zeros);
+	vec eta1(1,fill::zeros);
+	if (this->delayed) {
+	  this->X1 = full.X1.rows(index);
+	  this->X0 = full.X0.rows(full.which0(index)); // special
+	  this->wt0 = full.wt0(full.which0(index)); // special
+	  eta0 = this->X0 * vbeta;
+	  eta1 = this->X1 * vbeta;
+	}
+	for (int k=0; k<K; ++k) {
+	  double bi = sqrt(2.0)*sigma*this->gauss_x[k];
+	  li_constraint lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
+	  ll += log(dot(exp(lik.li),wstar));
+	  constraint += lik.constraint;
+	}
+      }
+      return -ll;
+    }
+    /// Another way for gradients
+    /// gradient of objective
+    vec gradient_new(vec beta) {
 	int n = beta.size();
 	double sigma = exp(0.5*beta[n-1]);
 	mat Z(this->N,1,fill::ones);
@@ -1316,7 +1369,7 @@ vec gradient_new(vec beta) {
 	vec gr(n,fill::zeros);
 	for (int i=0; i<n; i++) gr(i) = grad(i); // - dconstraint(i);
 	return -gr;  
-}
+    }
     vec gradient(vec beta) {
       int n = beta.size();
       double sigma = exp(0.5*beta[n-1]);
@@ -1399,6 +1452,7 @@ vec gradient_new(vec beta) {
     }
     IndexMap clusters, cluster_events, cluster_event_indices;
     vec gauss_x, gauss_w;
+    BaseData full;
   };
 
 
