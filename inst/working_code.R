@@ -214,11 +214,13 @@ summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
 require(rstpm2)
 require(frailtypack)
 data(dataAdditive)
-debug(pstpm2)
+##debug(pstpm2)
 system.time(mod2n <- pstpm2(Surv(t1,t2,event)~var1,
                            data=dataAdditive,
                            RandDist="LogN",
+                           optimiser="NelderMead",
                            smooth.formula=~s(t2),
+                           ##sp=0.07723242,
                            cluster=dataAdditive$group, nodes=20, trace=1))
 
 localargs <- mod2n@args

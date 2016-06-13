@@ -1264,7 +1264,7 @@ namespace rstpm2 {
 	Objective function for a log-normal shared frailty
 	Assumes that weights == 1.
     **/
-    double objective(vec beta) {
+    double objective_old(vec beta) {
       int n = beta.size();
       vec vbeta(beta); // nu=log(variance) is the last parameter in beta; exp(nu)=sigma^2
       vbeta.resize(n-1);
@@ -1307,21 +1307,12 @@ namespace rstpm2 {
       double constraint = 0.0;
       double ll = 0.0;
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
-	uvec index = conv_to<uvec>::from(it->second);
-	this->X = full.X.rows(index);
-	this->XD = full.XD.rows(index);
-	this->bhazard = full.bhazard(index);
-	this->wt = full.wt(index);
-	this->event = full.event(index);
-	this->time = full.time(index);
+	clusterDesign(it->second);
 	vec eta = this->X * vbeta;
 	vec etaD = this->XD * vbeta;
 	vec eta0(1,fill::zeros);
 	vec eta1(1,fill::zeros);
 	if (this->delayed) {
-	  this->X1 = full.X1.rows(index);
-	  this->X0 = full.X0.rows(full.which0(index)); // special
-	  this->wt0 = full.wt0(full.which0(index)); // special
 	  eta0 = this->X0 * vbeta;
 	  eta1 = this->X1 * vbeta;
 	}
@@ -1337,6 +1328,49 @@ namespace rstpm2 {
       resetDesign();
       return -ll;
     }
+
+    double objective(vec beta) {
+      int n = beta.size();
+      this->beta = beta; // used by objective_cluster()
+      vec vbeta(beta); // nu=log(variance) is the last parameter in beta; exp(nu)=sigma^2
+      vbeta.resize(n-1);
+      int K = gauss_x.size(); // number of nodes
+      double constraint = 0.0;
+      double ll = 0.0;
+      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+	clusterDesign(it->second);
+	double mu = Brent_fmin(-100.0,100.0,&(call_objective_cluster<This>),(void *) this,
+				      this->reltol);
+	// Abramowitz and Stegun 1972, p. 884
+	double eps = 1e-6;
+	double f1 = objective_cluster(mu+2*eps),
+	  f2 = objective_cluster(mu+eps),
+	  f3 = objective_cluster(mu),
+	  f4 = objective_cluster(mu-eps),
+	  f5 = objective_cluster(mu-2*eps);
+	double hessian = (-f1+16*f2-30*f3+16*f4-f5)/12.0/eps/eps;
+	double taustar = sqrt(2.0/hessian); // sqrt(2)*tau
+	vec eta = this->X * vbeta;
+	vec etaD = this->XD * vbeta;
+	vec eta0(1,fill::zeros);
+	vec eta1(1,fill::zeros);
+	if (this->delayed) {
+	  eta0 = this->X0 * vbeta;
+	  eta1 = this->X1 * vbeta;
+	}
+	double Lj = 0.0;
+	for (int k=0; k<K; ++k) {
+	  double bi = mu + taustar*this->gauss_x(k);
+	  li_constraint lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
+	  Lj += taustar*exp(sum(lik.li))*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
+	  constraint += lik.constraint;
+	}
+	ll += log(Lj);
+      }
+      resetDesign();
+      return -(ll - constraint);
+    }
+
     void resetDesign() {
       this->X = full.X;
       this->XD = full.XD;
@@ -1348,12 +1382,24 @@ namespace rstpm2 {
       this->X0 = full.X0;
       this->wt0 = full.wt0;
     }
-
-    double objective_cluster(double bi) {
-      int n = this->bfgs.coef.size();
-      vec beta(&this->bfgs.coef[0],n);
-      vec vbeta(beta); // nu=log(variance) is the last parameter in beta; exp(nu)=sigma^2
-      vbeta.resize(n - 1);
+    void clusterDesign(Index vindex) {
+      uvec index = conv_to<uvec>::from(vindex);
+      this->X = full.X.rows(index);
+      this->XD = full.XD.rows(index);
+      this->bhazard = full.bhazard(index);
+      this->wt = full.wt(index);
+      this->event = full.event(index);
+      this->time = full.time(index);
+      if (this->delayed) {
+	this->X1 = full.X1.rows(index);
+	this->X0 = full.X0.rows(full.which0(index)); 
+	this->wt0 = full.wt0(full.which0(index));
+      }
+    }
+    double objective_cluster(double bi, bool neglog = true) {
+      vec vbeta = this->beta; // nu=log(variance) is the last parameter in beta; exp(nu)=sigma^2
+      double sigma = exp(0.5*vbeta(this->n-1)); // standard deviation
+      vbeta.resize(this->n - 1);
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
       vec eta0(1,fill::zeros);
@@ -1363,23 +1409,16 @@ namespace rstpm2 {
 	eta1 = this->X1 * vbeta;
       }
       li_constraint lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
-      double ll = sum(lik.li);
-      return -ll;
+      double ll = sum(lik.li) + R::dnorm(bi,0.0,sigma,1);
+      return neglog ? -ll : exp(ll);
     }
+    // double fdhessian(boost::function<double(double x)> f, double x, double eps = 1.0e-6) {
+    //   return (-f(x+2*eps)+16*f(x+eps)-30*f(x)+16*f(x-eps)-f(x-2*eps))/12.0/eps/eps;
+    // }
     void calculate_modes_and_variances() {
+      this->beta = this->bfgs.coef;
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
-	uvec index = conv_to<uvec>::from(it->second);
-	this->X = full.X.rows(index);
-	this->XD = full.XD.rows(index);
-	this->bhazard = full.bhazard(index);
-	this->wt = full.wt(index);
-	this->event = full.event(index);
-	this->time = full.time(index);
-	if (this->delayed) {
-	  this->X1 = full.X1.rows(index);
-	  this->X0 = full.X0.rows(full.which0(index)); 
-	  this->wt0 = full.wt0(full.which0(index));
-	}
+	clusterDesign(it->second);
 	modes[it->first] = Brent_fmin(-100.0,100.0,&(call_objective_cluster<This>),(void *) this,
 				      this->reltol);
 	// Abramowitz and Stegun 1972, p. 884
@@ -1524,6 +1563,7 @@ namespace rstpm2 {
     vec gauss_x, gauss_w;
     BaseData full;
     Doubles modes, variances;
+    vec beta;
   };
 
   template<class T>
