@@ -210,7 +210,6 @@ summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
                      logH.formula=~nsx(rectime,df=3),
                      tvc.formula=~hormon:nsx(rectime,df=3,stata=TRUE)))
 
-
 require(rstpm2)
 require(frailtypack)
 data(dataAdditive)
@@ -218,10 +217,12 @@ data(dataAdditive)
 system.time(mod2n <- pstpm2(Surv(t1,t2,event)~var1,
                            data=dataAdditive,
                            RandDist="LogN",
-                           optimiser="NelderMead",
-                           smooth.formula=~s(t2),
-                           ##sp=0.07723242,
+                           ##optimiser="NelderMead",
+                           smooth.formula=~s(log(t2)),
+                           ## sp=0.07723242,
+                           adaptive=TRUE,
                            cluster=dataAdditive$group, nodes=20, trace=1))
+summary(mod2n)
 
 localargs <- mod2n@args
 localargs$return_type <- "variances"
@@ -232,13 +233,13 @@ localargs$return_type <- "modes"
 system.time(mod2nb <- stpm2(Surv(t1,t2,event)~var1,
                            data=dataAdditive,
                            RandDist="LogN",
-                           logH.formula=~ns(t2,df=7),
+                           logH.formula=~ns(log(t2),df=7),
                            cluster=dataAdditive$group, nodes=20))
 
 system.time(mod2g <- pstpm2(Surv(t1,t2,event)~var1,
                            data=dataAdditive,
                            RandDist="Gamma",
-                           smooth.formula=~s(t2),
+                           smooth.formula=~s(log(t2)),
                            cluster=dataAdditive$group))
 
 
@@ -260,19 +261,19 @@ system.time(mod2n <- stpm2(Surv(t1,t2,event)~var1,
                            data=dataAdditive,
                            RandDist="LogN",
                            optimiser="NelderMead",
-                           logH.formula=~ns(t2,df=7),
+                           logH.formula=~ns(log(t2),df=7),
                            cluster=dataAdditive$group, nodes=20))
 system.time(mod2nb <- stpm2(Surv(t1,t2,event)~var1,
                            data=dataAdditive,
                            RandDist="LogN",
-                           logH.formula=~ns(t2,df=7),
+                           logH.formula=~ns(log(t2),df=7),
                            cluster=dataAdditive$group, nodes=20))
 
 system.time(mod3 <- pstpm2(Surv(t1,t2,event)~var1,
                            data=dataAdditive,
                            RandDist="LogN",
                            criterion="BIC",
-                           smooth.formula=~s(t2),
+                           smooth.formula=~s(log(t2)),
                            cluster=dataAdditive$group, nodes=20))
 
 system.time(mod3 <- coxph(Surv(t1,t2,event)~frailty(group,distribution="gamma")+var1,data=dataAdditive))

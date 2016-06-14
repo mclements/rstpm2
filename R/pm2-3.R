@@ -438,7 +438,8 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                   optimiser=c("BFGS","NelderMead"),
                      reltol=1.0e-8, trace = 0,
                      link.type=c("PH","PO","probit","AH"), 
-                     frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"),
+                  frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"),
+                  adaptive = TRUE,
                      contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
@@ -632,6 +633,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x
         args$gauss_w <- rule$w
+        args$adaptive <- adaptive
     }
     negll <- function(beta) {
         localargs <- args
@@ -1090,7 +1092,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=1, trace = 0,
                    link.type=c("PH","PO","probit","AH"),
                   optimiser=c("BFGS","NelderMead","Nlm"),
-                   frailty=!is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,RandDist=c("Gamma","LogN"),
+                  frailty=!is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,RandDist=c("Gamma","LogN"),
+                  adaptive=TRUE,
                    reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-5),outer_optim=1,
                    contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
@@ -1328,6 +1331,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x
         args$gauss_w <- rule$w
+        args$adaptive <- adaptive
     }
     ## penalty function
     pfun <- function(beta,sp) {
