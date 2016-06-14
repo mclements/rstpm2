@@ -221,8 +221,13 @@ system.time(mod2n <- pstpm2(Surv(t1,t2,event)~var1,
                            smooth.formula=~s(log(t2)),
                            ## sp=0.07723242,
                            adaptive=TRUE,
-                           cluster=dataAdditive$group, nodes=20, trace=1))
+                           cluster=dataAdditive$group, nodes=20, trace=0))
 summary(mod2n)
+
+localargs <- mod2n@args
+localargs$return_type <- "gradient"
+.Call("model_output", localargs, package="rstpm2")
+
 
 localargs <- mod2n@args
 localargs$return_type <- "variances"

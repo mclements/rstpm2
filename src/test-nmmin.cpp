@@ -1341,6 +1341,7 @@ namespace rstpm2 {
 	// cluster-specific mode
 	double mu = Brent_fmin(-100.0,100.0,&(call_objective_cluster<This>),(void *) this,
 				      this->reltol);
+	muhat[it->first] = mu;
 	// cluster-specific variance
 	// Abramowitz and Stegun 1972, p. 884
 	double eps = 1e-6;
@@ -1351,6 +1352,7 @@ namespace rstpm2 {
 	  f5 = objective_cluster(mu-2*eps);
 	double hessian = (-f1+16*f2-30*f3+16*f4-f5)/12.0/eps/eps;
 	double tau = sqrt(1.0/hessian);
+	tauhat[it->first] = tau;
 	vec eta = this->X * vbeta;
 	vec etaD = this->XD * vbeta;
 	vec eta0(1,fill::zeros);
@@ -1441,7 +1443,6 @@ namespace rstpm2 {
     vec gradient(vec beta) {
       return this->adaptive ? gradient_adaptive(beta) : gradient_nonadaptive(beta);
     }
-    
     vec gradient_adaptive(vec beta) {
       int n = beta.size();
       this->objective_cluster_beta = beta; // for use by objective_cluster()
@@ -1455,19 +1456,9 @@ namespace rstpm2 {
       rowvec gradLi(n,fill::zeros);
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
 	clusterDesign(it->second);
-	// cluster-specific mode
-	double mu = Brent_fmin(-100.0,100.0,&(call_objective_cluster<This>),(void *) this,
-				      this->reltol);
-	// cluster-specific variance
-	// Abramowitz and Stegun 1972, p. 884
-	double eps = 1e-6;
-	double f1 = objective_cluster(mu+2*eps),
-	  f2 = objective_cluster(mu+eps),
-	  f3 = objective_cluster(mu),
-	  f4 = objective_cluster(mu-eps),
-	  f5 = objective_cluster(mu-2*eps);
-	double hessian = (-f1+16*f2-30*f3+16*f4-f5)/12.0/eps/eps;
-	double tau = sqrt(1.0/hessian);
+	// cluster-specific modes and variances (calculated in the objective function)
+	double mu = muhat[it->first];
+	double tau = tauhat[it->first];
 	mat Z(this->X.n_rows,1,fill::ones);
 	mat ZD(this->XD.n_rows,1,fill::zeros);
 	mat Z0(this->X0.n_rows,1,fill::ones);
@@ -1502,7 +1493,6 @@ namespace rstpm2 {
       resetDesign();
       return -gr;
     }
-
 
     vec gradient_nonadaptive(vec beta) {
 	int n = beta.size();
@@ -1631,6 +1621,7 @@ namespace rstpm2 {
     BaseData full;
     Doubles modes, variances;
     vec objective_cluster_beta;
+    Doubles muhat, tauhat;
     bool adaptive;
   };
 
