@@ -1451,8 +1451,7 @@ namespace rstpm2 {
       double sigma = exp(0.5*vbeta(this->n-1)); // standard deviation
       vbeta.resize(n-1);
       int K = gauss_x.size(); // number of nodes
-      double constraint = 0.0;
-      rowvec dconstraint(n,fill::zeros); 
+      // rowvec dconstraint(n,fill::zeros); 
       rowvec gradLi(n,fill::zeros);
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
 	clusterDesign(it->second);
@@ -1479,12 +1478,11 @@ namespace rstpm2 {
 	  li_constraint lik = Base::li(etastar,etaDstar,eta0star,eta1star);
 	  gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star);
 	  double g = exp(sum(lik.li)+R::dnorm(bi,0.0,sigma,1));
-	  gradlik.gradli.col(gradlik.gradli.n_cols-1) = gradlik.gradli.col(gradlik.gradli.n_cols-1)*0.0 - 0.5 + bi*bi/2/sigma/sigma;
+	  gradlik.gradli.col(gradlik.gradli.n_cols-1) = gradlik.gradli.col(gradlik.gradli.n_cols-1)*bi*0.5; //-0.5*bi*bi/sigma/sigma;
 	  gradlik.gradli *= g;
 	  Lj += sqrt(2.0)*tau*g*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
 	  numerator += sqrt(2.0)*tau*sum(gradlik.gradli,0)*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
-	  constraint += lik.constraint;
-	  dconstraint += sum(gradlik.constraint,0);
+	  // dconstraint += sum(gradlik.constraint,0);
 	}
 	gradLi += numerator/Lj;
       }
@@ -1644,8 +1642,10 @@ namespace rstpm2 {
     }
     else if (return_type == "objective")
       return wrap(model.objective(beta));
-    else if (return_type == "gradient")
+    else if (return_type == "gradient") {
+      model.objective(beta); // only needed for updating NormalSharedFrailty
       return wrap(model.gradient(beta));
+    }
     else if (return_type == "feasible")
       return wrap(model.feasible(beta));
     else if (return_type == "modes")
@@ -1675,8 +1675,10 @@ namespace rstpm2 {
       return wrap(model.objective(beta));
     else if (return_type == "objective0")
       return wrap(model.objective0(beta));
-    else if (return_type == "gradient")
+    else if (return_type == "gradient") {
+      model.objective(beta);
       return wrap(model.gradient(beta));
+    }
     else if (return_type == "gradient0")
       return wrap(model.gradient0(beta));
     else if (return_type == "constraint")

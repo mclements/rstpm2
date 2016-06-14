@@ -210,6 +210,7 @@ summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
                      logH.formula=~nsx(rectime,df=3),
                      tvc.formula=~hormon:nsx(rectime,df=3,stata=TRUE)))
 
+## Frailty model
 require(rstpm2)
 require(frailtypack)
 data(dataAdditive)
@@ -220,14 +221,29 @@ system.time(mod2n <- pstpm2(Surv(t1,t2,event)~var1,
                            ##optimiser="NelderMead",
                            smooth.formula=~s(log(t2)),
                            ## sp=0.07723242,
-                           adaptive=TRUE,
-                           cluster=dataAdditive$group, nodes=20, trace=0))
+                           adaptive=FALSE,
+                           cluster=dataAdditive$group, nodes=10, trace=0))
 summary(mod2n)
 
 localargs <- mod2n@args
+localargs$init <- mod2n@args$init*1.1
+localargs$adaptive=TRUE
 localargs$return_type <- "gradient"
 .Call("model_output", localargs, package="rstpm2")
-
+fdgrad <- function(obj,eps=1e-6) {
+    args <- obj@args
+    args$init <- args$init*1.1
+    sapply(1:length(args$init), function(i) {
+        args$return_type <- "objective"
+        args$init[i] <- args$init[i]+eps
+        f1 <- .Call("model_output", args, package="rstpm2")
+        args$init[i] <- args$init[i]-2*eps
+        f2 <- .Call("model_output", args, package="rstpm2")
+        (f1-f2)/2/eps
+    })
+}
+fdgrad(mod2n)
+## OK for adaptive=FALSE
 
 localargs <- mod2n@args
 localargs$return_type <- "variances"
