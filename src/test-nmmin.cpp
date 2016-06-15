@@ -1468,6 +1468,7 @@ namespace rstpm2 {
 	mat X1star = join_horiz(this->X1, Z1);
 	double Lj = 0.0;
 	rowvec numerator(this->n,fill::zeros);
+	rowvec numeratorstar(this->n,fill::zeros);
 	for (int k=0; k<K; ++k) {
 	  double bi = mu + sqrt(2.0)*tau*this->gauss_x(k);
 	  betastar[betastar.size()-1] = bi;
@@ -1475,13 +1476,20 @@ namespace rstpm2 {
 	  vec etaDstar = XDstar * betastar;
 	  vec eta0star = X0star * betastar;
 	  vec eta1star = X1star * betastar;
+	  // li_constraint lik = Base::li(etastar,etaDstar,eta0star,eta1star);
+	  // gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star);
+	  // double g = exp(sum(lik.li)+R::dnorm(bi,0.0,sigma,1));
+	  // gradlik.gradli.col(gradlik.gradli.n_cols-1) = gradlik.gradli.col(gradlik.gradli.n_cols-1)*bi*0.5; //-0.5*bi*bi/sigma/sigma;
+	  // gradlik.gradli *= g;
+	  // Lj += sqrt(2.0)*tau*g*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
+	  // numerator += sqrt(2.0)*tau*sum(gradlik.gradli,0)*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
 	  li_constraint lik = Base::li(etastar,etaDstar,eta0star,eta1star);
+	  double g = exp(sum(lik.li) + R::dnorm(bi,0.0,sigma,1));
 	  gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star);
-	  double g = exp(sum(lik.li)+R::dnorm(bi,0.0,sigma,1));
-	  gradlik.gradli.col(gradlik.gradli.n_cols-1) = gradlik.gradli.col(gradlik.gradli.n_cols-1)*bi*0.5; //-0.5*bi*bi/sigma/sigma;
-	  gradlik.gradli *= g;
 	  Lj += sqrt(2.0)*tau*g*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
-	  numerator += sqrt(2.0)*tau*sum(gradlik.gradli,0)*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
+	  numeratorstar += sqrt(2.0)*tau*g*sum(gradlik.gradli,0)*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
+	  numerator(span(0,n-2)) = numeratorstar(span(0,n-2));
+	  numerator(n-1) += sqrt(2.0)*tau*gauss_w(k)*exp(gauss_x(k)*gauss_x(k))*g*(- 0.5 + bi*bi/2/sigma/sigma);
 	  // dconstraint += sum(gradlik.constraint,0);
 	}
 	gradLi += numerator/Lj;
