@@ -221,8 +221,8 @@ system.time(mod2n <- pstpm2(Surv(t1,t2,event)~var1,
                            ##optimiser="NelderMead",
                            smooth.formula=~s(log(t2)),
                            ## sp=0.07723242,
-                           adaptive=FALSE,
-                           cluster=dataAdditive$group, nodes=20, trace=0))
+                           adaptive=TRUE,
+                           cluster=dataAdditive$group, nodes=10, trace=0))
 summary(mod2n)
 
 localargs <- mod2n@args
@@ -327,6 +327,25 @@ lines(tt,predict(fit1,newdata=data.frame(right=tt),type="density"),col="blue")
 ## plot(estimate, type="l", ylim=c(0,0.15))
 ## lines(tt,dweibull(tt,weibullShape,weibullScale),lty=2)
 
+
+library(rstpm2)
+library(survival)
+data(veteran)
+## Re-define variables
+veteran <- dplyr::mutate(veteran,
+                         squamous = ifelse(celltype=="squamous",1,0),
+                         smallcell = ifelse(celltype=="smallcell",1,0),
+                         adeno = ifelse(celltype=="adeno",1,0),
+                         large = ifelse(celltype=="large",1,0),
+                         prior.ty = ifelse(prior==0,0,1),
+                         trt = ifelse(trt==2,1,0),
+                         high = ifelse(karno > 50,1,0))
+lung<-subset(veteran, prior==0) ## patients with no prior therapy
+## Why no optimal smoothing parameters?? divergence with version 1.3.3
+pfit <-pstpm2(Surv(time,status==1) ~ adeno + smallcell + squamous,
+                          smooth.formula = ~s(log(time)) + s(karno), data=lung, link.type="PO", trace = 1)
+
+ 
 
 ## two-dimensional smoothers
 x1 <- x2 <- seq(0,1,length=11)

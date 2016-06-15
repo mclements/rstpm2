@@ -366,70 +366,6 @@ namespace rstpm2 {
     vec parscale;
   };
 
-  /** @brief Curiously recurring template pattern for optimisation with constraints
-   **/
-  template<class That>
-  class OptimWithConstraint {
-  public:
-    void optimWithConstraintBFGS(NumericVector init) {
-      That* that = static_cast<That *>(this); 
-      bool satisfied;
-      that->kappa = that->kappa_init;
-      do {
-	that->bfgs.optim(&optimfunction<That>, &optimgradient<That>, init, (void *) that); 
-	vec vcoef(&that->bfgs.coef[0],that->n);
-	satisfied = that->feasible(vcoef % that->parscale);
-	if (!satisfied) that->kappa *= 2.0;
-      } while ((!satisfied) && that->kappa < 1.0e3);
-      if (that->bfgs.trace > 0 && that->kappa>1.0) Rprintf("kappa=%f\n",that->kappa); 
-    }
-    void optimWithConstraintNM(NumericVector init) {
-      That* that = static_cast<That *>(this); 
-      bool satisfied;
-      NelderMead2 nm;
-      nm.hessianp = false;
-      nm.parscale = that->parscale;
-      that->kappa = that->kappa_init;
-      do {
-	nm.optim(&optimfunction<That>, init, (void *) that);
-	vec vcoef(&nm.coef[0],that->n);
-	satisfied = that->feasible(vcoef % that->parscale);
-	if (!satisfied) that->kappa *= 2.0;
-      } while ((!satisfied) && that->kappa < 1.0e3);
-      nm.hessian = nm.calc_hessian(&optimfunction<That>, (void *) that); 
-      that->bfgs.coef = nm.coef;
-      that->bfgs.hessian = nm.hessian;
-    }
-    void optimWithConstraintNlm(NumericVector init) {
-      That* that = static_cast<That *>(this); 
-      bool satisfied;
-      Nlm2 nm;
-      nm.gradtl = nm.steptl = that->reltol;
-      nm.parscale = that->parscale;
-      that->kappa = that->kappa_init;
-      do {
-	nm.optim(&optimfunction_nlm<That>, init, (void *) that);
-	vec vcoef(&nm.coef[0],that->n);
-	satisfied = that->feasible(vcoef % that->parscale);
-	if (!satisfied) that->kappa *= 2.0;
-      } while ((!satisfied) && that->kappa < 1.0e3);
-      if (that->bfgs.trace > 0 && that->kappa>1.0) Rprintf("kappa=%f\n",that->kappa); 
-      nm.hessian = nm.calc_hessian(&optimfunction_nlm<That>, (void *) that); 
-      that->bfgs.coef = nm.coef;
-      that->bfgs.hessian = nm.hessian;
-    }
-    void optimWithConstraint(NumericVector init) {
-      That* that = static_cast<That *>(this); 
-      if (that->bfgs.trace > 0) Rprintf("Starting optimization\n");
-      if (that->optimiser == "NelderMead")
-	optimWithConstraintNM(init);
-      else if (that->optimiser == "Nlm")
-	optimWithConstraintNlm(init);
-      else
-	optimWithConstraintBFGS(init);
-    }
-  };
-
   /** @brief Macro to define the optimisation functions. Defined as a macro
       because the C API needs to pass a 'This' template parameter
       which varies for the different classes (alternatively, this
@@ -1035,7 +971,7 @@ namespace rstpm2 {
 	nm.optim(&pstpm2_multivariate_step<This>, logsp, (void *) this);
 	satisfied = true;
 	for (size_t i=0; i < sp.size(); ++i)
-	  if (logsp[i]< -7.0 || logsp[i] > 7.0) satisfied = false;
+	  if (logsp[i]< -9.0 || logsp[i] > 9.0) satisfied = false;
 	if (!satisfied) this->kappa *= 2.0;
       } while (!satisfied && this->kappa<1.0e5);
       for (int i=0; i < nm.coef.size(); ++i)
@@ -1060,7 +996,7 @@ namespace rstpm2 {
   nm.optim(&pstpm2_multivariate_stepNlm<This>, logsp, (void *) this);
 	satisfied = true;
 	for (size_t i=0; i < sp.size(); ++i)
-	  if (logsp[i]< -7.0 || logsp[i] > 7.0) satisfied = false;
+	  if (logsp[i]< -9.0 || logsp[i] > 9.0) satisfied = false;
 	if (!satisfied) this->kappa *= 2.0;
       } while (!satisfied && this->kappa<1.0e5);
       for (int i=0; i < nm.coef.size(); ++i)
@@ -1374,7 +1310,6 @@ namespace rstpm2 {
       resetDesign();
       return -(ll - constraint);
     }
-
     void resetDesign() {
       this->X = full.X;
       this->XD = full.XD;
@@ -1439,7 +1374,6 @@ namespace rstpm2 {
       }
       resetDesign();
     }
-
     vec gradient(vec beta) {
       return this->adaptive ? gradient_adaptive(beta) : gradient_nonadaptive(beta);
     }
@@ -1468,7 +1402,6 @@ namespace rstpm2 {
 	mat X1star = join_horiz(this->X1, Z1);
 	double Lj = 0.0;
 	rowvec numerator(this->n,fill::zeros);
-	rowvec numeratorstar(this->n,fill::zeros);
 	for (int k=0; k<K; ++k) {
 	  double bi = mu + sqrt(2.0)*tau*this->gauss_x(k);
 	  betastar[betastar.size()-1] = bi;
@@ -1476,19 +1409,12 @@ namespace rstpm2 {
 	  vec etaDstar = XDstar * betastar;
 	  vec eta0star = X0star * betastar;
 	  vec eta1star = X1star * betastar;
-	  // li_constraint lik = Base::li(etastar,etaDstar,eta0star,eta1star);
-	  // gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star);
-	  // double g = exp(sum(lik.li)+R::dnorm(bi,0.0,sigma,1));
-	  // gradlik.gradli.col(gradlik.gradli.n_cols-1) = gradlik.gradli.col(gradlik.gradli.n_cols-1)*bi*0.5; //-0.5*bi*bi/sigma/sigma;
-	  // gradlik.gradli *= g;
-	  // Lj += sqrt(2.0)*tau*g*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
-	  // numerator += sqrt(2.0)*tau*sum(gradlik.gradli,0)*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
 	  li_constraint lik = Base::li(etastar,etaDstar,eta0star,eta1star);
 	  double g = exp(sum(lik.li) + R::dnorm(bi,0.0,sigma,1));
 	  gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star);
 	  Lj += sqrt(2.0)*tau*g*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
-	  numeratorstar += sqrt(2.0)*tau*g*sum(gradlik.gradli,0)*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
-	  numerator(span(0,n-2)) = numeratorstar(span(0,n-2));
+	  rowvec numeratorstar = sqrt(2.0)*tau*g*sum(gradlik.gradli,0)*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
+	  numerator(span(0,n-2)) += numeratorstar(span(0,n-2));
 	  numerator(n-1) += sqrt(2.0)*tau*gauss_w(k)*exp(gauss_x(k)*gauss_x(k))*g*(- 0.5 + bi*bi/2/sigma/sigma);
 	  // dconstraint += sum(gradlik.constraint,0);
 	}
@@ -1499,7 +1425,6 @@ namespace rstpm2 {
       resetDesign();
       return -gr;
     }
-
     vec gradient_nonadaptive(vec beta) {
 	int n = beta.size();
 	double sigma = exp(0.5*beta[n-1]);
