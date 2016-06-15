@@ -210,6 +210,19 @@ summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
                      logH.formula=~nsx(rectime,df=3),
                      tvc.formula=~hormon:nsx(rectime,df=3,stata=TRUE)))
 
+require(foreign)
+require(rstpm2)
+stmixed <- read.dta("http://fmwww.bc.edu/repec/bocode/s/stmixed_example2.dta")
+system.time(r <- stpm2(Surv(stime,event)~treat,data=stmixed,cluster=stmixed$trial))
+system.time(r <- stpm2(Surv(stime,event)~treat,data=stmixed,cluster=stmixed$trial,RandDist="LogN",
+                       nodes=20))
+summary(r)
+
+require(mexhaz)
+system.time(mix <-
+                mexhaz(formula=Surv(stime,event)~treat, data=stmixed, base="exp.bs",degree=3,
+                       random="trial", verbose=0))
+
 ## Frailty model
 require(rstpm2)
 require(frailtypack)

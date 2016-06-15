@@ -1166,6 +1166,20 @@ namespace rstpm2 {
     R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
     return model->objective_cluster(bi);
   }    
+  /** @brief Wrapper for calling a gradient_cluster method
+   **/
+  template<class T>
+  double call_objective_cluster_bfgs(int n, double *bi, void * model_ptr) {
+    T * model = static_cast<T *>(model_ptr);
+    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
+    return model->objective_cluster(*bi);
+  }    
+  template<class T>
+  void call_gradient_cluster(int dim, double * bi, double* out, void * model_ptr) {
+    T * model = static_cast<T *>(model_ptr);
+    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
+    *out = model->gradient_cluster(*bi);
+  }    
   /** 
       Extension of stpm2 and pstpm2 to include log-normal shared frailties with a cluster variable
   **/
@@ -1186,6 +1200,7 @@ namespace rstpm2 {
       gauss_x = as<vec>(list["gauss_x"]); // node values
       gauss_w = as<vec>(list["gauss_w"]); // probability weights
       adaptive = as<bool>(list["adaptive"]);
+      first = true;
       // wragged array indexed by a map of vectors
       for (int id=0; id<cluster.size(); ++id) {
 	clusters[cluster[id]].push_back(id);
@@ -1239,7 +1254,7 @@ namespace rstpm2 {
       double constraint = 0.0;
       double ll = 0.0;
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
-	clusterDesign(it->second);
+	clusterDesign(it);
 	vec eta = this->X * vbeta;
 	vec etaD = this->XD * vbeta;
 	vec eta0(n-1,fill::zeros);
@@ -1273,10 +1288,19 @@ namespace rstpm2 {
       double constraint = 0.0;
       double ll = 0.0;
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
-	clusterDesign(it->second);
+	clusterDesign(it);
 	// cluster-specific mode
-	double mu = Brent_fmin(-100.0,100.0,&(call_objective_cluster<This>),(void *) this,
-				      this->reltol);
+	double mu;
+	if (!first) {
+	  mu = Brent_fmin(muhat[it->first]-1e-1,
+			  muhat[it->first]+1e-1,
+			  &(call_objective_cluster<This>),
+			  (void *) this,
+			  this->reltol);
+	}
+	if (first || std::abs(mu-muhat[it->first])>(1e-1-1e-5))
+	  mu = Brent_fmin(-100.0,100.0,&(call_objective_cluster<This>),(void *) this,
+			  this->reltol);
 	muhat[it->first] = mu;
 	// cluster-specific variance
 	// Abramowitz and Stegun 1972, p. 884
@@ -1308,6 +1332,7 @@ namespace rstpm2 {
 	ll += log(Lj);
       }
       resetDesign();
+      first = false;
       return -(ll - constraint);
     }
     void resetDesign() {
@@ -1321,8 +1346,9 @@ namespace rstpm2 {
       this->X0 = full.X0;
       this->wt0 = full.wt0;
     }
-    void clusterDesign(Index vindex) {
-      uvec index = conv_to<uvec>::from(vindex);
+    void clusterDesign(IndexMap::iterator it) {
+      clusterid = it->first;
+      uvec index = conv_to<uvec>::from(it->second);
       this->X = full.X.rows(index);
       this->XD = full.XD.rows(index);
       this->bhazard = full.bhazard(index);
@@ -1336,7 +1362,7 @@ namespace rstpm2 {
       }
     }
     // log(g(bi))
-    double objective_cluster(double bi, bool neglog = true) {
+    double objective_cluster(double bi) {
       vec vbeta = this->objective_cluster_beta; // nu=log(variance) is the last parameter in vbeta
       double sigma = exp(0.5*vbeta(this->n-1)); // standard deviation
       vbeta.resize(this->n - 1);
@@ -1350,7 +1376,7 @@ namespace rstpm2 {
       }
       li_constraint lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
       double ll = sum(lik.li) + R::dnorm(bi,0.0,sigma,1);
-      return neglog ? -ll : exp(ll);
+      return -ll;
     }
     // double fdhessian(boost::function<double(double x)> f, double x, double eps = 1.0e-6) {
     //   return (-f(x+2*eps)+16*f(x+eps)-30*f(x)+16*f(x-eps)-f(x-2*eps))/12.0/eps/eps;
@@ -1358,7 +1384,7 @@ namespace rstpm2 {
     void calculate_modes_and_variances() {
       this->objective_cluster_beta = this->bfgs.coef;
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
-	clusterDesign(it->second);
+	clusterDesign(it);
 	modes[it->first] = Brent_fmin(-100.0,100.0,&(call_objective_cluster<This>),(void *) this,
 				      this->reltol);
 	// Abramowitz and Stegun 1972, p. 884
@@ -1388,7 +1414,7 @@ namespace rstpm2 {
       // rowvec dconstraint(n,fill::zeros); 
       rowvec gradLi(n,fill::zeros);
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
-	clusterDesign(it->second);
+	clusterDesign(it);
 	// cluster-specific modes and variances (calculated in the objective function)
 	double mu = muhat[it->first];
 	double tau = tauhat[it->first];
@@ -1485,54 +1511,6 @@ namespace rstpm2 {
 	for (int i=0; i<n; i++) gr(i) = grad(i); // - dconstraint(i);
 	return -gr;  
     }
-    vec gradient_old(vec beta) {
-      int n = beta.size();
-      double sigma = exp(0.5*beta[n-1]);
-      mat Z(this->N,1,fill::ones);
-      mat ZD(this->N,1,fill::zeros);
-      mat Z0(this->X0.n_rows,1,fill::ones);
-      mat Z1(this->X1.n_rows,1,fill::ones);
-      mat Xstar = join_horiz(this->X, Z); 
-      mat XDstar = join_horiz(this->XD, ZD); // assumes time-invariant random effects
-      mat X0star = join_horiz(this->X0, Z0); 
-      mat X1star = join_horiz(this->X1, Z1); 
-      int K = gauss_x.size(); // number of nodes
-      vec wstar = gauss_w/sqrt(datum::pi);
-      int G = clusters.size();
-      vec Li(G,fill::zeros);
-      mat gradLi(G,n,fill::zeros);
-      vec betastar = beta;
-      rowvec dconstraint(n,fill::zeros); 
-      for (int k=0; k<K; ++k) {
-	double bi = sqrt(2.0)*sigma*gauss_x[k];
-	betastar[betastar.size()-1] = bi;
-	vec etastar = Xstar * betastar;
-	vec etaDstar = XDstar * betastar;
-	vec eta0star = X0star * betastar;
-	vec eta1star = X1star * betastar;
-	li_constraint lik = Base::li(etastar, etaDstar, eta0star, eta1star);
-	gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,
-						 Xstar, XDstar, X0star, X1star);
-	// adjust the last column of the gradient to account for the variance components:
-	// chain rule: d lik/d bi * d bi/d nu where bi = sqrt(2)*exp(nu/2)*x_k
-	gradlik.gradli.col(gradlik.gradli.n_cols-1) *= bi*0.5;
-	dconstraint += sum(gradlik.constraint,0); // ignores clustering??
-	int g = 0;
-	for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it, ++g) {
-	  uvec index = conv_to<uvec>::from(it->second);
-	  double Lgk = exp(sum(lik.li(index)));
-	  Li(g) += Lgk*wstar[k];
-	  gradLi.row(g) += wstar[k]*Lgk*sum(gradlik.gradli.rows(index),0);
-	}
-      }
-      rowvec grad = sum(rmult(gradLi,1/Li),0);
-      // if (this->bfgs.trace>0) {
-      // 	Rprintf("fdgradient="); Rprint(this->fdgradient(beta)); 
-      // }
-      vec gr(n,fill::zeros);
-      for (int i=0; i<n; i++) gr(i) = grad(i); // - dconstraint(i);
-      return -gr;  
-    }
     bool feasible(vec beta) {
       vec coef(beta);
       coef.resize(beta.size()-1);
@@ -1553,7 +1531,8 @@ namespace rstpm2 {
     Doubles modes, variances;
     vec objective_cluster_beta;
     Doubles muhat, tauhat;
-    bool adaptive;
+    int clusterid;
+    bool adaptive, first;
   };
 
   template<class T>

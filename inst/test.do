@@ -114,3 +114,17 @@ regress y rcs*
 quietly predict yhat
 scatter x yhat 
 restore
+
+
+use http://fmwww.bc.edu/repec/bocode/s/stmixed_example2, clear
+// stset the data:
+stset stime, f(event=1)
+// stmixed treat || trial: , dist(fpm) df(3) gh(20) nonadapt nohr nolog
+timer clear 1
+timer on 1
+stmixed treat || trial: , dist(fpm) df(3) gh(20) nohr nolog
+timer off 1
+timer list 1
+matrix list e(vcv)
+
+stpm2 treat i.trial, df(3) scale(hazard)
