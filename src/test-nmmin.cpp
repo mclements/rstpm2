@@ -1163,21 +1163,23 @@ namespace rstpm2 {
   template<class T>
   double call_objective_cluster(double bi, void * model_ptr) {
     T * model = static_cast<T *>(model_ptr);
-    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
     return model->objective_cluster(bi);
+  }    
+  template<class T>
+  double call_gradient_cluster(double bi, void * model_ptr) {
+    T * model = static_cast<T *>(model_ptr);
+    return model->gradient_cluster(bi);
   }    
   /** @brief Wrapper for calling a gradient_cluster method
    **/
   template<class T>
   double call_objective_cluster_bfgs(int n, double *bi, void * model_ptr) {
     T * model = static_cast<T *>(model_ptr);
-    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
     return model->objective_cluster(*bi);
   }    
   template<class T>
-  void call_gradient_cluster(int dim, double * bi, double* out, void * model_ptr) {
+  void call_gradient_cluster_bfgs(int dim, double * bi, double* out, void * model_ptr) {
     T * model = static_cast<T *>(model_ptr);
-    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
     *out = model->gradient_cluster(*bi);
   }    
   /** 
@@ -1292,6 +1294,16 @@ namespace rstpm2 {
 	// cluster-specific mode
 	double mu;
 	if (!first) {
+	  // double Tol = this->reltol;
+	  // int Maxit = 100;
+	  // mu = R_zeroin2(-100.0,
+	  // 		 100.0,
+	  // 		 gradient_cluster(-100.0),
+	  // 		 gradient_cluster(100.0),
+	  // 		 &(call_gradient_cluster<This>),
+	  // 		 (void *) this,
+	  // 		 &Tol,
+	  // 		 &Maxit);
 	  mu = Brent_fmin(muhat[it->first]-1e-1,
 	  		  muhat[it->first]+1e-1,
 	  		  &(call_objective_cluster<This>),
@@ -1299,6 +1311,7 @@ namespace rstpm2 {
 	  		  this->reltol);
 	}
 	if (first || std::abs(mu-muhat[it->first])>(1e-1-1e-5))
+	// if (first || mu>100.0-1e-5 || mu<-100.0+1e-5)
 	  mu = Brent_fmin(-100.0,100.0,&(call_objective_cluster<This>),(void *) this,
 			  this->reltol);
 	muhat[it->first] = mu;
