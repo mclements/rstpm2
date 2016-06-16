@@ -1293,25 +1293,18 @@ namespace rstpm2 {
 	double mu;
 	if (!first) {
 	  mu = Brent_fmin(muhat[it->first]-1e-1,
-			  muhat[it->first]+1e-1,
-			  &(call_objective_cluster<This>),
-			  (void *) this,
-			  this->reltol);
+	  		  muhat[it->first]+1e-1,
+	  		  &(call_objective_cluster<This>),
+	  		  (void *) this,
+	  		  this->reltol);
 	}
 	if (first || std::abs(mu-muhat[it->first])>(1e-1-1e-5))
 	  mu = Brent_fmin(-100.0,100.0,&(call_objective_cluster<This>),(void *) this,
 			  this->reltol);
 	muhat[it->first] = mu;
 	// cluster-specific variance
-	// Abramowitz and Stegun 1972, p. 884
 	double eps = 1e-6;
-	double f1 = objective_cluster(mu+2*eps),
-	  f2 = objective_cluster(mu+eps),
-	  f3 = objective_cluster(mu),
-	  f4 = objective_cluster(mu-eps),
-	  f5 = objective_cluster(mu-2*eps);
-	double hessian = (-f1+16*f2-30*f3+16*f4-f5)/12.0/eps/eps;
-	double tau = sqrt(1.0/hessian);
+	double tau = sqrt(eps*2.0/(gradient_cluster(mu+eps)-gradient_cluster(mu-eps)));
 	tauhat[it->first] = tau;
 	vec eta = this->X * vbeta;
 	vec etaD = this->XD * vbeta;
@@ -1378,6 +1371,26 @@ namespace rstpm2 {
       double ll = sum(lik.li) + R::dnorm(bi,0.0,sigma,1);
       return -ll;
     }
+    double gradient_cluster(double bi) {
+      vec vbeta = this->objective_cluster_beta; // nu=log(variance) is the last parameter in vbeta
+      double sigma = exp(0.5*vbeta(this->n-1)); // standard deviation
+      vbeta.resize(this->n - 1);
+      vec eta = this->X * vbeta;
+      vec etaD = this->XD * vbeta;
+      vec eta0(1,fill::zeros);
+      vec eta1(1,fill::zeros);
+      if (this->delayed) {
+	eta0 = this->X0 * vbeta;
+	eta1 = this->X1 * vbeta;
+      }
+      mat X = mat(this->X.n_rows,1,fill::ones);
+      mat XD = mat(this->XD.n_rows,1,fill::zeros);
+      mat X0 = mat(this->X0.n_rows,1,fill::ones);
+      mat X1 = mat(this->X1.n_rows,1,fill::ones);
+      gradli_constraint gradlik = Base::gradli(eta+bi,etaD,eta0+bi,eta1+bi,X,XD,X0,X1);
+      rowvec gradll = sum(gradlik.gradli,0) - bi/sigma/sigma;
+      return -gradll(0);
+    }
     // double fdhessian(boost::function<double(double x)> f, double x, double eps = 1.0e-6) {
     //   return (-f(x+2*eps)+16*f(x+eps)-30*f(x)+16*f(x-eps)-f(x-2*eps))/12.0/eps/eps;
     // }
@@ -1397,6 +1410,7 @@ namespace rstpm2 {
 	double f5 = objective_cluster(bi-2*eps);
 	double hessian = (-f1+16*f2-30*f3+16*f4-f5)/12.0/eps/eps;
 	variances[it->first] = 1.0/hessian;
+	variances[it->first] = eps*2.0/(gradient_cluster(bi+eps)-gradient_cluster(bi-eps));
       }
       resetDesign();
     }

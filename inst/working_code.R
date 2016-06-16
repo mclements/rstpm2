@@ -233,7 +233,7 @@ system.time(mod2n <- pstpm2(Surv(t1,t2,event)~var1,
                            RandDist="LogN",
                            ##optimiser="NelderMead",
                            smooth.formula=~s(log(t2)),
-                           ## sp=0.07723242,
+                           sp.init=0.07723242,
                            adaptive=TRUE,
                            cluster=dataAdditive$group, nodes=10, trace=0))
 summary(mod2n)
