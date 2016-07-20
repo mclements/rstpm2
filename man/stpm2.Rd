@@ -26,7 +26,7 @@ stpm2(formula, data,
       reltol=1.0e-8, trace = 0,
       link.type=c("PH","PO","probit","AH"), 
       frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,
-      RandDist=c("Gamma","LogN"), 
+      RandDist=c("Gamma","LogN"), recurrent = FALSE,
       contrasts = NULL,
       subset = NULL, ...)
 }
@@ -113,6 +113,9 @@ two variables define the time}
   for the frailty}
 \item{nodes}{number of integration points for Gaussian quadrature}
 \item{RandDist}{type of distribution for the random effect or frailty}
+\item{recurrent}{logical for whether clustered, left truncated data are
+  recurrent or for first event (where the latter requires an adjustment
+  for the frailties or random effects)}
 \item{logtheta}{initial value for log-theta used in the gamma shared frailty
   model}
 \item{\dots}{

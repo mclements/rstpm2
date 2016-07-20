@@ -45,6 +45,11 @@ namespace rstpm2 {
       Rprintf("%f ", v(i));
     Rprintf("\n");
   }
+  void Rprint(uvec const & v) {
+    for (size_t i=0; i<v.size(); ++i) 
+      Rprintf("%i ", v(i));
+    Rprintf("\n");
+  }
   void Rprint(vec const & v) {
     for (size_t i=0; i<v.size(); ++i) 
       Rprintf("%f ", v(i));
@@ -431,7 +436,8 @@ namespace rstpm2 {
   struct BaseData {
     mat X, XD, X0, X1; 
     vec bhazard,wt,wt0,event,time;
-    uvec ind0, map0, which0;
+    vec map0;
+    uvec ind0, which0;
   };
   // Main class for Stpm2 (fully parametric)
   template<class Link = LogLogLink>
@@ -465,9 +471,9 @@ namespace rstpm2 {
       if (interval) {
 	X1 = as<mat>(list["X1"]);
       }
-      ind0 = as<uvec>(list["ind0"]); // length N boolean
-      map0 = as<uvec>(list["map0"]); // length N map from individuals to row of X0
-      which0 = as<uvec>(list["which0"]); // length N0 indicator for X0
+      map0 = as<vec>(list["map0"]); // length N map for X->X0
+      full_which0 = as<vec>(list["which0"]); // length N map for X0->X
+      ind0 = as<uvec>(list["ind0"]); // length N boolean for X0
       ttype = as<vec>(list["ttype"]); 
       kappa_init = kappa = as<double>(list["kappa"]);
       optimiser = as<std::string>(list["optimiser"]);
@@ -475,6 +481,7 @@ namespace rstpm2 {
       reltol = bfgs.reltol = as<double>(list["reltol"]);
       bfgs.hessianp = false;
       bfgs.parscale = parscale = as<vec>(list["parscale"]);
+      which0 = removeNaN(full_which0);
     }
     // log-likelihood components and constraints
     // Note: the li and gradli components depend on other variables (bhazard, wt, wt0, wt, event);
@@ -529,9 +536,12 @@ namespace rstpm2 {
       }
       else {
 	li_constraint s = li_right_censored(eta, etaD);
-	if (delayed) {
+	if (delayed && !eta0.empty()) {
 	  li_constraint s0 = li_left_truncated(eta0);
 	  s.constraint += s0.constraint;
+	  if (bfgs.trace > 0) {
+	    Rprint(which0);
+	  }
 	  s.li(which0) += s0.li;
 	}
 	return s;
@@ -679,20 +689,27 @@ namespace rstpm2 {
     // 	  event(i)/h(i)/h(i)*gradh.row(i).t()*gradh.row(i);
     //   return wrap(-hessian);
     // }
-    // find the left truncated values for a given index
-    uvec find0() { return map0(find(ind0)); }
-    uvec find0(vec index) { return (map0(index))(find(ind0(index))); }
+    uvec map0f(uvec index) {
+      return removeNaN(this->map0(index));
+    }
+    uvec which0f(uvec index) {
+      vec which = this->full_which0(index);
+      return find(which == which);
+    }
+    uvec removeNaN(vec x) {
+      vec newx = x;
+      uvec index = find(newx == newx); // NaN != NaN
+      newx = newx(index);
+      return conv_to<uvec>::from(newx);
+    }
     SEXP return_modes() { return wrap(-1); } // used in NormalSharedFrailties
     SEXP return_variances() { return wrap(-1); } // used in NormalSharedFrailties
     NumericVector init;
-    // mat X, XD, X0, X1; 
-    // vec bhazard,wt,wt0,event,time;
-    vec parscale, ttype;
+    vec parscale, ttype, full_which0;
     double kappa_init, kappa, reltol;
     bool delayed, interval;
     int n, N;
     BFGS2 bfgs;
-    // uvec ind0, map0, which0;
     std::string optimiser;
   };
 
@@ -1026,11 +1043,12 @@ namespace rstpm2 {
     GammaSharedFrailty(SEXP sexp) : Base(sexp) {
       List list = as<List>(sexp);
       ivec cluster = as<ivec>(list["cluster"]);
+      recurrent = as<bool>(list["recurrent"]);
       // wragged array indexed by a map of vectors
       for (size_t id=0; id<cluster.size(); ++id) {
 	clusters[cluster[id]].push_back(id);
-	if (this->event[id]==1)
-	  cluster_events[cluster[id]].push_back(id);
+	if (this->ind0[id])
+	  cluster_delayed[cluster[id]].push_back(id);
       }
     }
     /** 
@@ -1065,16 +1083,22 @@ namespace rstpm2 {
 	int mi = sum(this->event(index));
 	double sumH = sum(H(index));
 	double sumHenter = 0.0;
-	ll += sum(log(h(index)) % this->event(index));
-	if (this->delayed && cluster_events.count(it->first) > 0) {
-	  uvec ind00 = conv_to<uvec>::from(cluster_events[it->first]);
-	  sumHenter = sum(H0(ind00));
+	ll += sum(log(h(index)) % this->event(index)); // shared
+	if (this->delayed && !cluster_delayed[it->first].empty()) {
+	  uvec ind00 = conv_to<uvec>::from(cluster_delayed[it->first]);
+	  sumHenter = sum(H0(Base::map0f(ind00)));
 	}
-	 ll += -(1.0/theta+mi)*log(1.0+theta*(sumH)) + 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
-	// ll -= (1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // conditional (Gutierrez 2002)
-	if (mi>0) {
+	if (recurrent) {
+	  ll += -(1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // Gutierrez (2002)
+	} else {
+	  ll += -(1.0/theta+mi)*log(1.0+theta*sumH) + 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
+	}
+	if (!recurrent && mi>0) { 
 	  for (int k=1; k<=mi; ++k)
 	    ll += log(1.0+theta*(mi-k));
+	}
+	if (recurrent && mi>0) {
+	  ll += R::lgammafn(1.0/theta+mi)-R::lgammafn(1.0/theta)+mi*log(theta); // Gutierrez (2002)
 	}
       }
       ll -= constraint;
@@ -1114,9 +1138,10 @@ namespace rstpm2 {
 	for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
 	  sumH += H(*j);
 	  gradHi += gradH.row(*j).t();
-	  gradi += gradh.row(*j).t() / h(*j) * this->event(*j);
-	  if (this->event(*j)==1) 
+	  if (this->event(*j)==1) {
+	    gradi += gradh.row(*j).t() / h(*j);
 	    mi++;
+	  }
 	  if (this->delayed  && this->ind0[*j]) {
 	    int jj = this->map0[*j];
 	    sumHenter += H0(jj);
@@ -1126,26 +1151,29 @@ namespace rstpm2 {
 	  grconstraint += this->kappa * ((gradh.row(*j).t() * h(*j) * (h(*j)<0)) + (gradH.row(*j).t() * H(*j) * (H(*j)<0)));
 	}
 	for (int k=0; k<n-1; ++k) {
-	  // gr(k) += gradi(k) - (1+mi*theta)*(gradHi(k)-gradH0i(k))/(1+theta*(sumH-sumHenter)) - grconstraint(k); // Gu tierrez
-	   gr(k) += gradi(k) - (1+mi*theta)*gradHi(k)/(1+theta*(sumH)) + 1.0/(1+theta*sumHenter)*gradH0i(k) - grconstraint(k); // Rondeau et al
+	  if (recurrent) {
+	  gr(k) += gradi(k) - (1.0/theta+mi)*theta*(gradHi(k)-gradH0i(k))/(1+theta*(sumH-sumHenter)) - grconstraint(k); // Gutierrez
+	  } else {
+	    gr(k) += gradi(k) - theta*(1.0/theta+mi)*gradHi(k)/(1+theta*sumH) + 1.0/(1+theta*sumHenter)*gradH0i(k) - grconstraint(k); // Rondeau et al
+	  }
 	}
-	double lastterm = 0.0;
-	if (mi>0) {
-	  for (int k=1; k<=mi; ++k)
-	    lastterm += theta*(mi-k)/(1.0+theta*(mi-k));
+	if (recurrent) {
+	  // axiom: D(-(1/exp(btheta)+mi)*log(1+exp(btheta)*H),btheta)
+	  // axiom: D(log(Gamma(1/exp(btheta)+mi))-log(Gamma(1/exp(btheta)))+mi*btheta,btheta)
+	  double H = sumH - sumHenter;
+	  gr(n-1) += ((1+theta*H)*log(1+H*theta)-H*mi*theta*theta - H*theta)/(H*theta*theta + theta) + (-R::digamma(1.0/theta+mi)+R::digamma(1/theta)+mi*theta)/theta;
+	} else {
+	  // axiom: D(-(1/exp(btheta)+mi)*log(1+exp(btheta)*H),btheta)
+	  // axiom: D(1.0/exp(btheta)*log(1+exp(btheta)*H0),btheta)
+	  gr(n-1) += ((1+sumH*theta)*log(1+sumH*theta)-sumH*mi*theta*theta-sumH*theta)/(sumH*theta*theta+theta);
+	  gr(n-1) += (-(1+sumHenter*theta)*log(sumHenter*theta+1)+sumHenter*theta)/(sumHenter*theta*theta+theta); 
+	  if (mi>0) {
+	    for (int k=1; k<=mi; ++k)
+	      // axiom: D(log(1+exp(btheta)*(mi-k)),btheta)
+	      gr(n-1) += theta*(mi-k)/(1.0+theta*(mi-k));
+	  }
 	}
-	// gr(n-1) += log(1.0+theta*(sumH-sumHenter))/theta - 
-	//   (1.0/theta+mi)*theta*(sumH-sumHenter)/(1.0+theta*(sumH-sumHenter)) + 
-	//   lastterm; // Gutierrez 
-	gr(n-1) += log(1.0+theta*sumH)/theta - 
-	  (1.0+mi*theta)*sumH/(1.0+theta*sumH) + 
-	  sumHenter/(1.0+theta*sumHenter) -
-	  log(1.0+theta*sumHenter)/theta +
-	  lastterm; // Rondeau et al
       }
-      // if (this->bfgs.trace>1) {
-      // 	Rprintf("Calculating fdgradient:\n"); Rprint(this->fdgradient(beta)); Rprintf("(=fdgradient)\n");
-      // }
       return -gr;  
     }
     bool feasible(vec beta) {
@@ -1154,7 +1182,8 @@ namespace rstpm2 {
       return Base::feasible(coef);
     }
     OPTIM_FUNCTIONS;
-    IndexMap clusters, cluster_events;
+    IndexMap clusters, cluster_delayed;
+    bool recurrent;
   };
 
 
@@ -1196,56 +1225,23 @@ namespace rstpm2 {
       List list = as<List>(sexp);
       const BaseData fullTmp = {this->X, this->XD, this->X0, this->X1, this->bhazard,
 				this->wt, this->wt0, this->event, this->time,
-				this->ind0, this->map0, this->which0};
+				this->map0, this->ind0, this->which0};
       full = fullTmp;
       IntegerVector cluster = as<IntegerVector>(list["cluster"]);
       gauss_x = as<vec>(list["gauss_x"]); // node values
       gauss_w = as<vec>(list["gauss_w"]); // probability weights
       adaptive = as<bool>(list["adaptive"]);
+      recurrent = as<bool>(list["recurrent"]);
       first = true;
       // wragged array indexed by a map of vectors
       for (int id=0; id<cluster.size(); ++id) {
 	clusters[cluster[id]].push_back(id);
-	if (this->event[id]==1) {
-	  cluster_events[cluster[id]].push_back(id);
-	  cluster_event_indices[cluster[id]].push_back(id);
-	}
       }
     }
     /** 
 	Objective function for a log-normal shared frailty
 	Assumes that weights == 1.
     **/
-    // Original implementation
-    double objective_old(vec beta) {
-      int n = beta.size();
-      vec vbeta(beta); // nu=log(variance) is the last parameter in beta; exp(nu)=sigma^2
-      vbeta.resize(n-1);
-      double sigma = exp(0.5*beta[n-1]); // standard deviation
-      int K = gauss_x.size(); // number of nodes
-      mat lijk(this->N,K);
-      double constraint = 0.0;
-      vec wstar = gauss_w/sqrt(datum::pi);
-      vec eta = this->X * vbeta;
-      vec etaD = this->XD * vbeta;
-      vec eta0 = this->X0 * vbeta;
-      vec eta1 = this->X1 * vbeta;
-      for (int k=0; k<K; ++k) {
-	double bi = sqrt(2.0)*sigma*this->gauss_x[k];
-	li_constraint lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
-	lijk.col(k) = lik.li;
-	constraint += lik.constraint;
-      }
-      double ll = 0.0;
-      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
-	uvec index = conv_to<uvec>::from(it->second);
-	double Li = dot(exp(sum(lijk.rows(index),0)),wstar);
-	ll += log(Li);
-      }
-      // ll -= constraint;
-      return -ll;  
-    }
-    // Use clusterDesign
     double objective_nonadaptive(vec beta) {
       int n = beta.size();
       vec vbeta(beta); // nu=log(variance) is the last parameter in beta; exp(nu)=sigma^2
@@ -1255,6 +1251,7 @@ namespace rstpm2 {
       vec wstar = gauss_w/sqrt(datum::pi);
       double constraint = 0.0;
       double ll = 0.0;
+      bool left_trunc_not_recurrent = (this->delayed && !this->recurrent && !this->interval);
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
 	clusterDesign(it);
 	vec eta = this->X * vbeta;
@@ -1265,14 +1262,25 @@ namespace rstpm2 {
 	  eta0 = this->X0 * vbeta;
 	  eta1 = this->X1 * vbeta;
 	}
-	double Lj = 0.0;
+	double Lj = 0.0, L0j = 0.0;
 	for (int k=0; k<K; ++k) {
+	  li_constraint lik, l0ik;
 	  double bi = sqrt(2.0)*sigma*this->gauss_x(k);
-	  li_constraint lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
+	  if (left_trunc_not_recurrent) {
+	    this->delayed = false; 
+	    lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
+	    this->delayed = true; 
+	    l0ik = Base::li_left_truncated(eta0+bi);
+	    L0j += exp(sum(-l0ik.li))*wstar(k);
+	  } else {
+	    lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
+	  }
 	  Lj += exp(sum(lik.li))*wstar(k);
 	  constraint += lik.constraint;
 	}
 	ll += log(Lj);
+	if (left_trunc_not_recurrent)
+	  ll -= log(L0j);
       }
       resetDesign();
       return -(ll - constraint);
@@ -1351,6 +1359,7 @@ namespace rstpm2 {
       this->X1 = full.X1;
       this->X0 = full.X0;
       this->wt0 = full.wt0;
+      this->which0 = full.which0;
     }
     void clusterDesign(IndexMap::iterator it) {
       clusterid = it->first;
@@ -1363,8 +1372,10 @@ namespace rstpm2 {
       this->time = full.time(index);
       if (this->delayed) {
 	this->X1 = full.X1.rows(index);
-	this->X0 = full.X0.rows(full.which0(index)); 
-	this->wt0 = full.wt0(full.which0(index));
+	uvec index0 = Base::map0f(index);
+	this->X0 = full.X0.rows(index0);
+	this->wt0 = full.wt0(index0);
+	this->which0 = Base::which0f(index);
       }
     }
     // log(g(bi))
@@ -1552,14 +1563,14 @@ namespace rstpm2 {
       return wrap(variances);
     }
     OPTIM_FUNCTIONS;
-    IndexMap clusters, cluster_events, cluster_event_indices;
+    IndexMap clusters;
     vec gauss_x, gauss_w;
     BaseData full;
     Doubles modes, variances;
     vec objective_cluster_beta;
     Doubles muhat, tauhat;
     int clusterid;
-    bool adaptive, first;
+    bool adaptive, first, recurrent;
   };
 
   template<class T>

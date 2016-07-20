@@ -438,7 +438,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                   optimiser=c("BFGS","NelderMead"),
                      reltol=1.0e-8, trace = 0,
                      link.type=c("PH","PO","probit","AH"), 
-                  frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"),
+                  frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"), recurrent = FALSE,
                   adaptive = TRUE,
                      contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
@@ -587,13 +587,16 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         X <- lpmatrix.lm(lm.obj,data)
         XD <- grad(lpfunc,0,lm.obj,data,timeVar)
         XD <- matrix(XD,nrow=nrow(X))
-        X1 <- X0 <- matrix(0,1,ncol(X))
+        X1 <- X0 <- matrix(0,nrow(X),ncol(X))
         if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
         if (delayed) {
             ind0 <- time0>0
             map0 <- vector("integer",nrow(X))
             map0[ind0] <- as.integer(1:sum(ind0))
-            which0 <- which(ind0)
+            map0[!ind0] <- NaN
+            ##which0 <- which(ind0)
+            which0 <- 1:nrow(X)
+            which0[!ind0] <- NaN
             data0 <- data[ind0,,drop=FALSE] # data for delayed entry times
             data0[[timeVar]] <- data0[[time0Var]]
             X0 <- lpmatrix.lm(lm.obj, data0)
@@ -610,7 +613,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         X <- lpmatrix.lm(lm.obj, data0)
         XD <- grad(lpfunc,0,lm.obj,data0,timeVar)
         XD <- matrix(XD,nrow=nrow(X))
-        X0 <- matrix(0,1,ncol(X))
+        X0 <- matrix(0,nrow(X),ncol(X))
         rm(data0)
     } 
     if (frailty) {
@@ -628,7 +631,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
                  kappa=1, trace = trace, cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
                  RandDist=RandDist, optimiser=optimiser,
-                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", return_type="optim")
+                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim")
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x
@@ -1259,13 +1262,16 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         X <- predict(gam.obj,data,type="lpmatrix")
         XD <- grad1(lpfunc,data[[timeVar]])    
         XD <- matrix(XD,nrow=nrow(X))
-        X1 <- X0 <- matrix(0,1,ncol(X))
+        X1 <- X0 <- matrix(0,nrow(X),ncol(X))
         if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
         if (delayed) {
             ind0 <- time0>0
             map0 <- vector("integer",nrow(X))
             map0[ind0] <- as.integer(1:sum(ind0))
-            which0 <- which(ind0)
+            map0[!ind0] <- NaN
+            ## which0 <- which(ind0)
+            which0 <- 1:nrow(X)
+            which0[!ind0] <- NaN
             data0 <- data[ind0,,drop=FALSE] # data for delayed entry times
             data0[[timeVar]] <- data0[[time0Var]]
             X0 <- predict(gam.obj,data0,type="lpmatrix")
@@ -1287,7 +1293,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         X <- predict(gam.obj,data0,type="lpmatrix")
         XD <- grad1(lpfunc,data0[[timeVar]])    
         XD <- matrix(XD,nrow=nrow(X))
-        X0 <- matrix(0,1,ncol(X))
+        X0 <- matrix(0,nrow(X),ncol(X))
         rm(data0)
     }
     ## initial values
@@ -1325,7 +1331,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2),
                  cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0=which0 - 1L, link = link.type,
                  penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser=optimiser,
-                 type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2",
+                 type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2", recurrent = recurrent,
                  return_type="optim")
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)

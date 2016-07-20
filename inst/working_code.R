@@ -101,6 +101,64 @@ summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
 head(predict(fit,se.fit=TRUE)) 
 pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)
 
+## left truncated with clusters
+require(rstpm2)
+brcancer2 <- transform(brcancer,
+                       startTime=ifelse(hormon==0,rectime/2,0),
+                       id=rep(1:(nrow(brcancer)/2),each=2))
+##debug(stpm2)
+summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
+                     cluster=brcancer2$id, optimiser="NelderMead",recurrent=TRUE,
+                     smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
+summary(fit0 <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
+                     optimiser="NelderMead",
+                     smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
+
+require(foreign)
+require(rstpm2)
+stmixed <- read.dta("http://fmwww.bc.edu/repec/bocode/s/stmixed_example2.dta")
+stmixed2 <- transform(stmixed, start = ifelse(treat,stime/2,0))
+summary(stpm2(Surv(start,stime,event)~treat,data=stmixed2))
+
+summary(fit <- stpm2(Surv(start,stime,event)~treat,data=stmixed2,cluster=stmixed$trial,optimiser="NelderMead",recurrent=TRUE))
+summary(fit <- stpm2(Surv(start,stime,event)~treat,data=stmixed2,cluster=stmixed$trial,recurrent=TRUE))
+summary(fit <- stpm2(Surv(start,stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",
+                   optimiser="NelderMead", recurrent=TRUE))
+summary(r2 <- stpm2(Surv(start,stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",
+                    recurrent=TRUE))
+
+summary(fit <- stpm2(Surv(start,stime,event)~treat,data=stmixed2,cluster=stmixed$trial,optimiser="NelderMead"))
+summary(fit <- stpm2(Surv(start,stime,event)~treat,data=stmixed2,cluster=stmixed$trial))
+summary(fit <- stpm2(Surv(start,stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",
+                   optimiser="NelderMead"))
+summary(r2 <- stpm2(Surv(start,stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN"))
+
+
+
+summary(r <- stpm2(Surv(start,stime,event)~treat,data=stmixed2))
+
+
+
+## check gradients
+args <- fit@args
+args$return_type <- "gradient"
+.Call("model_output", args, package="rstpm2")
+fdgrad <- function(obj,eps=1e-6) {
+    args <- obj@args
+    args$return_type <- "objective"
+    sapply(1:length(args$init), function(i) {
+        largs <- args
+        largs$init[i] <- args$init[i]+eps
+        f1 <- .Call("model_output", largs, package="rstpm2")
+        largs$init[i] <- args$init[i]-eps
+        f2 <- .Call("model_output", largs, package="rstpm2")
+        data.frame(f1,f2,gradient=(f1-f2)/2.0/eps)
+    })
+}
+fdgrad(fit)
+
+
+
 require(rstpm2)
 require(mgcv)
 x=seq(0,1,length=5001)

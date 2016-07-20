@@ -31,7 +31,7 @@ pstpm2(formula, data, smooth.formula = NULL, smooth.args = NULL,
        sp.init=1, trace = 0,
        link.type=c("PH","PO","probit","AH"), optimiser = c("BFGS", "NelderMead", "Nlm"),
        frailty=!is.null(cluster),cluster = NULL, logtheta=-6, nodes=9,
-       RandDist=c("Gamma","LogN"),
+       RandDist=c("Gamma","LogN"), recurrent = FALSE,
        reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-5),outer_optim=1,
        contrasts = NULL, subset = NULL, ...)
 }
@@ -107,6 +107,9 @@ two variables define the time}
 \item{RandDist}{type of distribution for the random effect or frailty}
 \item{logtheta}{initial value for log-theta used in the gamma shared frailty
   model}
+\item{recurrent}{logical for whether clustered, left truncated data are
+  recurrent or for first event (where the latter requires an adjustment
+  for the frailties or random effects)}
 \item{outer_optim}{Integer to indicate the algorithm for outer optimisation. If outer_optim=1, then use Neldear-Mead, otherwise use Nlm.}
 \item{\dots}{
   additional arguments to be passed to the \code{\link{mle2}} .
