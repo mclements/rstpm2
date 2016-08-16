@@ -758,7 +758,7 @@ setMethod("predictnl", "stpm2",
 
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
   {
@@ -872,6 +872,9 @@ setMethod("predict", "stpm2",
         if (type=="meansurv") {
             return(mean(S))
         }
+        if (type=="meanhaz") {
+            return(sum(h*S)/sum(S))
+        }
         if (type=="meansurvdiff") {
             eta2 <- as.vector(X2 %*% beta)
             S2 <- link$ilink(eta2)
@@ -942,7 +945,7 @@ setMethod("predict", "stpm2",
     else {
       if (is.null(link))
         link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                       hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log")
+                       hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meansurv="I",meanhaz="I")
       predictnl(object,local,link=link,newdata=newdata,type=type,
                 exposed=exposed,...) 
     }
@@ -964,7 +967,8 @@ setMethod("plot", signature(x="stpm2", y="missing"),
                    sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard",
                    loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
                    meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
-                   margsurv="Marginal survival",marghaz="Marginal hazard",marghr="Marginal hazard ratio", haz="Hazard",fail="Failure")
+                   margsurv="Marginal survival",marghaz="Marginal hazard",marghr="Marginal hazard ratio", haz="Hazard",fail="Failure",
+                   meanhaz="Mean hazard")
   xx <- attr(y,"newdata")
   xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
   if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
@@ -1738,7 +1742,7 @@ setMethod("predictnl", "pstpm2",
 ##
 setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
   {
@@ -1855,6 +1859,9 @@ setMethod("predict", "pstpm2",
         if (type=="meansurv") {
             return(mean(S))
         }
+        if (type=="meanhaz") {
+            return(sum(h*S)/sum(S))
+        }
         if (type=="meansurvdiff") {
             eta2 <- as.vector(X2 %*% beta)
             S2 <- link$ilink(eta2)
@@ -1925,7 +1932,7 @@ setMethod("predict", "pstpm2",
     else {
       if (is.null(link))
         link <- switch(type,surv="cloglog",density="log",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                       hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log")
+                       hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meanhaz="I",meansurv="I")
       predictnl(object,local,link=link,newdata=newdata,type=type,
                 exposed=exposed,...) 
     }
@@ -1951,7 +1958,7 @@ setMethod("plot", signature(x="pstpm2", y="missing"),
                    loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
                    meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
                    margsurv="Marginal survival",marghaz="Marginal hazard",
-                   marghr="Marginal hazard ratio", haz="Hazard", fail="Failure")
+                   marghr="Marginal hazard ratio", haz="Hazard", fail="Failure", meanhaz="Mean hazard")
   xx <- attr(y,"newdata")
   xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
   if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)

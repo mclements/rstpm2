@@ -17,13 +17,13 @@
     \S4method{predict}{stpm2}(object, newdata=NULL,
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
                "hdiff","loghazard","link","meansurv","meansurvdiff",
-               "odds","or","margsurv","marghaz","marghr"),
+               "odds","or","margsurv","marghaz","marghr","meanhaz"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
     \S4method{predict}{pstpm2}(object, newdata=NULL,
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
                "hdiff","loghazard","link","meansurv","meansurvdiff",
-               "odds","or","margsurv","marghaz","marghr"),
+               "odds","or","margsurv","marghaz","marghr","meanhaz"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
 }
@@ -52,6 +52,7 @@
       \item{"margsurv"}{marginal (population) survival}
       \item{"marghaz"}{marginal (population) hazard}
       \item{"marghr"}{marginal (population) hazard ratio}
+      \item{"meanhaz"}{mean hazard}
     }
   }
   \item{grid}{whether to merge newdata with a regular sequence of event
