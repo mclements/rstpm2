@@ -1264,14 +1264,15 @@ namespace rstpm2 {
 	}
 	double Lj = 0.0, L0j = 0.0;
 	for (int k=0; k<K; ++k) {
-	  li_constraint lik, l0ik;
+	  li_constraint lik, H0ik;
 	  double bi = sqrt(2.0)*sigma*this->gauss_x(k);
 	  if (left_trunc_not_recurrent) {
 	    this->delayed = false; 
 	    lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
 	    this->delayed = true; 
-	    l0ik = Base::li_left_truncated(eta0+bi);
-	    L0j += exp(sum(-l0ik.li))*wstar(k);
+	    H0ik = Base::li_left_truncated(eta0+bi);
+	    L0j += exp(-sum(H0ik.li))*wstar(k);
+	    constraint += H0ik.constraint;
 	  } else {
 	    lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
 	  }
@@ -1297,6 +1298,7 @@ namespace rstpm2 {
       int K = gauss_x.size(); // number of nodes
       double constraint = 0.0;
       double ll = 0.0;
+      bool left_trunc_not_recurrent = (this->delayed && !this->recurrent && !this->interval);
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
 	clusterDesign(it);
 	// cluster-specific mode
@@ -1335,11 +1337,22 @@ namespace rstpm2 {
 	  eta0 = this->X0 * vbeta;
 	  eta1 = this->X1 * vbeta;
 	}
-	double Lj = 0.0;
+	double Lj = 0.0, L0j = 0.0;
 	for (int k=0; k<K; ++k) {
+	  double g = 0.0, g0 = 0.0;
 	  double bi = mu + sqrt(2.0)*tau*this->gauss_x(k);
-	  li_constraint lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
-	  double g = exp(sum(lik.li)+R::dnorm(bi,0.0,sigma,1));
+	  li_constraint lik, l0ik;
+	  if (left_trunc_not_recurrent) {
+	    this->delayed = false; 
+	    lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
+	    this->delayed = true; 
+	    l0ik = Base::li_left_truncated(eta0+bi);
+	    g0 = exp(sum(l0ik.li)+R::dnorm(bi,0.0,sigma,1));
+	    L0j += sqrt(2.0)*tau*g0*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
+	  } else {
+	    lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
+	  }
+	  g = exp(sum(lik.li)+R::dnorm(bi,0.0,sigma,1));
 	  Lj += sqrt(2.0)*tau*g*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
 	  constraint += lik.constraint;
 	}

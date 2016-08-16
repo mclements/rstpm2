@@ -155,7 +155,7 @@ fdgrad <- function(obj,eps=1e-6) {
         data.frame(f1,f2,gradient=(f1-f2)/2.0/eps)
     })
 }
-fdgrad(fit)
+fdgrad(fit,1e-3)
 
 
 
