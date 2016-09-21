@@ -400,7 +400,7 @@ namespace rstpm2 {
 	vec vcoef(&nm.coef[0],this->n);					\
 	satisfied = this->feasible(vcoef % this->parscale);		\
 	if (!satisfied) this->kappa *= 2.0;				\
-      } while ((!satisfied) && this->kappa < 1.0e3);			\
+      } while ((!satisfied) && this->kappa < this->maxkappa);			\
       nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this); \
       this->bfgs.coef = nm.coef;					\
       this->bfgs.hessian = nm.hessian;					\
@@ -476,6 +476,7 @@ namespace rstpm2 {
       ind0 = as<uvec>(list["ind0"]); // length N boolean for X0
       ttype = as<vec>(list["ttype"]); 
       kappa_init = kappa = as<double>(list["kappa"]);
+      maxkappa = as<double>(list["maxkappa"]);
       optimiser = as<std::string>(list["optimiser"]);
       bfgs.trace = as<int>(list["trace"]);
       reltol = bfgs.reltol = as<double>(list["reltol"]);
@@ -706,7 +707,7 @@ namespace rstpm2 {
     SEXP return_variances() { return wrap(-1); } // used in NormalSharedFrailties
     NumericVector init;
     vec parscale, ttype, full_which0;
-    double kappa_init, kappa, reltol;
+    double kappa_init, kappa, maxkappa, reltol;
     bool delayed, interval;
     int n, N;
     BFGS2 bfgs;

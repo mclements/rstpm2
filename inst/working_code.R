@@ -36,14 +36,60 @@ expit(2)*expit(-2)
 numder(dnorm,2)
 -dnorm(2)*2
 
+require(mgcv)
+d <- data.frame(x = seq(0,1,length=100), x2=rnorm(100), y = rnorm(100))
+fit <- gam(y~s(x)+s(x2,by=x), data=d)
+X <- predict(fit,d,type="lpmatrix")
+X0 <- predict(fit,transform(d,x=0),type="lpmatrix")
+Xstar <- X-X0
+index0 <- rstpm2:::which.dim(Xstar)
+lapply(fit$smooth, function(s) {
+    which((1:ncol(X) %in% index0)[s$first.para:s$last.para]) # index for S'
+})
+lapply(fit$smooth, function(s) {
+    range(which((1:ncol(X) %in% s$first.para:s$last.para)[index0]))
+})
+lapply(fit$smooth,"[[","S")
+## outline: given a full index=1:n, a reduced index set index0 and a smoother with first.para, last.para and a square matrix S, return a revised first.para', last.para' and matrix S'
+## For S': 
+
+
+
 refresh
 require(rstpm2)
+## additive
+debug(pstpm2)
+fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AH",
+             smooth.formula=~ns(rectime,df=4)+hormon:ns(rectime,df=3), optimiser="NelderMead")
+fit2 <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AH",
+             smooth.formula=~ns(rectime,df=4)+hormon:ns(rectime,df=3))
+plot(fit2,newdata=data.frame(hormon=0),type="haz")
+plot(fit2,newdata=data.frame(hormon=1),add=TRUE,lty=2,type="haz")
+
+fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AH",
+             smooth.formula=~s(rectime)+s(rectime,by=hormon))
+plot(fit,newdata=data.frame(hormon=0),type="haz")
+plot(fit,newdata=data.frame(hormon=1),add=TRUE,lty=2,type="haz")
+
+
+## robust standard errors for clustered data
+refresh
+require(rstpm2)
+brcancer2 <- transform(brcancer,
+                       id=rep(1:(nrow(brcancer)/2),each=2))
+fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer)
+summary(fit)
+fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer, cluster=brcancer2$id, robust=TRUE)
+summary(fit)
+
+
+
 
 ## Stata estimated coef for hormon
 ## PH:     -.3614357
 ## PO:     -.474102
 ## Probit: -.2823338
-system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)))
+system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,link="AH")))
 system.time(print(pfit <- pstpm2(Surv(rectime,censrec==1)~hormon,smooth.formula=~s(log(rectime))+s(x1),data=brcancer)))
 ##
 system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO")))
