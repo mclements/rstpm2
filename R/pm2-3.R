@@ -456,7 +456,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                      reltol=1.0e-8, trace = 0,
                      link.type=c("PH","PO","probit","AH"), 
                   frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"), recurrent = FALSE,
-                  adaptive = TRUE, maxkappa = 1e3,
+                  adaptive = TRUE, maxkappa = 1e3, Z = ~1,
                      contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
@@ -619,7 +619,8 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         X <- trans(X,data)
         XD <- grad(lpfunc,0,lm.obj,data,timeVar)
         XD <- transD(matrix(XD,nrow=nrow(X)))
-        X1 <- X0 <- matrix(0,nrow(X),ncol(X))
+        X1 <- matrix(0,nrow(X),ncol(X))
+        X0 <- matrix(0,1,ncol(X))
         if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
         if (delayed) {
             ind0 <- time0>0
@@ -661,14 +662,17 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     names(parscale) <- names(init)
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
-                 kappa=1, trace = trace, cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
+                 kappa=1, trace = trace, oldcluster=cluster, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
                  RandDist=RandDist, optimiser=optimiser,
-                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", trans=trans, transD=transD, maxkappa=maxkappa)
+                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", trans=trans, transD=transD, maxkappa=maxkappa, Z.formula = Z)
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x
         args$gauss_w <- rule$w
         args$adaptive <- adaptive
+        args$Z <- model.matrix(Z, data)
+        if (ncol(args$Z)>1) stop("Current implementation only allows for a single random effect")
+        args$Z <- as.vector(args$Z)
     }
     negll <- function(beta) {
         localargs <- args
@@ -859,6 +863,9 @@ setMethod("predict", "stpm2",
             beta <- beta[-length(beta)]
             gauss_x <- object@args$gauss_x
             gauss_w <- object@args$gauss_w
+            Z <- model.matrix(args$Z.formula, newdata)
+            if (ncol(Z)>1) stop("Current implementation only allows for a single random effect")
+            Z <- as.vector(Z)
         }
         eta <- as.vector(X %*% beta)
         etaD <- as.vector(XD %*% beta)
@@ -929,7 +936,7 @@ setMethod("predict", "stpm2",
                 return((1+theta*H)^(-1/theta))
             if (object@args$RandDist=="LogN") {
                 return(sapply(1:length(gauss_x),
-                              function(i) link$ilink(eta+sqrt(theta)*gauss_x[i])) %*%
+                              function(i) link$ilink(eta+Z*sqrt(theta)*gauss_x[i])) %*%
                        gauss_w / sum(gauss_w))
             }
         }
@@ -941,7 +948,7 @@ setMethod("predict", "stpm2",
             }
             if (object@args$RandDist=="LogN") {
                 return(sapply(1:length(gauss_x),
-                              function(i) link$h(eta+sqrt(theta)*gauss_x[i],etaD)) %*%
+                              function(i) link$h(eta+Z*sqrt(theta)*gauss_x[i],etaD)) %*%
                        gauss_w / sum(gauss_w))
             }
         }
@@ -959,10 +966,10 @@ setMethod("predict", "stpm2",
             }
             if (object@args$RandDist=="LogN") {
                 marghaz <- sapply(1:length(gauss_x),
-                                  function(i) as.vector(link$h(eta+sqrt(theta)*gauss_x[i],etaD))) %*%
+                                  function(i) as.vector(link$h(eta+Z*sqrt(theta)*gauss_x[i],etaD))) %*%
                                   gauss_w / sum(gauss_w)
                 marghaz2 <- sapply(1:length(gauss_x),
-                                   function(i) as.vector(link$h(eta2+sqrt(theta)*gauss_x[i],etaD2))) %*%
+                                   function(i) as.vector(link$h(eta2+Z*sqrt(theta)*gauss_x[i],etaD2))) %*%
                                        gauss_w / sum(gauss_w)
             }
             return(marghaz2/marghaz)
@@ -1143,7 +1150,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                    link.type=c("PH","PO","probit","AH"),
                   optimiser=c("BFGS","NelderMead","Nlm"), recurrent = FALSE,
                   frailty=!is.null(cluster) & !robust, cluster = NULL, logtheta=-6, nodes=9,RandDist=c("Gamma","LogN"),
-                  adaptive=TRUE, maxkappa = 1e3,
+                  adaptive=TRUE, maxkappa = 1e3, Z = ~1,
                    reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-5),outer_optim=1,
                    contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
@@ -1333,7 +1340,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         X <- trans(X,data)
         XD <- grad1(lpfunc,data[[timeVar]])    
         XD <- transD(matrix(XD,nrow=nrow(X)))
-        X1 <- X0 <- matrix(0,nrow(X),ncol(X))
+        X1 <- matrix(0,nrow(X),ncol(X))
+        X0 <- matrix(0,1,ncol(X))
         if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
         if (delayed) {
             ind0 <- time0>0
@@ -1403,16 +1411,20 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  sp=sp, reltol_search=reltol$search, reltol=reltol$final, reltol_outer=reltol$outer, trace=trace,
                  kappa=1.0,outer_optim=outer_optim,
                  alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2),
-                 cluster=cluster, map0 = map0 - 1L, ind0 = ind0, which0=which0 - 1L, link = link.type,
+                 oldcluster=cluster, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL,
+                 map0 = map0 - 1L, ind0 = ind0, which0=which0 - 1L, link = link.type,
                  penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser=optimiser,
                  type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2", recurrent = recurrent, maxkappa=maxkappa,
-                 trans=trans, transD=transD,
+                 trans=trans, transD=transD, Z.formula = Z,
                  return_type="optim")
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x
         args$gauss_w <- rule$w
         args$adaptive <- adaptive
+        args$Z <- model.matrix(Z, data)
+        if (ncol(args$Z)>1) stop("Current implementation only allows for a single random effect")
+        args$Z <- as.vector(args$Z)
     }
     ## penalty function
     pfun <- function(beta,sp) {
@@ -1882,6 +1894,9 @@ setMethod("predict", "pstpm2",
             beta <- beta[-length(beta)]
             gauss_x <- object@args$gauss_x
             gauss_w <- object@args$gauss_w
+            Z <- model.matrix(args$Z.formula, newdata)
+            if (ncol(Z)>1) stop("Current implementation only allows for a single random effect")
+            Z <- as.vector(Z)
         }
         eta <- as.vector(X %*% beta)
         etaD <- as.vector(XD %*% beta)
@@ -1945,7 +1960,7 @@ setMethod("predict", "pstpm2",
                 return((1+theta*H)^(-1/theta))
             if (object@args$RandDist=="LogN") {
                 return(sapply(1:length(gauss_x),
-                              function(i) link$ilink(eta+sqrt(theta)*gauss_x[i])) %*%
+                              function(i) link$ilink(eta+Z*sqrt(theta)*gauss_x[i])) %*%
                        gauss_w / sum(gauss_w))
             }
         }
@@ -1957,7 +1972,7 @@ setMethod("predict", "pstpm2",
             }
             if (object@args$RandDist=="LogN") {
                 return(sapply(1:length(gauss_x),
-                              function(i) link$h(eta+sqrt(theta)*gauss_x[i],etaD)) %*%
+                              function(i) link$h(eta+Z*sqrt(theta)*gauss_x[i],etaD)) %*%
                        gauss_w / sum(gauss_w))
             }
         }
@@ -1975,10 +1990,10 @@ setMethod("predict", "pstpm2",
             }
             if (object@args$RandDist=="LogN") {
                 marghaz <- sapply(1:length(gauss_x),
-                                  function(i) as.vector(link$h(eta+sqrt(theta)*gauss_x[i],etaD))) %*%
+                                  function(i) as.vector(link$h(eta+Z*sqrt(theta)*gauss_x[i],etaD))) %*%
                                   gauss_w / sum(gauss_w)
                 marghaz2 <- sapply(1:length(gauss_x),
-                                   function(i) as.vector(link$h(eta2+sqrt(theta)*gauss_x[i],etaD2))) %*%
+                                   function(i) as.vector(link$h(eta2+Z*sqrt(theta)*gauss_x[i],etaD2))) %*%
                                        gauss_w / sum(gauss_w)
             }
             return(marghaz2/marghaz)

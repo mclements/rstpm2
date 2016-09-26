@@ -462,15 +462,14 @@ namespace rstpm2 {
       n = init.size(); // number of parameters
       N = X.n_rows; // number of observations
       X1 = as<mat>(list["X1"]);
-      X0 = as<mat>(list["X1"]);
+      X0 = as<mat>(list["X0"]);
       wt0.set_size(N); wt0.fill(0.0);
       if (delayed) {
-	X0 = as<mat>(list["X0"]);
 	wt0 = as<vec>(list["wt0"]);
       }
-      if (interval) {
-	X1 = as<mat>(list["X1"]);
-      }
+      // if (interval) {
+      // 	X1 = as<mat>(list["X1"]);
+      // }
       map0 = as<vec>(list["map0"]); // length N map for X->X0
       full_which0 = as<vec>(list["which0"]); // length N map for X0->X
       ind0 = as<uvec>(list["ind0"]); // length N boolean for X0
@@ -1229,6 +1228,8 @@ namespace rstpm2 {
 				this->map0, this->ind0, this->which0};
       full = fullTmp;
       IntegerVector cluster = as<IntegerVector>(list["cluster"]);
+      full_Z = Z = as<vec>(list["Z"]);
+      full_Z0 = Z0 = Z(this->ind0); // this could be size 0...
       gauss_x = as<vec>(list["gauss_x"]); // node values
       gauss_w = as<vec>(list["gauss_w"]); // probability weights
       adaptive = as<bool>(list["adaptive"]);
@@ -1257,8 +1258,8 @@ namespace rstpm2 {
 	clusterDesign(it);
 	vec eta = this->X * vbeta;
 	vec etaD = this->XD * vbeta;
-	vec eta0(n-1,fill::zeros);
-	vec eta1(n-1,fill::zeros);
+	vec eta0(1,fill::zeros);
+	vec eta1(this->X.n_rows,fill::zeros);
 	if (this->delayed) {
 	  eta0 = this->X0 * vbeta;
 	  eta1 = this->X1 * vbeta;
@@ -1269,13 +1270,13 @@ namespace rstpm2 {
 	  double bi = sqrt(2.0)*sigma*this->gauss_x(k);
 	  if (left_trunc_not_recurrent) {
 	    this->delayed = false; 
-	    lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
+	    lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
 	    this->delayed = true; 
-	    H0ik = Base::li_left_truncated(eta0+bi);
+	    H0ik = Base::li_left_truncated(eta0+Z0*bi);
 	    L0j += exp(-sum(H0ik.li))*wstar(k);
 	    constraint += H0ik.constraint;
 	  } else {
-	    lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
+	    lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
 	  }
 	  Lj += exp(sum(lik.li))*wstar(k);
 	  constraint += lik.constraint;
@@ -1333,7 +1334,7 @@ namespace rstpm2 {
 	vec eta = this->X * vbeta;
 	vec etaD = this->XD * vbeta;
 	vec eta0(1,fill::zeros);
-	vec eta1(1,fill::zeros);
+	vec eta1(this->X.n_rows,fill::zeros);
 	if (this->delayed) {
 	  eta0 = this->X0 * vbeta;
 	  eta1 = this->X1 * vbeta;
@@ -1345,13 +1346,13 @@ namespace rstpm2 {
 	  li_constraint lik, l0ik;
 	  if (left_trunc_not_recurrent) {
 	    this->delayed = false; 
-	    lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
+	    lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
 	    this->delayed = true; 
-	    l0ik = Base::li_left_truncated(eta0+bi);
+	    l0ik = Base::li_left_truncated(eta0+Z0*bi);
 	    g0 = exp(sum(l0ik.li)+R::dnorm(bi,0.0,sigma,1));
 	    L0j += sqrt(2.0)*tau*g0*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
 	  } else {
-	    lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
+	    lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
 	  }
 	  g = exp(sum(lik.li)+R::dnorm(bi,0.0,sigma,1));
 	  Lj += sqrt(2.0)*tau*g*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
@@ -1374,21 +1375,26 @@ namespace rstpm2 {
       this->X0 = full.X0;
       this->wt0 = full.wt0;
       this->which0 = full.which0;
+      this->Z = full_Z;
+      this->Z0 = full_Z0;
     }
     void clusterDesign(IndexMap::iterator it) {
       clusterid = it->first;
       uvec index = conv_to<uvec>::from(it->second);
       this->X = full.X.rows(index);
       this->XD = full.XD.rows(index);
+      this->X1 = full.X1.rows(index);
       this->bhazard = full.bhazard(index);
       this->wt = full.wt(index);
       this->event = full.event(index);
       this->time = full.time(index);
+      this->Z = full_Z(index);
+      this->Z0 = vec(1,fill::zeros);
       if (this->delayed) {
-	this->X1 = full.X1.rows(index);
 	uvec index0 = Base::map0f(index);
 	this->X0 = full.X0.rows(index0);
 	this->wt0 = full.wt0(index0);
+	this->Z0 = full_Z0(index0);
 	this->which0 = Base::which0f(index);
       }
     }
@@ -1400,12 +1406,12 @@ namespace rstpm2 {
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
       vec eta0(1,fill::zeros);
-      vec eta1(1,fill::zeros);
+      vec eta1(this->X.n_rows,fill::zeros);
       if (this->delayed) {
 	eta0 = this->X0 * vbeta;
 	eta1 = this->X1 * vbeta;
       }
-      li_constraint lik = Base::li(eta+bi,etaD,eta0+bi,eta1+bi);
+      li_constraint lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
       double ll = sum(lik.li) + R::dnorm(bi,0.0,sigma,1);
       return -ll;
     }
@@ -1416,16 +1422,16 @@ namespace rstpm2 {
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
       vec eta0(1,fill::zeros);
-      vec eta1(1,fill::zeros);
+      vec eta1(this->X1.n_rows,fill::zeros);
       if (this->delayed) {
 	eta0 = this->X0 * vbeta;
 	eta1 = this->X1 * vbeta;
       }
-      mat X = mat(this->X.n_rows,1,fill::ones);
+      mat X = mat(Z); // mat(this->X.n_rows,1,fill::ones);
       mat XD = mat(this->XD.n_rows,1,fill::zeros);
-      mat X0 = mat(this->X0.n_rows,1,fill::ones);
-      mat X1 = mat(this->X1.n_rows,1,fill::ones);
-      gradli_constraint gradlik = Base::gradli(eta+bi,etaD,eta0+bi,eta1+bi,X,XD,X0,X1);
+      mat X0 = mat(Z0); // mat(this->X0.n_rows,1,fill::ones);
+      mat X1 = mat(Z); // mat(this->X1.n_rows,1,fill::ones);
+      gradli_constraint gradlik = Base::gradli(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,X,XD,X0,X1);
       rowvec gradll = sum(gradlik.gradli,0) - bi/sigma/sigma;
       return -gradll(0);
     }
@@ -1470,13 +1476,13 @@ namespace rstpm2 {
 	// cluster-specific modes and variances (calculated in the objective function)
 	double mu = muhat[it->first];
 	double tau = tauhat[it->first];
-	mat Z(this->X.n_rows,1,fill::ones);
+	mat Zmain(Z); 
 	mat ZD(this->XD.n_rows,1,fill::zeros);
-	mat Z0(this->X0.n_rows,1,fill::ones);
-	mat Z1(this->X1.n_rows,1,fill::ones);
-	mat Xstar = join_horiz(this->X, Z); 
+	mat Z0main(Z0); 
+	mat Z1(Z); 
+	mat Xstar = join_horiz(this->X, Zmain); 
 	mat XDstar = join_horiz(this->XD, ZD); // assumes time-invariant random effects
-	mat X0star = join_horiz(this->X0, Z0); 
+	mat X0star = join_horiz(this->X0, Z0main); 
 	mat X1star = join_horiz(this->X1, Z1);
 	double Lj = 0.0;
 	rowvec numerator(this->n,fill::zeros);
@@ -1506,13 +1512,13 @@ namespace rstpm2 {
     vec gradient_nonadaptive(vec beta) {
 	int n = beta.size();
 	double sigma = exp(0.5*beta[n-1]);
-	mat Z(this->N,1,fill::ones);
+	mat Zmain(Z);
 	mat ZD(this->N,1,fill::zeros);
-	mat Z0(this->X0.n_rows,1,fill::ones);
-	mat Z1(this->X1.n_rows,1,fill::ones);
-	mat Xstar = join_horiz(this->X, Z); 
+	mat Z0main(Z0);
+	mat Z1(Z);
+	mat Xstar = join_horiz(this->X, Zmain); 
 	mat XDstar = join_horiz(this->XD, ZD); // assumes time-invariant random effects
-	mat X0star = join_horiz(this->X0, Z0); 
+	mat X0star = join_horiz(this->X0, Z0main); 
 	mat X1star = join_horiz(this->X1, Z1); 
 	int K = gauss_x.size(); // number of nodes
 	vec wstar = gauss_w/sqrt(datum::pi);
@@ -1578,7 +1584,7 @@ namespace rstpm2 {
     }
     OPTIM_FUNCTIONS;
     IndexMap clusters;
-    vec gauss_x, gauss_w;
+    vec gauss_x, gauss_w, full_Z, full_Z0, Z, Z0;
     BaseData full;
     Doubles modes, variances;
     vec objective_cluster_beta;

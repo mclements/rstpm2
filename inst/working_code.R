@@ -58,11 +58,12 @@ lapply(fit$smooth,"[[","S")
 refresh
 require(rstpm2)
 ## additive
-debug(pstpm2)
 fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AH",
              smooth.formula=~ns(rectime,df=4)+hormon:ns(rectime,df=3), optimiser="NelderMead")
+summary(fit)
 fit2 <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AH",
              smooth.formula=~ns(rectime,df=4)+hormon:ns(rectime,df=3))
+summary(fit2)
 plot(fit2,newdata=data.frame(hormon=0),type="haz")
 plot(fit2,newdata=data.frame(hormon=1),add=TRUE,lty=2,type="haz")
 
@@ -89,7 +90,7 @@ summary(fit)
 ## PH:     -.3614357
 ## PO:     -.474102
 ## Probit: -.2823338
-system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,link="AH")))
+system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer, stata=TRUE)))
 system.time(print(pfit <- pstpm2(Surv(rectime,censrec==1)~hormon,smooth.formula=~s(log(rectime))+s(x1),data=brcancer)))
 ##
 system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO")))
@@ -97,6 +98,8 @@ system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="PO"
 ##
 system.time(print( stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit")))
 system.time(print(pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,type="probit"))) # slow
+
+summary(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,smooth.formula=~nsx(log(rectime), df=4, stata.stpm2.compatible = TRUE)))
 
 if (FALSE) {
     debug(pstpm2)
@@ -160,11 +163,17 @@ summary(fit0 <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
                      optimiser="NelderMead",
                      smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
 
+refresh
+
 require(foreign)
 require(rstpm2)
 stmixed <- read.dta("http://fmwww.bc.edu/repec/bocode/s/stmixed_example2.dta")
 stmixed2 <- transform(stmixed, start = ifelse(treat,stime/2,0))
 summary(stpm2(Surv(start,stime,event)~treat,data=stmixed2))
+summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN"))
+
+system.time(summary(r2 <- stpm2(Surv(stime,event)~treat+factor(trial),data=stmixed2,cluster=stmixed$trial,RandDist="LogN",Z=~treat-1)))
+
 
 summary(fit <- stpm2(Surv(start,stime,event)~treat,data=stmixed2,cluster=stmixed$trial,optimiser="NelderMead",recurrent=TRUE))
 summary(fit <- stpm2(Surv(start,stime,event)~treat,data=stmixed2,cluster=stmixed$trial,recurrent=TRUE))
