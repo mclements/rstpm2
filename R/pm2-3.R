@@ -420,6 +420,23 @@ link.AH <- list(link=function(S) -log(S),
                 H=function(eta) eta,
                 gradh=function(eta,etaD,obj) obj$XD,
                 gradH=function(eta,obj) obj$X)
+link.AO <- function(theta) { # Aranda-Ordaz
+    if (theta==0) {
+        return(link.PH)
+        } else {
+            list(link = function(S) log((S^(-theta)-1)/theta),
+                 ilink = function(eta) exp(-log(theta*exp(eta)+1)/theta),
+                 H = function(eta) log(theta*exp(eta)+1)/theta,
+                 h = function(eta,etaD) exp(eta)*etaD/(theta*exp(eta)+1),
+                 gradH = function(eta,obj) exp(eta)*obj$X/(1+theta*exp(eta)),
+                 gradh = function(eta,etaD,obj) {
+                     eta <- as.vector(eta)
+                     etaD <- as.vector(etaD)
+                     ((theta*exp(2*eta)+exp(eta))*obj$XD+exp(eta)*etaD*obj$X) /
+                         (theta*exp(eta)+1)^2
+                 })
+        }
+    }
 
 ## general link functions
 setClass("stpm2", representation(xlevels="list",
@@ -454,12 +471,12 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                   bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE,
                   optimiser=c("BFGS","NelderMead"),
                      reltol=1.0e-8, trace = 0,
-                     link.type=c("PH","PO","probit","AH"), 
+                     link.type=c("PH","PO","probit","AH","AO"), theta.AO=0, 
                   frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"), recurrent = FALSE,
                   adaptive = TRUE, maxkappa = 1e3, Z = ~1,
                      contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
-    link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
+    link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH,AO=link.AO(theta.AO))
     RandDist <- match.arg(RandDist)
     optimiser <- match.arg(optimiser)
     use.gr <- TRUE # old code
@@ -664,7 +681,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
                  kappa=1, trace = trace, oldcluster=cluster, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
                  RandDist=RandDist, optimiser=optimiser,
-                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", trans=trans, transD=transD, maxkappa=maxkappa, Z.formula = Z)
+                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", trans=trans, transD=transD, maxkappa=maxkappa, Z.formula = Z, thetaAO = theta.AO)
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x
@@ -1147,14 +1164,14 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                    sp=NULL, use.gr = TRUE, 
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=1, trace = 0,
-                   link.type=c("PH","PO","probit","AH"),
+                   link.type=c("PH","PO","probit","AH","AO"), theta.AO=0,
                   optimiser=c("BFGS","NelderMead","Nlm"), recurrent = FALSE,
                   frailty=!is.null(cluster) & !robust, cluster = NULL, logtheta=-6, nodes=9,RandDist=c("Gamma","LogN"),
                   adaptive=TRUE, maxkappa = 1e3, Z = ~1,
                    reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-5),outer_optim=1,
                    contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
-    link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH)
+    link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH,AO=link.AO(theta.AO))
     RandDist <- match.arg(RandDist)
     optimiser <- match.arg(optimiser)
     ## logH.args is deprecated
@@ -1415,7 +1432,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  map0 = map0 - 1L, ind0 = ind0, which0=which0 - 1L, link = link.type,
                  penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser=optimiser,
                  type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2", recurrent = recurrent, maxkappa=maxkappa,
-                 trans=trans, transD=transD, Z.formula = Z,
+                 trans=trans, transD=transD, Z.formula = Z, thetaAO = theta.AO,
                  return_type="optim")
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)

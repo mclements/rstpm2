@@ -18,6 +18,57 @@
 ##   require(bbmle)
 ## }
 
+# Aranda-Ordaz link
+refresh
+require(rstpm2)
+## PH
+summary(fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="PH", df=3))
+summary(fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AO", df=3)) # Same: OK
+summary(fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="PO", df=3))
+summary(fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AO", theta.AO=1, df=3)) # Same: OK
+
+summary(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AO", theta.AO=0.5))
+
+
+
+
+grad <- function(f,x,eps=1e-5)
+    sapply(1:length(x), function(i) {
+        lower <- upper <- x
+        upper[i] <- x[i]+eps
+        lower[i] <- x[i]-eps
+        (f(upper)-f(lower))/2/eps
+    })
+link <- function(S,theta=0.5) log((S^(-theta)-1)/theta)
+S <- ilink <- function(eta,theta=0.5) exp(-log(theta*exp(eta)+1)/theta)
+H <- function(eta,theta=0.5) -log(S(eta,theta))
+h <- function(eta,etaD,theta=0.5) exp(eta)*etaD/(theta*exp(eta)+1)
+gradH <- function(eta,X,theta=0.5) exp(eta)*X/(1+theta*exp(eta))
+gradh <- function(eta,etaD,X,XD,theta=0.5) {
+    eta <- as.vector(eta)
+    etaD <- as.vector(etaD)
+    ((theta*exp(2*eta)+exp(eta))*XD+exp(eta)*etaD*X) /
+        (theta*exp(eta)+1)^2
+}
+
+
+X <- cbind(1,1:2,1) # (constant, t, x)
+XD <- cbind(0,1:2,0)
+beta <- c(0.1, 0.2, 0.3)
+eta <- as.vector(X %*% beta)
+etaD <- as.vector(XD %*% beta)
+S(eta)
+H(eta)
+h(eta,etaD) - grad(function(t) H(cbind(1,t,1) %*% beta), 1) # OK
+gradH(eta,X) - grad(function(beta) H(X %*% beta), beta) # OK
+gradh(eta,etaD,X,XD)
+grad(function(beta) h(X %*% beta, XD %*% beta), beta)
+
+ilink(link(.1))
+link(ilink(.1))
+
+
+
 
 require(abind)
 X <- matrix(seq(0,1,length=5*10),nrow=10)
@@ -172,7 +223,10 @@ stmixed2 <- transform(stmixed, start = ifelse(treat,stime/2,0))
 summary(stpm2(Surv(start,stime,event)~treat,data=stmixed2))
 summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN"))
 
+summary(r2 <- pstpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN"))
+
 system.time(summary(r2 <- stpm2(Surv(stime,event)~treat+factor(trial),data=stmixed2,cluster=stmixed$trial,RandDist="LogN",Z=~treat-1)))
+system.time(summary(r2 <- pstpm2(Surv(stime,event)~treat+factor(trial),data=stmixed2,cluster=stmixed$trial,RandDist="LogN",Z=~treat-1)))
 
 
 summary(fit <- stpm2(Surv(start,stime,event)~treat,data=stmixed2,cluster=stmixed$trial,optimiser="NelderMead",recurrent=TRUE))

@@ -136,7 +136,51 @@ namespace rstpm2 {
       }
       return c;
     }
+    LogLogLink(SEXP sexp) {}
   };
+
+  class ArandaOrdazLink {
+  public:
+    vec link(vec S) {
+      if (thetaAO==0)
+	return log(-log(S));
+      else return log((exp(log(S)*(-thetaAO))-1)/thetaAO);
+    }
+    vec ilink(vec eta) {
+      if (thetaAO==0)
+	return exp(-exp(eta));
+      else return exp(-log(thetaAO*exp(eta)+1)/thetaAO);
+    }
+    vec h(vec eta, vec etaD) {
+      if (thetaAO==0)
+	return etaD % exp(eta);
+      else return exp(eta) % etaD/(thetaAO*exp(eta)+1);
+    }
+    vec H(vec eta) {
+      if (thetaAO==0)
+	return exp(eta);
+      else return log(thetaAO*exp(eta)+1)/thetaAO;
+    }
+    mat gradH(vec eta, mat X) {
+      if (thetaAO==0)
+	return rmult(X,exp(eta));
+      else return rmult(X,exp(eta)/(1+thetaAO*exp(eta)));
+    }
+    mat gradh(vec eta, vec etaD, mat X, mat XD) { 
+      if (thetaAO==0)
+	return rmult(XD, exp(eta)) + rmult(X, etaD % exp(eta));
+      else {
+	vec denom = (thetaAO*exp(eta)+1) % (thetaAO*exp(eta)+1);
+	return rmult(XD,(thetaAO*exp(2*eta)+exp(eta))/denom)+rmult(X,exp(eta) % etaD/denom);
+      }
+    }
+    double thetaAO;
+    ArandaOrdazLink(SEXP sexp) { 
+      List args = as<List>(sexp);
+      thetaAO = as<double>(args["thetaAO"]);
+    }
+  };
+
   // Useful relationship: d/dx expit(x)=expit(x)*expit(-x) 
   class LogitLink {
   public:
@@ -174,6 +218,7 @@ namespace rstpm2 {
       }
       return c;
     }
+    LogitLink(SEXP sexp) {}
   };
   class ProbitLink {
   public:
@@ -199,6 +244,7 @@ namespace rstpm2 {
       cube c(beta.size(), beta.size(), X.n_rows, fill::zeros);
       return c;
     }
+    ProbitLink(SEXP sexp) {}
   };
   class LogLink {
   public:
@@ -216,6 +262,7 @@ namespace rstpm2 {
       cube c(beta.size(), beta.size(), X.n_rows, fill::zeros);
       return c;
     }
+    LogLink(SEXP sexp) {}
   };
   // wrappers to call class methods from C
   template<class T>
@@ -448,7 +495,7 @@ namespace rstpm2 {
     using Link::H;
     using Link::gradh;
     using Link::gradH;
-    Stpm2(SEXP sexp) : bfgs() {
+    Stpm2(SEXP sexp) : Link(sexp), bfgs() {
       List list = as<List>(sexp);
       bfgs.coef = init = as<NumericVector>(list["init"]);
       X = as<mat>(list["X"]); 
@@ -1679,6 +1726,8 @@ namespace rstpm2 {
       	return stpm2_model_output_<Stpm2<LogLink> >(args);
       else if (link == "probit")
       	return stpm2_model_output_<Stpm2<ProbitLink> >(args);
+      else if (link == "AO")
+      	return stpm2_model_output_<Stpm2<ArandaOrdazLink> >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
@@ -1693,6 +1742,8 @@ namespace rstpm2 {
       	return pstpm2_model_output_<Pstpm2<Stpm2<LogLink>,SmoothLogH> >(args);
       else if (link == "probit")
       	return pstpm2_model_output_<Pstpm2<Stpm2<ProbitLink>,SmoothLogH> >(args);
+      else if (link == "AO")
+      	return pstpm2_model_output_<Pstpm2<Stpm2<ArandaOrdazLink>,SmoothLogH> >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
@@ -1707,6 +1758,8 @@ namespace rstpm2 {
       	return stpm2_model_output_<GammaSharedFrailty<Stpm2<LogLink> > >(args);
       else if (link == "probit")
       	return stpm2_model_output_<GammaSharedFrailty<Stpm2<ProbitLink> > >(args);
+      else if (link == "AO")
+      	return stpm2_model_output_<GammaSharedFrailty<Stpm2<ArandaOrdazLink> > >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
@@ -1721,6 +1774,8 @@ namespace rstpm2 {
       	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<LogLink> >,SmoothLogH> >(args);
       else if (link == "probit")
       	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<ProbitLink> >,SmoothLogH> >(args);
+      else if (link == "AO")
+      	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<ArandaOrdazLink> >,SmoothLogH> >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
@@ -1735,6 +1790,8 @@ namespace rstpm2 {
       	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogLink> > >(args);
       else if (link == "probit")
       	return stpm2_model_output_<NormalSharedFrailty<Stpm2<ProbitLink> > >(args);
+      else if (link == "AO")
+      	return stpm2_model_output_<NormalSharedFrailty<Stpm2<ArandaOrdazLink> > >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
@@ -1750,6 +1807,8 @@ namespace rstpm2 {
       	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<LogLink> >,SmoothLogH> >(args);
       else if (link == "probit")
       	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<ProbitLink> >,SmoothLogH> >(args);
+      else if (link == "AO")
+      	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<ArandaOrdazLink> >,SmoothLogH> >(args);
       else {
 	REprintf("Unknown link function.\n");
 	return wrap(-1);
