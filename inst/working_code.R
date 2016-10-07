@@ -26,10 +26,16 @@ summary(fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="PH", df=3))
 summary(fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AO", df=3)) # Same: OK
 summary(fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="PO", df=3))
 summary(fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AO", theta.AO=1, df=3)) # Same: OK
-
 summary(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AO", theta.AO=0.5))
 
-
+## Examples using ns() for covariates - this was buggy.
+refresh
+require(rstpm2)
+summary(fit <- stpm2(Surv(rectime,censrec==1)~1,
+                     smooth.formula=~ns(log(rectime),df=3)+ns(x1,df=3),
+                     data=brcancer,link="PH"))
+summary(fit <- stpm2(Surv(rectime,censrec==1)~ns(x1,df=3), df=3,data=brcancer,link="PH"))
+summary(fit <- pstpm2(Surv(rectime,censrec==1)~ns(x1,df=3), data=brcancer,link="PH"))
 
 
 grad <- function(f,x,eps=1e-5)

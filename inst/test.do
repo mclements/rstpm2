@@ -127,4 +127,13 @@ timer off 1
 timer list 1
 matrix list e(vcv)
 
+tab trial, gen(trialvar)
+timer clear 1
+timer on 1
+stmixed treat trialvar2-trialvar15 || trial: treat, nocons dist(fpm) df(3)
+timer off 1
+timer list 1
+
+
+
 stpm2 treat i.trial, df(3) scale(hazard)

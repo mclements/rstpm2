@@ -531,10 +531,8 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ## ensure that data is a data frame
     ## data <- get_all_vars(full.formula, data) # but this loses the other design information
     ## restrict to non-missing data (assumes na.action=na.omit)
-    .include <- Reduce(`&`,
-                       lapply(model.frame(formula, data, na.action=na.pass),
-                              Negate(is.na)),
-                       TRUE)
+    .include <- apply(model.matrix(formula, data, na.action = na.pass), 1, function(row) !any(is.na(row))) &
+        !is.na(eval(eventExpr,data)) & !is.na(eval(timeExpr,data))
     data <- data[.include, , drop=FALSE]
     ##
     ## parse the function call
@@ -1185,12 +1183,6 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ## data <- get_all_vars(temp.formula, raw.data)
     criterion <- match.arg(criterion)
     penalty <- match.arg(penalty)
-    ## restrict to non-missing data (assumes na.action=na.omit)
-    .include <- Reduce(`&`,
-                       lapply(model.frame(formula, data, na.action=na.pass),
-                              Negate(is.na)),
-                       TRUE)
-    data <- data[.include, , drop=FALSE] ### REPLACEMENT ###
     ##
     ## parse the function call
     Call <- match.call()
@@ -1200,9 +1192,9 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     mf <- mf[c(1L, m)]
     ##
     ## parse the event expression
+    eventExpr <- lhs(formula)[[length(lhs(formula))]]
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
-    eventExpr <- lhs(formula)[[length(lhs(formula))]]
     delayed <- length(lhs(formula))>=4
     surv.type <- attr(eventInstance,"type")
     if (surv.type %in% c("interval2","left","mstate"))
@@ -1211,6 +1203,11 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
     if (timeVar == "")
       timeVar <- all.vars(timeExpr)
+    ## restrict to non-missing data (assumes na.action=na.omit)
+    .include <- apply(model.matrix(formula, data, na.action = na.pass), 1, function(row) !any(is.na(row))) &
+        !is.na(eval(eventExpr,data)) & !is.na(eval(timeExpr,data))
+    data <- data[.include, , drop=FALSE] ### REPLACEMENT ###
+    ## we can now evaluate over data
     time <- eval(timeExpr, data, parent.frame())
     time0Expr <- NULL # initialise
     if (delayed) {
