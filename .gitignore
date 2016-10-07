@@ -1,0 +1,14 @@
+*.o
+*.aux
+*.log
+auto
+*.out
+...Rcheck
+.Rhistory
+*~
+*.so
+rstpm2.Rcheck
+*.Rnw.tex
+_region_.tex
+Introduction-*.pdf
+Introduction.tex

@@ -24,9 +24,10 @@ stpm2(formula, data,
       timeVar = "", time0Var = "", use.gr = TRUE,
       optimiser=c("BFGS","NelderMead"),
       reltol=1.0e-8, trace = 0,
-      link.type=c("PH","PO","probit","AH"), 
-      frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9,
-      RandDist=c("Gamma","LogN"), recurrent = FALSE,
+      link.type=c("PH","PO","probit","AH","AO"), theta.AO=0, 
+      frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=-6, nodes=9,
+      RandDist=c("Gamma","LogN"), recurrent = FALSE, adaptive=TRUE,
+      maxkappa=1000, Z=~1,
       contrasts = NULL,
       subset = NULL, ...)
 }
@@ -105,7 +106,12 @@ two variables define the time}
   for when more than one data variable is used in the entry time.}
 \item{use.gr}{logical indicating whether to use gradients in the calculation}
 \item{optimiser}{select which optimiser is used}
-\item{link.type}{type of link function.}
+\item{link.type}{type of link function. For "PH" (generalised
+  proportional hazards), g(S)=log(-log(S)); for
+"PO" (generalised proportional odds), g(S)=-logit(S); for "probit"
+(generalised probit), g(S)=-probit(S); for "AH" (generalised additive
+hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta.AO)-1)/theta.AO).}
+\item{theta.AO}{theta parameter for the Aranda-Ordaz link type.}
 \item{reltol}{relative tolerance for the model convergence}
 \item{trace}{logical for whether to provide trace information}
 \item{frailty}{logical for whether to fit a shared frailty model}
@@ -118,6 +124,11 @@ two variables define the time}
   for the frailties or random effects)}
 \item{logtheta}{initial value for log-theta used in the gamma shared frailty
   model}
+\item{adaptive}{logical for whether to use adaptive or non-adaptive
+  quadrature}
+\item{maxkappa}{double float value for the maximum value of the weight
+  used in the constraint}
+\item{Z}{formula for the design matrix for the random effects}
 \item{\dots}{
   additional arguments to be passed to the \code{\link{mle2}} .
 }

@@ -29,9 +29,11 @@ pstpm2(formula, data, smooth.formula = NULL, smooth.args = NULL,
        smoother.parameters = NULL,
        alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1,
        sp.init=1, trace = 0,
-       link.type=c("PH","PO","probit","AH"), optimiser = c("BFGS", "NelderMead", "Nlm"),
-       frailty=!is.null(cluster),cluster = NULL, logtheta=-6, nodes=9,
-       RandDist=c("Gamma","LogN"), recurrent = FALSE,
+       link.type=c("PH","PO","probit","AH","AO"), theta.AO=0,
+       optimiser = c("BFGS", "NelderMead", "Nlm"),
+       recurrent = FALSE, frailty=!is.null(cluster) & !robust,cluster = NULL,
+       logtheta=-6, nodes=9,
+       RandDist=c("Gamma","LogN"), adaptive = TRUE, maxkappa=1000, Z = ~1, 
        reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-5),outer_optim=1,
        contrasts = NULL, subset = NULL, ...)
 }
@@ -97,19 +99,29 @@ two variables define the time}
   initial values [optional and rarely used].}
 \item{time0Var}{string variable to determine the entry variable; useful
   for when more than one data variable is used in the entry time.}
-\item{reltol}{list with components for search and final relative tolerances.}
-\item{link.type}{type of link function.}
+\item{link.type}{type of link function. For "PH" (generalised
+  proportional hazards), g(S)=log(-log(S)); for
+"PO" (generalised proportional odds), g(S)=-logit(S); for "probit"
+(generalised probit), g(S)=-probit(S); for "AH" (generalised additive
+hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta.AO)-1)/theta.AO).}
+\item{theta.AO}{theta parameter for the Aranda-Ordaz link type.}
 \item{optimiser}{select which optimiser is used}
-\item{frailty}{logical for whether to fit a shared frailty model}
-\item{cluster}{string for the data variable that determines the cluster
-  for the frailty}
-\item{nodes}{number of integration points for Gaussian quadrature}
-\item{RandDist}{type of distribution for the random effect or frailty}
-\item{logtheta}{initial value for log-theta used in the gamma shared frailty
-  model}
 \item{recurrent}{logical for whether clustered, left truncated data are
   recurrent or for first event (where the latter requires an adjustment
   for the frailties or random effects)}
+\item{frailty}{logical for whether to fit a shared frailty model}
+\item{cluster}{string for the data variable that determines the cluster
+  for the frailty}
+\item{logtheta}{initial value for log-theta used in the gamma shared frailty
+  model}
+\item{nodes}{number of integration points for Gaussian quadrature}
+\item{RandDist}{type of distribution for the random effect or frailty}
+\item{adaptive}{logical for whether to use adaptive or non-adaptive
+  quadrature}
+\item{maxkappa}{double float value for the maximum value of the weight
+  used in the constraint}
+\item{Z}{formula for the design matrix for the random effects}
+\item{reltol}{list with components for search and final relative tolerances.}
 \item{outer_optim}{Integer to indicate the algorithm for outer optimisation. If outer_optim=1, then use Neldear-Mead, otherwise use Nlm.}
 \item{\dots}{
   additional arguments to be passed to the \code{\link{mle2}} .
