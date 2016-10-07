@@ -1022,31 +1022,34 @@ setMethod("predict", "stpm2",
 ##`%c%` <- function(f,g) function(...) g(f(...)) # function composition
 setMethod("plot", signature(x="stpm2", y="missing"),
           function(x,y,newdata,type="surv",
-                      xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
-                      add=FALSE,ci=!add,rug=!add,
-                      var=NULL,exposed=incrVar(var),...) {
-  y <- predict(x,newdata,type=if (type=="fail") "surv" else type,var=var,exposed=exposed,grid=TRUE,se.fit=TRUE)
-  if (type=="fail") y <- data.frame(Estimate=1-y$Estimate, lower=1-y$upper, upper=1-y$lower)
-  if (is.null(xlab)) xlab <- deparse(x@timeExpr)
-  if (is.null(ylab))
-    ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
-                   sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard",
-                   loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
-                   meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
-                   margsurv="Marginal survival",marghaz="Marginal hazard",marghr="Marginal hazard ratio", haz="Hazard",fail="Failure",
-                   meanhaz="Mean hazard")
-  xx <- attr(y,"newdata")
-  xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
-  if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
-  if (ci) polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
-  lines(xx,y[,1],col=line.col,lty=lty)
-  if (rug) {
-      Y <- x@y
-      eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]
-      rug(eventTimes,col=line.col)
-    }
-  return(invisible(y))
-})
+                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
+                   add=FALSE,ci=!add,rug=!add,
+                   var=NULL,exposed=incrVar(var),...) {
+              y <- predict(x,newdata,type=if (type=="fail") "surv" else type,var=var,exposed=exposed,
+                           grid=!(x@timeVar %in% names(newdata)), se.fit=ci)
+              if (type=="fail") y <- if (ci) data.frame(Estimate=1-y$Estimate, lower=1-y$upper, upper=1-y$lower) else data.frame(Estimate=1-y)
+              if (is.null(xlab)) xlab <- deparse(x@timeExpr)
+              if (is.null(ylab))
+                  ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
+                                 sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard",
+                                 loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
+                                 meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
+                                 margsurv="Marginal survival",marghaz="Marginal hazard",marghr="Marginal hazard ratio", haz="Hazard",fail="Failure",
+                                 meanhaz="Mean hazard")
+              xx <- attr(y,"newdata")
+              xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
+              if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
+              if (ci) {
+                  polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
+                  lines(xx,y[,1],col=line.col,lty=lty)
+              } else lines(xx,y,col=line.col,lty=lty)
+              if (rug) {
+                  Y <- x@y
+                  eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]
+                  rug(eventTimes,col=line.col)
+              }
+              return(invisible(y))
+          })
 if (FALSE) {
     lpfunc <- function(delta,fit,dataset,var) {
       dataset[[var]] <- dataset[[var]]+delta
@@ -2052,28 +2055,31 @@ setMethod("plot", signature(x="pstpm2", y="missing"),
                    lwd=par("lwd"),
                    add=FALSE,ci=!add,rug=!add,exposed=incrVar(var),
                    var=NULL,...) {
-  y <- predict(x,newdata,type=if (type=="fail") "surv" else type,var=var,exposed=exposed,grid=TRUE,se.fit=TRUE)
-  if (type=="fail") y <- data.frame(Estimate=1-y$Estimate, lower=1-y$upper, upper=1-y$lower)
-  if (is.null(xlab)) xlab <- deparse(x@timeExpr)
-  if (is.null(ylab))
-    ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
-                   sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard",
-                   loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
-                   meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
-                   margsurv="Marginal survival",marghaz="Marginal hazard",
-                   marghr="Marginal hazard ratio", haz="Hazard", fail="Failure", meanhaz="Mean hazard")
-  xx <- attr(y,"newdata")
-  xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
-  if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
-  if (ci) polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
-  lines(xx,y[,1],col=line.col,lty=lty,lwd=lwd)
-  if (rug) {
-      Y <- x@y
-      eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]
-      rug(eventTimes,col=line.col)
-    }
-  return(invisible(y))
-})
+              y <- predict(x,newdata,type=if (type=="fail") "surv" else type,var=var,exposed=exposed,
+                           grid=!(x@timeVar %in% names(newdata)), se.fit=TRUE)
+              if (type=="fail") y <- if (ci) data.frame(Estimate=1-y$Estimate, lower=1-y$upper, upper=1-y$lower) else data.frame(Estimate=y)
+              if (is.null(xlab)) xlab <- deparse(x@timeExpr)
+              if (is.null(ylab))
+                  ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
+                                 sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard",
+                                 loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
+                                 meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
+                                 margsurv="Marginal survival",marghaz="Marginal hazard",
+                                 marghr="Marginal hazard ratio", haz="Hazard", fail="Failure", meanhaz="Mean hazard")
+              xx <- attr(y,"newdata")
+              xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
+              if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
+              if (ci) {
+                  polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
+                  lines(xx,y[,1],col=line.col,lty=lty,lwd=lwd)
+                  } else lines(xx,y,col=line.col,lty=lty,lwd=lwd)
+              if (rug) {
+                  Y <- x@y
+                  eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]
+                  rug(eventTimes,col=line.col)
+              }
+              return(invisible(y))
+          })
 
 ## sandwich variance estimator (from the sandwich package)
 

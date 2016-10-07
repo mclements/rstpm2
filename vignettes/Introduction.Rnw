@@ -50,8 +50,6 @@ A more detailed theoretical development is available from the paper by Liu, Pawi
 
 Why would you want to use these models? 
 
-\section{}
-
 
 \section{Mean survival}
 
@@ -60,8 +58,8 @@ This has a useful interpretation for causal inference.
 $E_Z(S(t|Z,X=1))-E_Z(S(t|Z,X=0))$
 
 \begin{verbatim}
-fit <- rstpm()
-predict(fit,type="meansurvdiff",newdata=data)
+fit <- stpm(...)
+predict(fit,type="meansurv",newdata=data)
 \end{verbatim}
 
 \section{Cure models}
@@ -77,10 +75,8 @@ options(width=80,useFancyQuotes="UTF-8")
 require(rstpm2)
 @ 
 <<>>=
-data(popmort, package="rstpm2")
-data(colon,package="rstpm2")
-popmort2 <- transform(popmort,exitage=age,exityear=year,age=NULL,year=NULL)
-colon2 <- within(colon, {
+popmort2 <- transform(rstpm2::popmort,exitage=age,exityear=year,age=NULL,year=NULL)
+colon2 <- within(rstpm2::colon, {
   status <- ifelse(surv_mm>120.5,1,status)
   tm <- pmin(surv_mm,120.5)/12
   exit <- dx+tm*365.25
@@ -120,23 +116,26 @@ figures with that in Stata. For the predictions, the Stata model gives:
   6. | .86108264   .8542898   .8675839 |
      +---------------------------------+
 \end{verbatim}
-We can estimate the proportion of failures at the end of follow-up using:
+We can estimate the proportion of failures prior to the last event time:
 <<>>=
 newdata.eof <- data.frame(year8594 = unique(colon2$year8594),
-                          tm=max(colon2$tm)) 
+                          tm=10)
 1-predict(fit0, newdata.eof, type="surv", se.fit=TRUE)
 1-predict(fit, newdata.eof, type="surv", se.fit=TRUE)
+predict(fit, newdata.eof, type="haz", se.fit=TRUE)
 @ 
 We can plot the predicted survival estimates:
 \begin{center}
 <<fig=TRUE>>=
-plot(fit0,newdata=data.frame(year8594 = "Diagnosed 85-94"), ylim=0:1,
+tms=seq(0,10,length=301)[-1]
+plot(fit0,newdata=data.frame(year8594 = "Diagnosed 85-94", tm=tms), ylim=0:1,
      xlab="Time since diagnosis (years)", ylab="Relative survival")
-plot(fit0,newdata=data.frame(year8594 = "Diagnosed 75-84"),
+plot(fit0,newdata=data.frame(year8594 = "Diagnosed 75-84",tm=tms),
      add=TRUE,line.col="red",rug=FALSE)
-plot(fit,newdata=data.frame(year8594 = "Diagnosed 85-94"),
+## warnings: Predicted hazards less than zero for cure
+plot(fit,newdata=data.frame(year8594 = "Diagnosed 85-94",tm=tms),
      add=TRUE,ci=FALSE,lty=2,rug=FALSE)
-plot(fit,newdata=data.frame(year8594="Diagnosed 75-84"),
+plot(fit,newdata=data.frame(year8594="Diagnosed 75-84",tm=tms),
      add=TRUE,rug=FALSE,line.col="red",ci=FALSE,lty=2)
 legend("topright",c("85-94 without cure","75-84 without cure",
                     "85-94 with cure","75-84 with cure"),
@@ -148,16 +147,16 @@ And the hazard curves:
 
 \begin{center}
 <<fig=TRUE>>=
-plot(fit0,newdata=data.frame(year8594 = "Diagnosed 85-94"), 
+plot(fit0,newdata=data.frame(year8594 = "Diagnosed 85-94", tm=tms), 
      ylim=c(0,0.5), type="hazard",
      xlab="Time since diagnosis (years)",ylab="Excess hazard")
-plot(fit0,newdata=data.frame(year8594 = "Diagnosed 75-84"),
+plot(fit0,newdata=data.frame(year8594 = "Diagnosed 75-84", tm=tms),
      type="hazard",
      add=TRUE,line.col="red",rug=FALSE)
-plot(fit,newdata=data.frame(year8594 = "Diagnosed 85-94"),
+plot(fit,newdata=data.frame(year8594 = "Diagnosed 85-94", tm=tms),
      type="hazard",
      add=TRUE,ci=FALSE,lty=2,rug=FALSE)
-plot(fit,newdata=data.frame(year8594="Diagnosed 75-84"),
+plot(fit,newdata=data.frame(year8594="Diagnosed 75-84", tm=tms),
      type="hazard",
      add=TRUE,rug=FALSE,line.col="red",ci=FALSE,lty=2)
 legend("topright",c("85-94 without cure","75-84 without cure",
