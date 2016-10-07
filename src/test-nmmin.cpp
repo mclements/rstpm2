@@ -110,8 +110,20 @@ namespace rstpm2 {
     }
     return wrap(out);
   }
+
+  class Link {
+  public:
+    virtual vec link(vec S) = 0;
+    virtual vec ilink(vec x) = 0;
+    virtual vec h(vec eta, vec etaD) = 0;
+    virtual vec H(vec eta) = 0;
+    virtual mat gradH(vec eta, mat X) = 0;
+    virtual mat gradh(vec eta, vec etaD, mat X, mat XD) = 0;
+    virtual ~Link() { }
+  };
+
   // Various link objects
-  class LogLogLink {
+  class LogLogLink : public Link {
   public:
     vec link(vec S) { return log(-log(S)); }
     vec ilink(vec x) { return exp(-exp(x)); }
@@ -139,7 +151,7 @@ namespace rstpm2 {
     LogLogLink(SEXP sexp) {}
   };
 
-  class ArandaOrdazLink {
+  class ArandaOrdazLink : public Link {
   public:
     vec link(vec S) {
       if (thetaAO==0)
@@ -182,7 +194,7 @@ namespace rstpm2 {
   };
 
   // Useful relationship: d/dx expit(x)=expit(x)*expit(-x) 
-  class LogitLink {
+  class LogitLink : public Link {
   public:
     vec link(vec S) { return -logit(S); }
     vec ilink(vec x) { return expit(-x); }
@@ -220,7 +232,7 @@ namespace rstpm2 {
     }
     LogitLink(SEXP sexp) {}
   };
-  class ProbitLink {
+  class ProbitLink : public Link {
   public:
     vec link(vec S) { return -qnorm01(S); }
     vec ilink(vec eta) { return pnorm01(-eta); }
@@ -246,7 +258,7 @@ namespace rstpm2 {
     }
     ProbitLink(SEXP sexp) {}
   };
-  class LogLink {
+  class LogLink : public Link {
   public:
     vec link(vec S) { return -log(S); }
     vec ilink(vec x) { return exp(-x); }
@@ -487,16 +499,26 @@ namespace rstpm2 {
     uvec ind0, which0;
   };
   // Main class for Stpm2 (fully parametric)
-  template<class Link = LogLogLink>
-  class Stpm2 : public BaseData, Link {
+  class Stpm2 : public BaseData {
   public:
-    typedef Stpm2<Link> This;
-    using Link::h;
-    using Link::H;
-    using Link::gradh;
-    using Link::gradH;
-    Stpm2(SEXP sexp) : Link(sexp), bfgs() {
+    typedef Stpm2 This;
+    Stpm2(SEXP sexp) : bfgs() {
       List list = as<List>(sexp);
+      std::string linkType = as<std::string>(list["link"]);
+      if (linkType=="PH")
+	link=new LogLogLink(sexp);
+      else if (linkType=="PO")
+	link=new LogitLink(sexp);
+      else if (linkType=="probit")
+	link=new ProbitLink(sexp);
+      else if (linkType=="AH")
+	link=new LogLink(sexp);
+      else if (linkType=="AO")
+	link=new ArandaOrdazLink(sexp);
+      else {
+	REprintf("No matching link.type");
+	return;
+      }
       bfgs.coef = init = as<NumericVector>(list["init"]);
       X = as<mat>(list["X"]); 
       XD = as<mat>(list["XD"]); 
@@ -533,9 +555,12 @@ namespace rstpm2 {
     // log-likelihood components and constraints
     // Note: the li and gradli components depend on other variables (bhazard, wt, wt0, wt, event);
     //       calculations should *not* be done on subsets
+    virtual ~Stpm2() {
+      delete link;
+    }
     li_constraint li_right_censored(vec eta, vec etaD) {
-      vec h = Link::h(eta,etaD) + bhazard;
-      vec H = Link::H(eta);
+      vec h = link->h(eta,etaD) + bhazard;
+      vec H = link->H(eta);
       vec eps = h*0.0 + 1.0e-16; 
       double constraint = kappa/2.0 * (sum(h % h % (h<0)) +
 				       sum(H % H % (H<0))); 
@@ -546,7 +571,7 @@ namespace rstpm2 {
       return out;
     }
     li_constraint li_left_truncated(vec eta0) {
-      vec H0 = Link::H(eta0);
+      vec H0 = link->H(eta0);
       double constraint = kappa/2.0 * sum(H0 % H0 % (H0<0));
       vec eps = H0*0.0 + 1.0e-16; 
       vec li = wt0 % max(H0,eps);
@@ -554,9 +579,9 @@ namespace rstpm2 {
       return out;
     }
     li_constraint li_interval(vec eta, vec etaD, vec eta1) {
-      vec H = Link::H(eta);
-      vec H1 = Link::H(eta1);
-      vec h = Link::h(eta, etaD) + bhazard;
+      vec H = link->H(eta);
+      vec H1 = link->H(eta1);
+      vec h = link->h(eta, etaD) + bhazard;
       double constraint = kappa/2.0 * (sum(H % H % (H<0))+
 				       sum(h % h % (h<0))+
 				       sum(H1 % H1 % (H1<0)));
@@ -616,11 +641,11 @@ namespace rstpm2 {
     // Note: gradH and gradh are currently calculated at eta and etaD and may not satisfy the constraints, 
     //       while H and h may be transformed for the constraints 
     gradli_constraint gradli_right_censored(vec eta, vec etaD, mat X, mat XD) {
-      vec h = Link::h(eta,etaD) + bhazard;
-      vec H = Link::H(eta);
+      vec h = link->h(eta,etaD) + bhazard;
+      vec H = link->H(eta);
       vec eps = h*0.0 + 1.0e-16;
-      mat gradH = Link::gradH(eta,X);
-      mat gradh = Link::gradh(eta,etaD,X,XD);
+      mat gradH = link->gradH(eta,X);
+      mat gradh = link->gradh(eta,etaD,X,XD);
       mat Xconstraint = kappa * (rmult(gradh, h % (h<0)) +
 				 rmult(gradH, H % (H<0)));
       // h = max(h,eps);
@@ -629,8 +654,8 @@ namespace rstpm2 {
       return out;
     }
     gradli_constraint gradli_left_truncated(vec eta0, mat X0) {
-      mat gradH0 = Link::gradH(eta0, X0); 
-      vec H0 = Link::H(eta0); 
+      mat gradH0 = link->gradH(eta0, X0); 
+      vec H0 = link->H(eta0); 
       vec eps = H0*0.0 + 1.0e-16;
       mat Xconstraint = kappa * rmult(gradH0, H0 % (H0<0));
       mat Xgrad = rmult(gradH0, wt0);
@@ -639,12 +664,12 @@ namespace rstpm2 {
     }
     gradli_constraint gradli_interval_censored(vec eta, vec etaD, vec eta1, 
 						       mat X, mat XD, mat X1) {
-      vec H = Link::H(eta);
-      vec h = Link::h(eta,etaD);
-      vec H1 = Link::H(eta1);
-      mat gradH = Link::gradH(eta,X);
-      mat gradH1 = Link::gradH(eta1,X1);
-      mat gradh = Link::gradh(eta, etaD, X, XD);
+      vec H = link->H(eta);
+      vec h = link->h(eta,etaD);
+      vec H1 = link->H(eta1);
+      mat gradH = link->gradH(eta,X);
+      mat gradH1 = link->gradH(eta1,X1);
+      mat gradh = link->gradh(eta, etaD, X, XD);
       vec eps = H*0.0 + 1e-16;
       mat Xconstraint = kappa * (rmult(gradH, H % (H<eps))+
 				 rmult(gradh, h % (h<eps))+
@@ -697,13 +722,13 @@ namespace rstpm2 {
     bool feasible(vec beta) {
       vec eta = X * beta;
       vec etaD = XD * beta;
-      vec h = Link::h(eta, etaD) + bhazard;
-      vec H = Link::H(eta);
+      vec h = link->h(eta, etaD) + bhazard;
+      vec H = link->H(eta);
       bool condition = all((h>0) % (H>0));
       if (delayed) {
 	vec eta0 = X0 * beta;
 	// vec etaD0 = XD0 * beta;
-	vec H0 = Link::H(eta0);
+	vec H0 = link->H(eta0);
 	condition = condition && all(H0>0);
       }
       return condition;
@@ -723,11 +748,11 @@ namespace rstpm2 {
     //   vec beta(&nvbeta[0],n);
     //   vec eta = X * beta;
     //   vec etaD = XD * beta;
-    //   vec h = Link::h(eta,etaD);
-    //   mat gradh = Link::gradh(eta,etaD,X,XD);
-    //   cube hessianh = Link::hessianh(beta,X,XD);
-    //   cube hessianH = Link::hessianH(beta,X);
-    //   cube hessianH0 = Link::hessianH(beta,X0);
+    //   vec h = link->h(eta,etaD);
+    //   mat gradh = link->gradh(eta,etaD,X,XD);
+    //   cube hessianh = link->hessianh(beta,X,XD);
+    //   cube hessianH = link->hessianH(beta,X);
+    //   cube hessianH0 = link->hessianH(beta,X0);
     //   mat hessian = -arma::sum(hessianH,2);
     //   if (delayed)
     // 	hessian += arma::sum(hessianH0,2);
@@ -758,6 +783,7 @@ namespace rstpm2 {
     int n, N;
     BFGS2 bfgs;
     std::string optimiser;
+    Link * link;
   };
 
   // penalised smoothers 
@@ -896,7 +922,7 @@ namespace rstpm2 {
   }    
   
   // Penalised link-based models
-  template<class Stpm2Type = Stpm2<LogLogLink>, class Smooth = SmoothLogH>
+  template<class Stpm2Type = Stpm2, class Smooth = SmoothLogH>
   class Pstpm2 : public Stpm2Type, public Smooth {
   public:
     typedef Pstpm2<Stpm2Type,Smooth> This;
@@ -1112,8 +1138,8 @@ namespace rstpm2 {
       double theta = exp(beta[n-1]);
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
-      vec h = Base::h(eta,etaD) + this->bhazard;
-      vec H = Base::H(eta);
+      vec h = this->link->h(eta,etaD) + this->bhazard;
+      vec H = this->link->H(eta);
       double constraint = this->kappa/2.0 * (sum(h % h % (h<0)) + sum(H % H % (H<0)));
       vec eps = h*0.0 + 1.0e-16; 
       h = max(h,eps);
@@ -1121,7 +1147,7 @@ namespace rstpm2 {
       vec H0;
       if (this->delayed) {
 	vec eta0 = this->X0 * vbeta;
-	H0 = Base::H(eta0);
+	H0 = this->link->H(eta0);
 	constraint += this->kappa/2.0 * sum(H0 % H0 % (H0<0));
       }
       double ll = 0.0;
@@ -1160,10 +1186,10 @@ namespace rstpm2 {
       double theta = exp(beta[n-1]);
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
-      vec h = Base::h(eta,etaD);
-      vec H = Base::H(eta);
-      mat gradh = Base::gradh(eta,etaD,this->X,this->XD);
-      mat gradH = Base::gradH(eta,this->X);
+      vec h = this->link->h(eta,etaD);
+      vec H = this->link->H(eta);
+      mat gradh = this->link->gradh(eta,etaD,this->X,this->XD);
+      mat gradH = this->link->gradH(eta,this->X);
       vec eps = h*0.0 + 1.0e-16; 
       h = max(h,eps);
       H = max(H,eps);
@@ -1172,8 +1198,8 @@ namespace rstpm2 {
       if (this->delayed) {
 	vec eta0 = this->X0 * vbeta;
 	// vec etaD0 = this->XD0 * vbeta;
-	H0 = Base::H(eta0);
-	gradH0 = Base::gradH(eta0,this->X0);
+	H0 = this->link->H(eta0);
+	gradH0 = this->link->gradH(eta0,this->X0);
       }
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
 	int mi=0;
@@ -1715,104 +1741,25 @@ namespace rstpm2 {
   }
   RcppExport SEXP model_output(SEXP args) {
     List list = as<List>(args);
-    std::string link = as<std::string>(list["link"]);
     std::string type = as<std::string>(list["type"]);
     if (type=="stpm2") {
-      if (link == "PH")
-	return stpm2_model_output_<Stpm2<LogLogLink> >(args);
-      else if (link == "PO")
-	return stpm2_model_output_<Stpm2<LogitLink> >(args);
-      else if (link == "AH")
-      	return stpm2_model_output_<Stpm2<LogLink> >(args);
-      else if (link == "probit")
-      	return stpm2_model_output_<Stpm2<ProbitLink> >(args);
-      else if (link == "AO")
-      	return stpm2_model_output_<Stpm2<ArandaOrdazLink> >(args);
-      else {
-	REprintf("Unknown link function.\n");
-	return wrap(-1);
-      }
+      return stpm2_model_output_<Stpm2>(args);
     }
     else if (type=="pstpm2") {
-      if (link == "PH")
-	return pstpm2_model_output_<Pstpm2<Stpm2<LogLogLink>,SmoothLogH> >(args);
-      else if (link == "PO")
-	return pstpm2_model_output_<Pstpm2<Stpm2<LogitLink>,SmoothLogH> >(args);
-      else if (link == "AH")
-      	return pstpm2_model_output_<Pstpm2<Stpm2<LogLink>,SmoothLogH> >(args);
-      else if (link == "probit")
-      	return pstpm2_model_output_<Pstpm2<Stpm2<ProbitLink>,SmoothLogH> >(args);
-      else if (link == "AO")
-      	return pstpm2_model_output_<Pstpm2<Stpm2<ArandaOrdazLink>,SmoothLogH> >(args);
-      else {
-	REprintf("Unknown link function.\n");
-	return wrap(-1);
-      }
+      return pstpm2_model_output_<Pstpm2<Stpm2,SmoothLogH> >(args);
     }
     else if (type=="stpm2_gamma_frailty") {
-      if (link == "PH")
-	return stpm2_model_output_<GammaSharedFrailty<Stpm2<LogLogLink> > >(args);
-      else if (link == "PO")
-	return stpm2_model_output_<GammaSharedFrailty<Stpm2<LogitLink> > >(args);
-      else if (link == "AH")
-      	return stpm2_model_output_<GammaSharedFrailty<Stpm2<LogLink> > >(args);
-      else if (link == "probit")
-      	return stpm2_model_output_<GammaSharedFrailty<Stpm2<ProbitLink> > >(args);
-      else if (link == "AO")
-      	return stpm2_model_output_<GammaSharedFrailty<Stpm2<ArandaOrdazLink> > >(args);
-      else {
-	REprintf("Unknown link function.\n");
-	return wrap(-1);
-      }
+      return stpm2_model_output_<GammaSharedFrailty<Stpm2> >(args);
     }
     else if (type=="pstpm2_gamma_frailty") {
-      if (link == "PH")
-	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<LogLogLink> >,SmoothLogH> >(args);
-      else if (link == "PO")
-	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<LogitLink> >,SmoothLogH> >(args);
-      else if (link == "AH")
-      	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<LogLink> >,SmoothLogH> >(args);
-      else if (link == "probit")
-      	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<ProbitLink> >,SmoothLogH> >(args);
-      else if (link == "AO")
-      	return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2<ArandaOrdazLink> >,SmoothLogH> >(args);
-      else {
-	REprintf("Unknown link function.\n");
-	return wrap(-1);
-      }
+      return pstpm2_model_output_<Pstpm2<GammaSharedFrailty<Stpm2>,SmoothLogH> >(args);
     }
     else if (type=="stpm2_normal_frailty") {
-      if (link == "PH")
-	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogLogLink> > >(args);
-      else if (link == "PO")
-	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogitLink> > >(args);
-      else if (link == "AH")
-      	return stpm2_model_output_<NormalSharedFrailty<Stpm2<LogLink> > >(args);
-      else if (link == "probit")
-      	return stpm2_model_output_<NormalSharedFrailty<Stpm2<ProbitLink> > >(args);
-      else if (link == "AO")
-      	return stpm2_model_output_<NormalSharedFrailty<Stpm2<ArandaOrdazLink> > >(args);
-      else {
-	REprintf("Unknown link function.\n");
-	return wrap(-1);
-      }
+      return stpm2_model_output_<NormalSharedFrailty<Stpm2> >(args);
     }
     else if (type=="pstpm2_normal_frailty") {
       // order is important here
-      if (link == "PH")
-	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<LogLogLink> >,SmoothLogH> >(args);
-      else if (link == "PO")
-	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<LogitLink> >,SmoothLogH> >(args);
-      else if (link == "AH")
-      	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<LogLink> >,SmoothLogH> >(args);
-      else if (link == "probit")
-      	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<ProbitLink> >,SmoothLogH> >(args);
-      else if (link == "AO")
-      	return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2<ArandaOrdazLink> >,SmoothLogH> >(args);
-      else {
-	REprintf("Unknown link function.\n");
-	return wrap(-1);
-      }
+      return pstpm2_model_output_<Pstpm2<NormalSharedFrailty<Stpm2>,SmoothLogH> >(args);
     }
     else {
       REprintf("Unknown model type.\n");
