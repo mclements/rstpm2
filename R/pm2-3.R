@@ -666,7 +666,11 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         rm(data0)
     } 
     if (frailty) {
-        init <- c(init,logtheta=logtheta)
+        Z <- model.matrix(Z, data)
+        if (ncol(Z)>2) stop("Current implementation only allows for one or two random effects")
+        if (ncol(Z)==2) {
+            init <- c(init,logtheta1=logtheta,corrtrans=0,logtheta2=logtheta)
+        } else init <- c(init, logtheta=logtheta)
     }
     if (!is.null(control) && "parscale" %in% names(control)) {
       if (length(control$parscale)==1)
@@ -686,9 +690,13 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         args$gauss_x <- rule$x
         args$gauss_w <- rule$w
         args$adaptive <- adaptive
-        args$Z <- model.matrix(Z, data)
-        if (ncol(args$Z)>1) stop("Current implementation only allows for a single random effect")
-        args$Z <- as.vector(args$Z)
+        if (ncol(args$Z)>1) {
+            use.gr <- FALSE
+            args$type <- "stpm2_normal_frailty_2d"
+            args$Z <- as.matrix(args$Z)
+            ## args$adaptive <- FALSE # adaptive not defined
+            ## args$optimiser <- "NelderMead" # gradients not defined
+        } else args$Z <- as.vector(args$Z)
     }
     negll <- function(beta) {
         localargs <- args
@@ -768,19 +776,38 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
   }
 ## summary.mle is not exported from bbmle
 .__C__summary.mle2 <- bbmle:::.__C__summary.mle2 # hack suggested from http://stackoverflow.com/questions/28871632/how-to-resolve-warning-messages-metadata-object-not-found-spatiallinesnull-cla
-setClass("summary.stpm2", representation(frailty="logical",theta="list",wald="matrix"), contains="summary.mle2")
+setClass("summary.stpm2", representation(frailty="logical",theta="list",wald="matrix",args="list"), contains="summary.mle2")
 ## setAs("summary.stpm2", "summary.mle2",
 ##       function(from,to) new("summary.mle2", call=from@call, coef=from@call, m2logL=from@m2logL))
 ## setMethod("show", "stpm2", function(object) show(as(object,"mle2")))
+corrtrans <- function(x) (1-exp(-x)) / (1+exp(-x))
 setMethod("summary", "stpm2",
           function(object) {
               newobj <- as(summary(as(object,"mle2")),"summary.stpm2")
+              newobj@args <- object@args
               newobj@frailty <- object@frailty
-              if (object@frailty) {
+              if (object@frailty && !is.matrix(object@args$Z)) {
                   coef <- coef(newobj)
                   theta <- exp(coef[nrow(coef),1])
                   se.logtheta <- coef[nrow(coef),2]
                   se.theta <- theta*se.logtheta
+                  test.statistic <- (1/se.logtheta)^2
+                  p.value <- pchisq(test.statistic,df=1,lower.tail=FALSE)/2
+                  newobj@theta <- list(theta=theta, se.theta=se.theta, p.value=p.value)
+              } else if (object@frailty && is.matrix(object@args$Z) && ncol(object@args$Z)==2) {
+                  ## browser()
+                  coef <- coef(object)
+                  index <- (length(coef)-2):length(coef)
+                  coef <- coef[index]
+                  vcov <- vcov(object)[index,index]
+                  rho <- corrtrans(g12 <- coef[2])
+                  theta <- c(theta1=exp(coef[1]),corr=rho,theta2=exp(coef[3]))
+                  se.theta <- c(theta[1]*sqrt(vcov[1,1]),
+                                2*exp(-g12)/(1+exp(-g12))^2*sqrt(vcov[2,2]),
+                                theta[3]*sqrt(vcov[3,3]))
+                  se.logtheta <- c(theta1=sqrt(vcov[1,1]),
+                                   corr=sqrt(vcov[2,2])/coef[2],
+                                   theta2=sqrt(vcov[3,3]))
                   test.statistic <- (1/se.logtheta)^2
                   p.value <- pchisq(test.statistic,df=1,lower.tail=FALSE)/2
                   newobj@theta <- list(theta=theta, se.theta=se.theta, p.value=p.value)
@@ -790,9 +817,20 @@ setMethod("summary", "stpm2",
 setMethod("show", "summary.stpm2",
           function(object) {
               show(as(object,"summary.mle2"))
-              if (object@frailty)
-                  cat(sprintf("\ntheta=%g\tse=%g\tp=%g\n",
-                              object@theta$theta,object@theta$se.theta,object@theta$p.value))
+              if (object@frailty) {
+                  if (is.matrix(object@args$Z)) {
+                      cat("Random effects model: corr=(1-exp(-corrtrans))/(1+exp(-corrtrans))")
+                      cat(sprintf("\ntheta1=%g\tse=%g\tp=%g\n",
+                                  object@theta$theta[1],object@theta$se.theta[1],object@theta$p.value[1]))
+                      cat(sprintf("\ncorr=%g\tse=%g\tp=%g\n",
+                                  object@theta$theta[2],object@theta$se.theta[2],object@theta$p.value[2]))
+                      cat(sprintf("\ntheta2=%g\tse=%g\tp=%g\n",
+                                  object@theta$theta[3],object@theta$se.theta[3],object@theta$p.value[3]))
+                  } else {
+                      cat(sprintf("\ntheta=%g\tse=%g\tp=%g\n",
+                                  object@theta$theta,object@theta$se.theta,object@theta$p.value))
+                  }
+              }
           })
 setMethod("predictnl", "stpm2",
           function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"),...)
@@ -936,15 +974,15 @@ setMethod("predict", "stpm2",
             return((1-S2)/S2/((1-S)/S))
         }
         if (type=="meansurv") {
-            return(mean(S))
+            return(tapply(S,newdata[[object@timeVar]],mean))
         }
         if (type=="meanhaz") {
-            return(sum(h*S)/sum(S))
+            return(tapply(S*h,newdata[[object@timeVar]],sum)/tapply(S,newdata[[object@timeVar]],sum))
         }
         if (type=="meansurvdiff") {
             eta2 <- as.vector(X2 %*% beta)
             S2 <- link$ilink(eta2)
-            return(mean(S2-S))
+            return(tapply(S2,newdata[[object@timeVar]],mean) - tapply(S,newdata[[object@timeVar]],mean))
         }
         if (type=="margsurv") {
             stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
@@ -1020,11 +1058,53 @@ setMethod("predict", "stpm2",
     return(pred)
   })
 ##`%c%` <- function(f,g) function(...) g(f(...)) # function composition
+plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, add=FALSE, ci=!add, rug=!add, recent=FALSE,
+                          xlab=NULL, ylab="Mean survival", lty=1, line.col=1, ci.col="grey", ...) {
+    if (is.null(times)) stop("plot.meansurv: times argument should be specified")
+    if (is.null(newdata)) newdata <- x@data
+    times <- times[times !=0]
+    if (recent) {
+        newdata <- do.call("rbind",
+                           lapply(times, 
+                                  function(time) {
+                                      newdata[[x@timeVar]] <- newdata[[x@timeVar]]*0+time
+                                      newdata
+                                  }))
+        pred <- predict(x, newdata=newdata, type="meansurv", se.fit=ci) # requires recent version
+        pred <- if (ci) rbind(c(Estimate=1,lower=1,upper=1),pred) else c(1,pred)
+    } else {
+        pred <- lapply(times, 
+                       function(time) {
+                           newdata[[x@timeVar]] <- newdata[[x@timeVar]]*0+time
+                           predict(x, newdata=newdata, type="meansurv", se.fit=ci)
+                       })
+        pred <- if (ci) rbind(c(Estimate=1,lower=1,upper=1),do.call("rbind", pred)) else c(1,unlist(pred))
+        }
+    times <- c(0,times)
+    if (is.null(xlab)) xlab <- deparse(x@timeExpr)
+    if (!add) matplot(times, pred, type="n", xlab=xlab, ylab=ylab, ...)
+    if (ci) {
+        polygon(c(times,rev(times)),c(pred$lower,rev(pred$upper)),col=ci.col,border=ci.col)
+        lines(times,pred$Estimate,col=line.col,lty=lty)
+    } else {
+        lines(times,pred,col=line.col,lty=lty)
+    }
+    if (rug) {
+        Y <- x@y
+        eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]
+        rug(eventTimes,col=line.col)
+    }
+    return(invisible(y))
+}
 setMethod("plot", signature(x="stpm2", y="missing"),
           function(x,y,newdata,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
                    add=FALSE,ci=!add,rug=!add,
-                   var=NULL,exposed=incrVar(var),...) {
+                   var=NULL,exposed=incrVar(var),times=NULL,...) {
+              if (type=="meansurv") {
+                  return(plot.meansurv(x,times=times,newdata=newdata,xlab=xlab,ylab=ylab,line.col=line.col,ci.col=ci.col,
+                                       lty=lty,add=add,ci=ci,rug=rug, ...))
+                  }
               y <- predict(x,newdata,type=if (type=="fail") "surv" else type,var=var,exposed=exposed,
                            grid=!(x@timeVar %in% names(newdata)), se.fit=ci)
               if (type=="fail") y <- if (ci) data.frame(Estimate=1-y$Estimate, lower=1-y$upper, upper=1-y$lower) else data.frame(Estimate=1-y)
@@ -2049,30 +2129,65 @@ setMethod("predict", "pstpm2",
 ##`%c%` <- function(f,g) function(...) g(f(...)) # function composition
 ## to do:
 ## (*) Stata-compatible knots
+## setMethod("plot", signature(x="pstpm2", y="missing"),
+##           function(x,y,newdata,type="surv",
+##                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
+##                    lwd=par("lwd"),
+##                    add=FALSE,ci=!add,rug=!add,exposed=incrVar(var),
+##                    var=NULL,...) {
+##               y <- predict(x,newdata,type=if (type=="fail") "surv" else type,var=var,exposed=exposed,
+##                            grid=!(x@timeVar %in% names(newdata)), se.fit=TRUE)
+##               if (type=="fail") y <- if (ci) data.frame(Estimate=1-y$Estimate, lower=1-y$upper, upper=1-y$lower) else data.frame(Estimate=y)
+##               if (is.null(xlab)) xlab <- deparse(x@timeExpr)
+##               if (is.null(ylab))
+##                   ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
+##                                  sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard",
+##                                  loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
+##                                  meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
+##                                  margsurv="Marginal survival",marghaz="Marginal hazard",
+##                                  marghr="Marginal hazard ratio", haz="Hazard", fail="Failure", meanhaz="Mean hazard")
+##               xx <- attr(y,"newdata")
+##               xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
+##               if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
+##               if (ci) {
+##                   polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
+##                   lines(xx,y[,1],col=line.col,lty=lty,lwd=lwd)
+##                   } else lines(xx,y,col=line.col,lty=lty,lwd=lwd)
+##               if (rug) {
+##                   Y <- x@y
+##                   eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]
+##                   rug(eventTimes,col=line.col)
+##               }
+##               return(invisible(y))
+##           })
+
 setMethod("plot", signature(x="pstpm2", y="missing"),
           function(x,y,newdata,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
-                   lwd=par("lwd"),
-                   add=FALSE,ci=!add,rug=!add,exposed=incrVar(var),
-                   var=NULL,...) {
+                   add=FALSE,ci=!add,rug=!add,
+                   var=NULL,exposed=incrVar(var),times=NULL,...) {
+              if (type=="meansurv") {
+                  return(plot.meansurv(x,times=times,newdata=newdata,xlab=xlab,ylab=ylab,line.col=line.col,ci.col=ci.col,
+                                       lty=lty,add=add,ci=ci,rug=rug, ...))
+                  }
               y <- predict(x,newdata,type=if (type=="fail") "surv" else type,var=var,exposed=exposed,
-                           grid=!(x@timeVar %in% names(newdata)), se.fit=TRUE)
-              if (type=="fail") y <- if (ci) data.frame(Estimate=1-y$Estimate, lower=1-y$upper, upper=1-y$lower) else data.frame(Estimate=y)
+                           grid=!(x@timeVar %in% names(newdata)), se.fit=ci)
+              if (type=="fail") y <- if (ci) data.frame(Estimate=1-y$Estimate, lower=1-y$upper, upper=1-y$lower) else data.frame(Estimate=1-y)
               if (is.null(xlab)) xlab <- deparse(x@timeExpr)
               if (is.null(ylab))
                   ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
                                  sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard",
                                  loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
                                  meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
-                                 margsurv="Marginal survival",marghaz="Marginal hazard",
-                                 marghr="Marginal hazard ratio", haz="Hazard", fail="Failure", meanhaz="Mean hazard")
+                                 margsurv="Marginal survival",marghaz="Marginal hazard",marghr="Marginal hazard ratio", haz="Hazard",fail="Failure",
+                                 meanhaz="Mean hazard")
               xx <- attr(y,"newdata")
               xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
               if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
               if (ci) {
                   polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
-                  lines(xx,y[,1],col=line.col,lty=lty,lwd=lwd)
-                  } else lines(xx,y,col=line.col,lty=lty,lwd=lwd)
+                  lines(xx,y[,1],col=line.col,lty=lty)
+              } else lines(xx,y,col=line.col,lty=lty)
               if (rug) {
                   Y <- x@y
                   eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]
@@ -2080,6 +2195,7 @@ setMethod("plot", signature(x="pstpm2", y="missing"),
               }
               return(invisible(y))
           })
+
 
 ## sandwich variance estimator (from the sandwich package)
 
