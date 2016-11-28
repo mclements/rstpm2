@@ -1,0 +1,448 @@
+
+* Axiom/Fricas source file
+
+** General case
+
+#+begin_src axiom :exports results :results output
+)cl p all
+η := operator 'η
+G := operator 'G
+rule1 := rule (D(η(t,β),β)==X; D(η(t,β),t)==XD*β; D(η(t,β),[t,β])==XD; η(t,β)==X*β)
+S := G(η(t,β))
+H := -log(S)
+h := D(H,t)
+[D(expr,β) for expr in [S,H,h]]
+[rule1 expr for expr in [S,H,h]]
+[rule1 D(expr,β) for expr in [S,H,h]]
+#+end_src
+
+#+RESULTS:
+#+begin_example
+(1) -> )cl p all
+(1) -> η := operator 'η
+ 
+   (1)  η
+                                                          Type: BasicOperator
+(2) -> G := operator 'G
+ 
+   (2)  G
+                                                          Type: BasicOperator
+(3) -> rule1 := rule (D(η(t,β),β)==X; D(η(t,β),t)==XD*β; D(η(t,β),[t,β])==XD; η(t,β)==X*β)
+ 
+   (3)  {η  (t,β) == X,η  (t,β) == XD β,η    (t,β) == XD,η(t,β) == X β}
+          ,2            ,1               ,1,2
+                           Type: Ruleset(Integer,Integer,Expression(Integer))
+(4) -> S := G(η(t,β))
+ 
+   (4)  G(η(t,β))
+                                                    Type: Expression(Integer)
+(5) -> H := -log(S)
+ 
+   (5)  - log(G(η(t,β)))
+                                                    Type: Expression(Integer)
+(6) -> h := D(H,t)
+ 
+           ,
+          G (η(t,β))η  (t,β)
+                     ,1
+   (6)  - ------------------
+               G(η(t,β))
+                                                    Type: Expression(Integer)
+(7) -> [D(expr,β) for expr in [S,H,h]]
+ 
+   (7)
+                           ,
+                          G (η(t,β))η  (t,β)
+     ,                               ,2
+   [G (η(t,β))η  (t,β), - ------------------,
+               ,2              G(η(t,β))
+
+                     ,                                               ,,
+         - G(η(t,β))G (η(t,β))η    (t,β) - G(η(t,β))η  (t,β)η  (t,β)G  (η(t,β))
+                               ,1,2                  ,1      ,2
+       + 
+          ,        2
+         G (η(t,β)) η  (t,β)η  (t,β)
+                     ,1      ,2
+    /
+                2
+       G(η(t,β))
+     ]
+                                              Type: List(Expression(Integer))
+(8) -> [rule1 expr for expr in [S,H,h]]
+ 
+                                     ,
+                                XD βG (X β)
+
+   (8)  [G(X β),- log(G(X β)),- -----------]
+                                   G(X β)
+                                              Type: List(Expression(Integer))
+(9) -> [rule1 D(expr,β) for expr in [S,H,h]]
+ 
+   (9)
+                  ,
+                XG (X β)
+      ,
+   [XG (X β), - --------,
+                 G(X β)
+                    ,,                ,     2             ,
+    - X XD β G(X β)G  (X β) + X XD β G (X β)  - XD G(X β)G (X β)
+
+    ------------------------------------------------------------]
+                                     2
+                               G(X β)
+                                              Type: List(Expression(Integer))
+ 
+#+end_example
+
+** Proportional hazards
+#+begin_src axiom :exports results :results output
+G(x) == exp(-exp(x))
+S := G(η(t,β))
+H := -log(S)
+h := D(H,t)
+D(G(x),x)
+[rule1 expr for expr in [S,H,h]]
+[rule1 D(expr,β) for expr in [S,H,h]]
+#+end_src
+
+#+RESULTS:
+#+begin_example
+(10) -> G(x) == exp(-exp(x))
+                                                                   Type: Void
+(11) -> S := G(η(t,β))
+    Compiling function G with type Expression(Integer) -> Expression(
+      Integer) 
+
+               η(t,β)
+           - %e
+   (11)  %e
+                                                    Type: Expression(Integer)
+(12) -> H := -log(S)
+ 
+           η(t,β)
+   (12)  %e
+                                                    Type: Expression(Integer)
+(13) -> h := D(H,t)
+ 
+           η(t,β)
+   (13)  %e      η  (t,β)
+                  ,1
+                                                    Type: Expression(Integer)
+(14) -> D(G(x),x)
+    Compiling function G with type Variable(x) -> Expression(Integer) 
+
+                    x
+             x  - %e
+   (14)  - %e %e
+                                                    Type: Expression(Integer)
+(15) -> [rule1 expr for expr in [S,H,h]]
+ 
+                X β
+            - %e      X β        X β
+   (15)  [%e       ,%e   ,XD β %e   ]
+                                              Type: List(Expression(Integer))
+(16) -> [rule1 D(expr,β) for expr in [S,H,h]]
+ 
+                         X β
+                X β  - %e        X β                X β
+   (16)  [- X %e   %e       ,X %e   ,(X XD β + XD)%e   ]
+                                              Type: List(Expression(Integer))
+ 
+#+end_example
+
+
+** Proportional odds
+
+#+begin_src axiom :exports results :results output
+G(x) == 1/(1+exp(x))
+S := G(η(t,β))
+H := -log(S)
+h := D(H,t)
+D(G(x),x)
+[rule1 expr for expr in [S,H,h]]
+[rule1 D(expr,β) for expr in [S,H,h]]
+#+end_src
+
+#+RESULTS:
+#+begin_example
+(17) -> G(x) == 1/(1+exp(x))
+   Compiled code for G has been cleared.
+   1 old definition(s) deleted for function or rule G 
+                                                                   Type: Void
+(18) -> S := G(η(t,β))
+    Compiling function G with type Expression(Integer) -> Expression(
+      Integer) 
+
+               1
+   (18)  ------------
+           η(t,β)
+         %e       + 1
+                                                    Type: Expression(Integer)
+(19) -> H := -log(S)
+ 
+                     1
+   (19)  - log(------------)
+                 η(t,β)
+               %e       + 1
+                                                    Type: Expression(Integer)
+(20) -> h := D(H,t)
+ 
+           η(t,β)
+         %e      η  (t,β)
+                  ,1
+   (20)  ----------------
+             η(t,β)
+           %e       + 1
+                                                    Type: Expression(Integer)
+(21) -> D(G(x),x)
+    Compiling function G with type Variable(x) -> Expression(Integer) 
+
+                    x
+                  %e
+   (21)  - -----------------
+              x 2      x
+           (%e )  + 2%e  + 1
+                                                    Type: Expression(Integer)
+(22) -> [rule1 expr for expr in [S,H,h]]
+ 
+                                            X β
+              1               1      XD β %e
+   (22)  [---------,- log(---------),----------]
+            X β             X β         X β
+          %e    + 1       %e    + 1   %e    + 1
+                                              Type: List(Expression(Integer))
+(23) -> [rule1 D(expr,β) for expr in [S,H,h]]
+ 
+                       X β             X β        X β 2                  X β
+                   X %e            X %e     XD (%e   )  + (X XD β + XD)%e
+   (23)  [- ---------------------,---------,--------------------------------]
+               X β 2      X β       X β              X β 2      X β
+            (%e   )  + 2%e    + 1 %e    + 1       (%e   )  + 2%e    + 1
+                                              Type: List(Expression(Integer))
+ 
+#+end_example
+
+
+** Probit 
+
+Is there a more canonical approach in Axiom?
+
+#+begin_src axiom :exports results :results output
+Φ := operator 'Φ
+φ := operator 'φ
+rule2 == rule D(Φ(x),x)==φ(x)
+G(x) == Φ(-x)
+S := G(η(t,β))
+H := -log(S)
+h := D(H,t)
+rule2 D(G(x),x)
+[rule1 rule2 expr for expr in [S,H,h]]
+[rule1 rule2 D(expr,β) for expr in [S,H,h]]
+#+end_src
+
+#+RESULTS:
+#+begin_example
+(24) -> Φ := operator 'Φ
+
+   (24)  Φ
+                                                          Type: BasicOperator
+(25) -> φ := operator 'φ
+ 
+   (25)  φ
+                                                          Type: BasicOperator
+(26) -> rule2 == rule D(Φ(x),x)==φ(x)
+                                                                    Type: Void
+(27) -> G(x) == Φ(-x)
+    Compiled code for G has been cleared.
+   1 old definition(s) deleted for function or rule G 
+                                                                   Type: Void
+(28) -> S := G(η(t,β))
+    Compiling function G with type Expression(Integer) -> Expression(
+      Integer) 
+
+   (28)  Φ(- η(t,β))
+                                                    Type: Expression(Integer)
+(29) -> H := -log(S)
+ 
+   (29)  - log(Φ(- η(t,β)))
+                                                    Type: Expression(Integer)
+(30) -> h := D(H,t)
+ 
+          ,
+         Φ (- η(t,β))η  (t,β)
+                      ,1
+   (30)  --------------------
+              Φ(- η(t,β))
+                                                    Type: Expression(Integer)
+(31) -> rule2 D(G(x),x)
+    Compiling function G with type Variable(x) -> Expression(Integer) 
+   Compiling body of rule rule2 to compute value of type RewriteRule(
+      Integer,Integer,Expression(Integer)) 
+
+   (31)  - φ(- x)
+                                                    Type: Expression(Integer)
+(32) -> [rule1 rule2 expr for expr in [S,H,h]]
+ 
+                                   XD β φ(- X β)
+   (32)  [Φ(- X β),- log(Φ(- X β)),-------------]
+                                      Φ(- X β)
+                                              Type: List(Expression(Integer))
+(33) -> [rule1 rule2 D(expr,β) for expr in [S,H,h]]
+ 
+   (33)
+                  X φ(- X β)
+   [- X φ(- X β), ----------,
+                   Φ(- X β)
+                      ,                         2
+    - X XD β Φ(- X β)φ (- X β) + X XD β φ(- X β)  + XD Φ(- X β)φ(- X β)
+
+    -------------------------------------------------------------------]
+                                         2
+                                 Φ(- X β)
+                                              Type: List(Expression(Integer))
+ 
+#+end_example
+
+** Additive hazards
+
+
+#+begin_src axiom :exports results :results output
+G(x) == exp(-x)
+S := G(η(t,β))
+H := -log(S)
+h := D(H,t)
+D(G(x),x)
+[rule1 expr for expr in [S,H,h]]
+[rule1 D(expr,β) for expr in [S,H,h]]
+#+end_src
+
+#+RESULTS:
+#+begin_example
+(34) -> G(x) == exp(-x)
+   Compiled code for G has been cleared.
+   1 old definition(s) deleted for function or rule G 
+                                                                   Type: Void
+(35) -> S := G(η(t,β))
+    Compiling function G with type Expression(Integer) -> Expression(
+      Integer) 
+
+           - η(t,β)
+   (35)  %e
+                                                    Type: Expression(Integer)
+(36) -> H := -log(S)
+ 
+   (36)  η(t,β)
+                                                    Type: Expression(Integer)
+(37) -> h := D(H,t)
+ 
+   (37)  η  (t,β)
+          ,1
+                                                    Type: Expression(Integer)
+(38) -> D(G(x),x)
+    Compiling function G with type Variable(x) -> Expression(Integer) 
+
+             - x
+   (38)  - %e
+                                                    Type: Expression(Integer)
+(39) -> [rule1 expr for expr in [S,H,h]]
+ 
+            - X β
+   (39)  [%e     ,X β,XD β]
+                                              Type: List(Expression(Integer))
+(40) -> [rule1 D(expr,β) for expr in [S,H,h]]
+ 
+                - X β
+   (40)  [- X %e     ,X,XD]
+                                              Type: List(Expression(Integer))
+ 
+#+end_example
+
+** Aranda-Ordaz
+#+begin_src axiom :exports results :results output
+G(x) == exp(-log(θ*exp(x)+1)/θ)
+S := G(η(t,β))
+H := -log(S)
+h := D(H,t)
+D(G(x),x)
+[rule1 expr for expr in [S,H,h]]
+[rule1 D(expr,β) for expr in [S,H,h]]
+#+end_src
+
+#+RESULTS:
+#+begin_example
+(41) -> G(x) == exp(-log(θ*exp(x)+1)/θ)
+   Compiled code for G has been cleared.
+   1 old definition(s) deleted for function or rule G 
+                                                                   Type: Void
+(42) -> S := G(η(t,β))
+    Compiling function G with type Expression(Integer) -> Expression(
+      Integer) 
+
+                     η(t,β)
+             log(θ %e       + 1)
+           - -------------------
+                      θ
+   (42)  %e
+                                                    Type: Expression(Integer)
+(43) -> H := -log(S)
+ 
+                 η(t,β)
+         log(θ %e       + 1)
+   (43)  -------------------
+                  θ
+                                                    Type: Expression(Integer)
+(44) -> h := D(H,t)
+ 
+           η(t,β)
+         %e      η  (t,β)
+                  ,1
+   (44)  ----------------
+              η(t,β)
+          θ %e       + 1
+                                                    Type: Expression(Integer)
+(45) -> D(G(x),x)
+    Compiling function G with type Variable(x) -> Expression(Integer) 
+
+                          x
+                  log(θ %e  + 1)
+                - --------------
+             x           θ
+           %e %e
+   (45)  - ---------------------
+                     x
+                 θ %e  + 1
+                                                    Type: Expression(Integer)
+(46) -> [rule1 expr for expr in [S,H,h]]
+ 
+                      X β
+              log(θ %e    + 1)
+            - ----------------         X β              X β
+                      θ        log(θ %e    + 1)  XD β %e
+   (46)  [%e                  ,----------------,-----------]
+                                       θ            X β
+                                                θ %e    + 1
+                                              Type: List(Expression(Integer))
+(47) -> [rule1 D(expr,β) for expr in [S,H,h]]
+ 
+   (47)
+                         X β
+                 log(θ %e    + 1)
+               - ----------------
+          X β            θ               X β
+      X %e   %e                      X %e
+   [- ---------------------------, -----------,
+                  X β                  X β
+              θ %e    + 1          θ %e    + 1
+            X β 2                  X β
+    XD θ (%e   )  + (X XD β + XD)%e
+    ----------------------------------]
+          2   X β 2        X β
+         θ (%e   )  + 2θ %e    + 1
+                                              Type: List(Expression(Integer))
+ 
+#+end_example
+
+** Other links
+
+The development for other links would be similar.

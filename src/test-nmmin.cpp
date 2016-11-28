@@ -1754,6 +1754,19 @@ namespace rstpm2 {
     bool adaptive, first, recurrent;
   };
 
+  template<class T>
+  double call_objective_clusterND(int n, double * beta, void * model_ptr) {
+    T * model = static_cast<T *>(model_ptr);
+    vec bi(beta, n);
+    return model->objective_cluster(bi);
+  }    
+  template<class T>
+  void call_gradient_clusterND(int n, double * beta, double * out, void * model_ptr) {
+    T * model = static_cast<T *>(model_ptr);
+    vec bi(beta, n);
+    vec grad = model->gradient_cluster(bi);
+    for (int i=0; i<n; ++i) out[i] = grad[i];
+  }    
   template<class Base>
   class NormalSharedFrailty2D : public Base {
   public:
@@ -1762,6 +1775,7 @@ namespace rstpm2 {
     typedef NormalSharedFrailty2D<Base> This;
     typedef std::map<int,vec> MapVec;
     typedef std::map<int,mat> MapMat;
+    typedef std::map<int,cube> MapCube;
     NormalSharedFrailty2D(SEXP sexp) : Base(sexp) {
       List list = as<List>(sexp);
       const BaseData fullTmp = {this->X, this->XD, this->X0, this->X1, this->bhazard,
@@ -1845,7 +1859,7 @@ namespace rstpm2 {
       vbeta.resize(this->n - reparm);
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
-      vec eta0(1,fill::zeros);
+      vec eta0(this->Z0.n_rows,fill::zeros);
       vec eta1(this->X.n_rows,fill::zeros);
       if (this->delayed) {
 	eta0 = this->X0 * vbeta;
@@ -1853,11 +1867,11 @@ namespace rstpm2 {
       }
       li_constraint lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
       vec zero(redim,fill::zeros);
-      double ll = sum(lik.li) + dmvnrm_arma(bi,zero,Sigma,true);
+      double ll = sum(lik.li) + dmvnrm_arma(bi,zero,this->Sigma,true);
       return -ll;
     }
     vec gradient_cluster(vec bi) {
-      vec vbeta = this->objective_cluster_beta; // nu=log(variance) is the last parameter in vbeta
+      vec vbeta = this->objective_cluster_beta; 
       vbeta.resize(this->n - reparm);
       vec eta = this->X * vbeta;
       vec etaD = this->XD * vbeta;
@@ -1867,26 +1881,29 @@ namespace rstpm2 {
 	eta0 = this->X0 * vbeta;
 	eta1 = this->X1 * vbeta;
       }
-      mat X = mat(Z); 
-      mat XD = mat(this->XD.n_rows,1,fill::zeros);
-      mat X0 = mat(Z0); 
-      mat X1 = mat(Z); 
+      mat X = Z; 
+      mat XD = mat(this->XD.n_rows,redim,fill::zeros);
+      mat X0 = Z0; 
+      mat X1 = Z; 
       gradli_constraint gradlik = Base::gradli(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,X,XD,X0,X1);
       vec gradll = (sum(gradlik.gradli,0)).t() - invSigma*bi;
       return -gradll;
     }
-    mat calc_SqrtSigma(vec beta) {
+    mat calc_SqrtSigma(vec beta, bool calc_inverse = true) {
+      bool flag;
       int n = beta.size();
       Sigma.resize(redim,redim);
-      Sigma(0,0) = exp(beta[n-reparm]); // variance
-      double corr = corrtransform(beta[n-2]); // correlation (initial=0.0)
-      Sigma(1,1) = exp(beta[n-1]); // variance 
+      Sigma(0,0) = exp(beta[n-reparm]);       // variance
+      double corr = corrtransform(beta[n-2]); // correlation
+      Sigma(1,1) = exp(beta[n-1]);            // variance 
       Sigma(0,1) = Sigma(1,0) = corr*sqrt(Sigma(1,1)*Sigma(0,0)); // covariance
-      bool flag = inv(invSigma, Sigma);
+      if (calc_inverse)
+	flag = inv(invSigma, Sigma);
       flag = sqrtmat_sympd(SqrtSigma,Sigma); // which version of RcppArmadillo??
       if (!flag) { Rprintf("Sigma:\n"); Rprint(Sigma); Rcpp::stop("Matrix sqrt invalid"); } 
       return SqrtSigma;
     }
+    // gradient in SqrtSigma wrt beta
     cube gradSqrtSigma(vec beta, double eps = 1.0e-6) {
       cube out(redim,redim,reparm,fill::zeros);
       int offset = beta.size()-reparm;
@@ -1895,10 +1912,37 @@ namespace rstpm2 {
       for (int i=0; i<reparm; ++i) {
 	betax = beta;
 	betax(offset+i) += eps;
-	val = calc_SqrtSigma(betax);
+	val = calc_SqrtSigma(betax, false);
 	betax(offset+i) -= 2.0*eps;
-	out.slice(i) = (val - calc_SqrtSigma(betax))/2.0/eps;
+	out.slice(i) = (val - calc_SqrtSigma(betax, false))/2.0/eps;
       }
+      return out;
+    }
+    // Sigma and SqrtSigma for the cluster-specific modes
+    mat calc_SqrtSigma_adaptive(BFGS opt) {
+      arma::mat tau, sqrttau;
+      bool flag = inv(tau,
+		      as<mat>(opt.calc_hessian(call_gradient_clusterND<This>, (void *) this)));
+      flag = sqrtmat_sympd(sqrttau,tau); // which version of RcppArmadillo??
+      if (!flag) { Rprintf("tau:\n"); Rprint(tau); Rcpp::stop("Matrix sqrt invalid"); }
+      return sqrttau;
+    }
+    // gradient for SqrtSigma for the cluster-specific modes
+    cube gradSqrtSigma_adaptive(BFGS opt, double eps = 1.0e-6) {
+      cube out(redim,redim,reparm,fill::zeros);
+      vec betax;
+      vec old = this->objective_cluster_beta;
+      mat val;
+      for (int i=0; i<reparm; ++i) {
+	betax = old;
+	betax(i) += eps;
+	this->objective_cluster_beta = betax;
+	val = calc_SqrtSigma_adaptive(opt);
+	betax(i) -= 2.0*eps;
+	this->objective_cluster_beta = betax;
+	out.slice(i) = (val - calc_SqrtSigma_adaptive(opt))/2.0/eps;
+      }
+      this->objective_cluster_beta = old;
       return out;
     }
     double objective_adaptive(vec beta) {
@@ -1917,17 +1961,29 @@ namespace rstpm2 {
       vec zero(redim,fill::zeros);
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
 	clusterDesign(it);
-	// cluster-specific mode
-	NelderMead nm; // Faster with BFGS and gradients...
-	nm.optim(&(call_objective_cluster<This>), muhat[it->first], (void *) this);
-	muhat[it->first] = as<vec>(nm.coef);
-	// cluster-specific variance
+	if (muhat.count(it->first)==0) { // initialise
+	  muhat[it->first].set_size(redim);
+	  for (int i=0; i<redim; ++i)
+	    muhat[it->first](i) = 0.0;
+	}
+	// cluster-specific modes
+	BFGS opt; 
+	opt.optim(&(call_objective_clusterND<This>),
+		  &(call_gradient_clusterND<This>),
+		 as<NumericVector>(wrap(muhat[it->first])),
+		 (void *) this);
+	muhat[it->first] = as<vec>(wrap(opt.coef));
+	// variance for the cluster-specific modes
 	arma::mat tau, sqrttau;
 	bool flag = inv(tau,
-		   -as<mat>(nm.calc_hessian(call_objective_cluster<This>, (void *) this)));
-	tauhat[it->first] = tau;
-	flag = sqrtmat_sympd(sqrttau,tau); // which version of RcppArmadillo??
-	if (!flag) { Rprintf("tau:\n"); Rprint(tau); Rcpp::stop("Matrix sqrt invalid"); } 
+			as<mat>(opt.calc_hessian(call_gradient_clusterND<This>, (void *) this)));
+	double dettau = det(tau); // logdet would be more precise
+	dettauhat[it->first] = dettau;
+	flag = sqrtmat_sympd(sqrttau,tau); // which version of RcppArmadillo?
+	if (!flag) { Rprintf("tau:\n"); Rprint(tau); Rcpp::stop("Matrix sqrt invalid."); }
+	sqrttauhat[it->first] = sqrttau;
+	if (this->optimiser=="BFGS")
+	  gradsqrttauhat[it->first] = gradSqrtSigma_adaptive(opt); 
 	vec eta = this->X * vbeta;
 	vec etaD = this->XD * vbeta;
 	vec eta0(1,fill::zeros);
@@ -1949,17 +2005,17 @@ namespace rstpm2 {
 	      lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
 	      this->delayed = true; 
 	      l0ik = Base::li_left_truncated(eta0+Z0*bi);
-	      g0 = exp(sum(l0ik.li)+dmvnrm_arma(bi,zero,tau,true));
+	      g0 = exp(sum(l0ik.li)+dmvnrm_arma(bi,zero,Sigma,true));
 	      L0j += wstar(k)*wstar(kk)*g0*exp(dot(d,d)/2);
 	    } else {
 	      lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
 	    }
-	    g = exp(sum(lik.li)+dmvnrm_arma(bi,zero,tau,true));
+	    g = exp(sum(lik.li)+dmvnrm_arma(bi,zero,Sigma,true));
 	    Lj += wstar(k)*wstar(kk)*g*exp(dot(d,d)/2);
 	    constraint += lik.constraint;
 	  }
 	}
-	ll += log(pow(2.0*datum::pi,redim/2)*sqrt(det(tau))*Lj);
+	ll += log(2.0*datum::pi)*redim/2.0+log(dettau)/2.0+log(Lj);
 	if (left_trunc_not_recurrent)
 	  ll -= log(L0j);
       }
@@ -1968,10 +2024,7 @@ namespace rstpm2 {
       return -(ll - constraint);
     }
     vec gradient(vec beta) {
-      // return this->adaptive ? gradient_adaptive(beta) : gradient_nonadaptive(beta);
-      if (this->adaptive)
-	Rcpp::stop("Gradient not defined for adaptive");
-      return gradient_nonadaptive(beta);
+      return this->adaptive ? gradient_adaptive(beta) : gradient_nonadaptive(beta);
     }
     vec gradient_nonadaptive(vec beta) {
       int n = beta.size();
@@ -2030,8 +2083,69 @@ namespace rstpm2 {
       resetDesign();
       return -gradl;  
     }
+    vec gradient_adaptive(vec beta) {
+      int n = beta.size();
+      objective_adaptive(beta); // bug check - remove
+      this->objective_cluster_beta = beta; // for use by objective_cluster()
+      vec vbeta(beta);
+      vbeta.resize(n-reparm);
+      calc_SqrtSigma(beta); // unnecessary?
+      int K = gauss_x.size(); // number of nodes
+      vec wstar = gauss_w/sqrt(datum::pi);
+      vec d = sqrt(2.0)*gauss_x;
+      vec gradl(n,fill::zeros);
+      vec dk(redim), bi(redim);
+      vec zero(redim,fill::zeros);
+      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+	clusterDesign(it);
+	uvec index = conv_to<uvec>::from(it->second);
+	vec mu = muhat[it->first];
+	mat sqrttau = sqrttauhat[it->first];
+	cube gradsqrttau = gradsqrttauhat[it->first];
+	mat Zmain(Z);
+	mat ZD(this->XD.n_rows,redim,fill::zeros);
+	mat Z0main(Z0);
+	mat Z1(Z);
+	mat Xstar = join_horiz(this->X, Zmain); 
+	mat XDstar = join_horiz(this->XD, ZD); // assumes time-invariant random effects
+	mat X0star = join_horiz(this->X0, Z0main); 
+	mat X1star = join_horiz(this->X1, Z1);
+	double L = 0.0;
+	vec gradL(n,fill::zeros);
+	vec betastar = beta; betastar.resize(beta.size() - reparm + redim);
+	// for K nodes calculation 
+	for (int k=0; k<K; ++k) {
+	  for (int kk=0; kk<K; ++kk) {
+	    dk(0) = d(k);
+	    dk(1) = d(kk); 
+	    bi = mu + sqrttau * dk;
+	    cube dbic = gradsqrttau.each_slice() * dk;
+	    mat dbi = reshape( mat(dbic.memptr(), dbic.n_elem, 1, false), redim, reparm);
+	    betastar(span(betastar.size()-redim,betastar.size()-1)) = bi;
+	    vec etastar = Xstar * betastar;
+	    vec etaDstar = XDstar * betastar;
+	    vec eta0star = X0star * betastar;
+	    vec eta1star = X1star * betastar;
+	    li_constraint lik = Base::li(etastar, etaDstar, eta0star, eta1star);
+	    gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star);
+	    // adjust the last columns of the gradient to account for the variance components:
+	    // chain rule: d lik/d bi * d bi/d nu
+	    int restart = gradlik.gradli.n_cols-redim, restop = gradlik.gradli.n_cols-1;
+	    gradlik.gradli.resize(gradlik.gradli.n_rows, gradlik.gradli.n_cols-redim+reparm);
+	    gradlik.gradli.cols(gradlik.gradli.n_cols-reparm,gradlik.gradli.n_cols-1) = gradlik.gradli.cols(restart, restop) * dbi;
+	    double Lk = exp(sum(lik.li)+dmvnrm_arma(bi,zero,Sigma,true));
+	    L += Lk*wstar(k)*wstar(kk)*exp(dot(d,d)/2);
+	    gradL += (Lk*sum(gradlik.gradli,0)*wstar(k)*wstar(kk)*exp(dot(d,d)/2)).t();
+	  }
+	}
+	// missing: grad(log(det(tau))/2,beta)
+	gradl += gradL/L;
+      }
+      resetDesign();
+      return -gradl;  
+    }
     double objective(vec beta) {
-      return adaptive ? objective_nonadaptive(beta) : objective_nonadaptive(beta);
+      return adaptive ? objective_adaptive(beta) : objective_nonadaptive(beta);
     }
     void resetDesign() {
       this->X = full.X;
@@ -2072,6 +2186,45 @@ namespace rstpm2 {
       coef.resize(beta.size()-reparm);
       return Base::feasible(coef);
     }
+    void calculate_modes_and_variances() {
+      vec beta = as<vec>(this->bfgs.coef);
+      this->objective_cluster_beta = beta;
+      calc_SqrtSigma(beta);
+      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+	clusterDesign(it);
+	if (muhat.count(it->first)==0) { // initialise
+	  muhat[it->first].set_size(redim);
+	  for (int i=0; i<redim; ++i)
+	    muhat[it->first](i) = 0.0;
+	}
+	// cluster-specific modes
+	BFGS opt; 
+	opt.optim(&(call_objective_clusterND<This>),
+		  &(call_gradient_clusterND<This>),
+		  as<NumericVector>(wrap(muhat[it->first])),
+		  (void *) this);
+	muhat[it->first] = as<vec>(wrap(opt.coef));
+	// cluster-specific variance
+	arma::mat tau, sqrttau;
+	bool flag = inv(tau,
+			as<mat>(opt.calc_hessian(call_gradient_clusterND<This>, (void *) this)));
+	double dettau = det(tau);
+	dettauhat[it->first] = dettau;
+	flag = sqrtmat_sympd(sqrttau,tau); // which version of RcppArmadillo?
+	if (!flag) { Rprintf("tau:\n"); Rprint(tau); Rcpp::stop("Matrix sqrt invalid."); }
+	sqrttauhat[it->first] = sqrttau;
+	gradsqrttauhat[it->first] = gradSqrtSigma_adaptive(opt); 
+      }
+      resetDesign();
+    }
+    SEXP return_modes() {
+      calculate_modes_and_variances();
+      return wrap(muhat);
+    }
+    SEXP return_variances() { 
+      calculate_modes_and_variances();
+      return wrap(sqrttauhat); // actually, these are not variances!
+    }
     OPTIM_FUNCTIONS;
     IndexMap clusters;
     vec gauss_x, gauss_w;
@@ -2081,7 +2234,9 @@ namespace rstpm2 {
     MapMat variances;
     vec objective_cluster_beta;
     MapVec muhat;
-    MapMat tauhat;
+    MapMat sqrttauhat;
+    MapCube gradsqrttauhat;
+    std::map<int,double> dettauhat;
     int clusterid, redim, reparm;
     bool adaptive, first, recurrent;
     mat Sigma, SqrtSigma, invSigma;

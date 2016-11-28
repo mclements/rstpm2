@@ -28,6 +28,32 @@ summary(fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="PO", df=3))
 summary(fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AO", theta.AO=1, df=3)) # Same: OK
 summary(fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AO", theta.AO=0.5))
 
+refresh
+require(rstpm2)
+## PH
+summary(fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,link="PH", df=3))
+predict(fit, newdata=transform(brcancer,rectime=1000),type="meansurv",keep.attributes=FALSE,se.fit=TRUE,use.gr=F)
+predict(fit, newdata=transform(brcancer,rectime=1000),type="meansurv",keep.attributes=FALSE,se.fit=TRUE,use.gr=T)
+plot(fit,newdata=transform(brcancer,hormon=1),type="meansurv",times=seq(10,1500,by=10))
+plot(fit,newdata=transform(brcancer,hormon=2),type="meansurv",times=seq(10,1500,by=10),lty=2,add=TRUE)
+
+newd <- merge(transform(brcancer,rectime=NULL), data.frame(rectime=c(500,1000)))
+unlist(predict(fit,newdata=newd,type="af",exposed=function(data) transform(data,hormon=1),keep.attributes=FALSE,se.fit=TRUE) -
+       predict(fit,newdata=newd,type="af",exposed=function(data) transform(data,hormon=1),keep.attributes=FALSE,se.fit=TRUE,use.gr=FALSE))
+
+plot(fit,newdata=NULL,type="af",exposed=function(data) transform(data,hormon=1))
+plot(fit,newdata=NULL,type="meansurv",ci=F)
+plot(fit,newdata=NULL,type="meansurvdiff",exposed=function(data) transform(data,hormon=1))
+
+plot(fit,newdata=data.frame(hormon=1),type="surv",ci=F)
+plot(fit,newdata=data.frame(hormon=1),type="fail",ci=T)
+
+unlist(predict(fit,newdata=newd,type="meansurvdiff",exposed=function(data) transform(data,hormon=1),keep.attributes=FALSE,se.fit=TRUE) -
+      predict(fit,newdata=newd,type="meansurvdiff",exposed=function(data) transform(data,hormon=1),keep.attributes=FALSE,se.fit=TRUE,use.gr=FALSE))
+unlist(predict(fit,newdata=newd,type="meansurv",keep.attributes=FALSE,se.fit=TRUE)-
+       predict(fit,newdata=newd,type="meansurv",keep.attributes=FALSE,se.fit=TRUE,use.gr=FALSE))
+
+
 ## tvc for Maarten Coemans
 require(rstpm2)
 brcancer <- transform(brcancer, x1c=x1-mean(x1))
@@ -290,19 +316,51 @@ summary(fit0 <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
                      optimiser="NelderMead",
                      smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
 
-
 require(foreign)
 require(rstpm2)
 stmixed <- read.dta("http://fmwww.bc.edu/repec/bocode/s/stmixed_example2.dta")
 stmixed2 <- transform(stmixed, start = ifelse(treat,stime/2,0))
+summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat,adaptive=TRUE,optimiser="NelderMead"))
+
+summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat,adaptive=TRUE,optimiser="NelderMead"))
+
+## non-adaptive
+system.time(print(summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat,adaptive=FALSE,nodes=20,optimiser="NelderMead")))) # slow and gradients not close to zero
+system.time(print(summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat,nodes=20,adaptive=FALSE)))) # gradients close to zero
 
 ## random intercept and random slope with 20 nodes
-summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat,nodes=20,adaptive=FALSE))
-summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat,adaptive=FALSE,nodes=20))
+summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat,nodes=20,adaptive=FALSE)) 
+summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat,adaptive=FALSE,nodes=20)) # gradients close to zero
 
 ## Simple examples with no random effects and with a random intercept (check: deviances)
 summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed,df=3))
 summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat-1))
+
+## check modes and sqrttau
+args <- r2@args
+args$return_type <- "modes"
+.Call("model_output", args, package="rstpm2")
+args$return_type <- "variances" # fudge
+.Call("model_output", args, package="rstpm2")
+
+
+## check gradients
+args <- r2@args
+args$return_type <- "gradient"
+.Call("model_output", args, package="rstpm2")
+fdgrad <- function(obj,eps=1e-6) {
+    args <- obj@args
+    args$return_type <- "objective"
+    sapply(1:length(args$init), function(i) {
+        largs <- args
+        largs$init[i] <- args$init[i]+eps
+        f1 <- .Call("model_output", largs, package="rstpm2")
+        largs$init[i] <- args$init[i]-eps
+        f2 <- .Call("model_output", largs, package="rstpm2")
+        data.frame(f1,f2,gradient=(f1-f2)/2.0/eps)
+    })
+}
+fdgrad(r2,1e-3)
 
 
 ## random intercept and random slope
@@ -423,6 +481,30 @@ gradlwrtb <- sapply(1:2, function(i,eps=1e-6) {
     (val - lb(b))/2/eps
 })
 t(gradbwrtg) %*% gradlwrtb
+
+
+## gradient for a multivariate normal
+require(mvtnorm)
+fdgrad <- function(f,x, ..., eps=1.0e-6) 
+    sapply(1:length(x), function(i) {
+        e <- rep(0,length(x))
+        e[i] <- 1
+        (f(x+e*eps, ...)-f(x-e*eps, ...))/2/eps
+    })
+## hess(i,i) = (-f2 +16.0*f1 - 30.0*f0 + 16.0*fm1 -fm2)/(12.0*hi*hi);
+fdhessian <- function(f,x, ..., eps=1.0e-5) 
+    sapply(1:length(x), function(i) {
+        ei <- rep(0,length(x))
+        ei[i] <- 1
+        sapply(1:length(x), function(j) {
+            ej <- rep(0,length(x))
+            ej[j] <- 1
+            if (i==j) (-f(x+2*ei*eps, ...)+16*f(x+ei*eps, ...)-30*f(x,...)+16*f(x-ei*eps, ...)-f(x-2*ei*eps, ...))/12/eps/eps else (f(x+eps*ei+eps*ej)-f(x+eps*ei-eps*ej)-f(x-eps*ei+eps*ej)+f(x-eps*ei-eps*ej))/4/eps/eps
+        })
+    })
+-fdgrad(mvtnorm::dmvnorm, c(1,1), c(0,0), Sigma <- matrix(c(1,.5,.5,1),2), log=TRUE)
+## fdhessian(mvtnorm::dmvnorm, c(1,1), c(0,0), Sigma <- matrix(c(1,.5,.5,1),2))
+as.vector(solve(Sigma) %*% c(1,1))
 
 
 summary(fit <- stpm2(Surv(start,stime,event)~treat,data=stmixed2,cluster=stmixed$trial,optimiser="NelderMead",recurrent=TRUE))
