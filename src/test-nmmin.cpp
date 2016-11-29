@@ -574,7 +574,7 @@ namespace rstpm2 {
       time = as<vec>(list["time"]);
       delayed = as<bool>(list["delayed"]);
       interval = as<bool>(list["interval"]);
-      n = init.size(); // number of parameters
+      n = nbeta = init.size(); // number of parameters
       N = X.n_rows; // number of observations
       X1 = as<mat>(list["X1"]);
       X0 = as<mat>(list["X0"]);
@@ -665,9 +665,23 @@ namespace rstpm2 {
 	return s;
       }
     }
+    vec getli(vec beta) {
+      vec vbeta = beta;
+      vbeta.resize(nbeta);
+      li_constraint lic = li(X*vbeta, XD*vbeta, X0*vbeta, X1*vbeta);
+      return lic.li;
+    }
+    mat getgradli(vec beta) {
+      vec vbeta = beta;
+      vbeta.resize(nbeta);
+      gradli_constraint gradlic = gradli(X*vbeta, XD*vbeta, X0*vbeta, X1*vbeta, X, XD, X0, X1);
+      return gradlic.gradli;
+    }
     // negative log-likelihood
     double objective(vec beta) {
-      li_constraint s = li(X * beta, XD * beta, X0 * beta, X1 * beta);
+      vec vbeta = beta;
+      vbeta.resize(nbeta);
+      li_constraint s = li(X * vbeta, XD * vbeta, X0 * vbeta, X1 * vbeta);
       return -sum(s.li) + s.constraint;
     }
     // finite-differencing of the gradient for the objective
@@ -862,7 +876,7 @@ namespace rstpm2 {
     vec parscale, ttype, full_which0;
     double kappa_init, kappa, maxkappa, reltol;
     bool delayed, interval;
-    int n, N;
+    int n, N, nbeta;
     BFGS2 bfgs;
     std::string optimiser;
     Link * link;
@@ -1199,10 +1213,11 @@ namespace rstpm2 {
       List list = as<List>(sexp);
       ivec cluster = as<ivec>(list["cluster"]);
       recurrent = as<bool>(list["recurrent"]);
+      this->nbeta = this->n - 1;
       // wragged array indexed by a map of vectors
       for (size_t id=0; id<cluster.size(); ++id) {
 	clusters[cluster[id]].push_back(id);
-	if (this->ind0[id])
+	if (this->delayed && this->ind0[id])
 	  cluster_delayed[cluster[id]].push_back(id);
       }
     }
@@ -1211,15 +1226,33 @@ namespace rstpm2 {
 	Assumes that weights == 1.
     **/
     double objective(vec beta) {
+      vec vbeta = beta;
+      vbeta.resize(this->nbeta);
+      li_constraint s = li(this->X * vbeta, this->XD * vbeta, this->X0 * vbeta, this->X1 * vbeta);
+      return -sum(s.li) + s.constraint;
+    }
+    vec getli(vec beta) {
+      vec vbeta = beta;
+      vbeta.resize(this->nbeta);
+      li_constraint lic = this->li(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta);
+      return lic.li;
+    }
+    mat getgradli(vec beta) {
+      vec vbeta = beta;
+      vbeta.resize(this->nbeta);
+      gradli_constraint gradlic = gradli(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, this->X, this->XD, this->X0, this->X1);
+      return gradlic.gradli;
+    }
+
+    li_constraint li(vec eta, vec etaD, vec eta0, vec eta1) {
+      vec ll(clusters.size(), fill::zeros);
+      vec beta = as<vec>(this->bfgs.coef);
       int n = beta.size();
-      if (this->bfgs.trace>0) {
-	Rprint(beta);
-      }
       vec vbeta(beta); // logtheta is the last parameter in beta
-      vbeta.resize(n-1);
+      vbeta.resize(nbeta);
       double theta = exp(beta[n-1]);
-      vec eta = this->X * vbeta;
-      vec etaD = this->XD * vbeta;
+      eta = this->X * vbeta;
+      etaD = this->XD * vbeta;
       vec h = this->link->h(eta,etaD) + this->bhazard;
       vec H = this->link->H(eta);
       double constraint = this->kappa/2.0 * (sum(h % h % (h<0)) + sum(H % H % (H<0)));
@@ -1228,37 +1261,40 @@ namespace rstpm2 {
       H = max(H,eps);
       vec H0;
       if (this->delayed) {
-	vec eta0 = this->X0 * vbeta;
+	eta0 = this->X0 * vbeta;
 	H0 = this->link->H(eta0);
 	constraint += this->kappa/2.0 * sum(H0 % H0 % (H0<0));
       }
-      double ll = 0.0;
-      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+      int i=0;
+      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it, ++i) {
 	uvec index = conv_to<uvec>::from(it->second);
 	int mi = sum(this->event(index));
 	double sumH = sum(H(index));
 	double sumHenter = 0.0;
-	ll += sum(log(h(index)) % this->event(index)); // shared
+	ll(i) += sum(log(h(index)) % this->event(index)); // shared
 	if (this->delayed && !cluster_delayed[it->first].empty()) {
 	  uvec ind00 = conv_to<uvec>::from(cluster_delayed[it->first]);
 	  sumHenter = sum(H0(Base::map0f(ind00)));
 	}
 	if (recurrent) {
-	  ll += -(1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // Gutierrez (2002)
+	  ll(i) += -(1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // Gutierrez (2002)
 	} else {
-	  ll += -(1.0/theta+mi)*log(1.0+theta*sumH) + 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
+	  ll(i) += -(1.0/theta+mi)*log(1.0+theta*sumH) + 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
 	}
 	if (!recurrent && mi>0) { 
 	  for (int k=1; k<=mi; ++k)
-	    ll += log(1.0+theta*(mi-k));
+	    ll(i) += log(1.0+theta*(mi-k));
 	}
 	if (recurrent && mi>0) {
-	  ll += R::lgammafn(1.0/theta+mi)-R::lgammafn(1.0/theta)+mi*log(theta); // Gutierrez (2002)
+	  ll(i) += R::lgammafn(1.0/theta+mi)-R::lgammafn(1.0/theta)+mi*log(theta); // Gutierrez (2002)
 	}
       }
-      ll -= constraint;
-      return -ll;  
+      li_constraint out;
+      out.constraint=constraint;
+      out.li = ll;
+      return out;
     }
+
     vec gradient(vec beta) {
       int n = beta.size();
       vec gr = zeros<vec>(n);
@@ -1394,6 +1430,7 @@ namespace rstpm2 {
       for (int id=0; id<cluster.size(); ++id) {
 	clusters[cluster[id]].push_back(id);
       }
+      this->nbeta = this->n - 1;
     }
     /** 
 	Objective function for a log-normal shared frailty
@@ -1525,6 +1562,9 @@ namespace rstpm2 {
       first = false;
       return -(ll - constraint);
     }
+    vec getli(vec beta) { vec missing(1,fill::zeros); return missing; }
+    mat getgradli(vec beta) { mat missing(1,1,fill::zeros); return missing; }
+    // TODO: redefine li
     void resetDesign() {
       this->X = full.X;
       this->XD = full.XD;
@@ -1799,6 +1839,7 @@ namespace rstpm2 {
       Sigma.set_size(redim,redim);
       invSigma.set_size(redim,redim);
       SqrtSigma.set_size(redim,redim);
+      this->nbeta = this->n - reparm;
     }
     /** 
 	Objective function for normal random effects
@@ -2272,10 +2313,9 @@ namespace rstpm2 {
     else if (return_type == "variances")
       return model.return_variances();
     else if (return_type == "li")
-      return wrap(model.li(model.X*beta, model.XD*beta, model.X0*beta, model.X1*beta).li);
+      return wrap(model.getli(beta));
     else if (return_type == "gradli")
-      return wrap(model.gradli(model.X*beta, model.XD*beta, model.X0*beta, model.X1*beta,
-			       model.X, model.XD, model.X0, model.X1).gradli);
+      return wrap(model.getgradli(beta));
     else {
       REprintf("Unknown return_type.\n");
       return wrap(-1);
@@ -2308,10 +2348,9 @@ namespace rstpm2 {
     else if (return_type == "feasible")
       return wrap(model.feasible(beta));
     else if (return_type == "li")
-      return wrap(model.li(model.X*beta, model.XD*beta, model.X0*beta, model.X1*beta).li);
+      return wrap(model.getli(beta));
     else if (return_type == "gradli")
-      return wrap(model.gradli(model.X*beta, model.XD*beta, model.X0*beta, model.X1*beta,
-			       model.X, model.XD, model.X0, model.X1).gradli);
+      return wrap(model.getgradli(beta));
     else if (return_type == "modes")
       return model.return_modes();
     else if (return_type == "variances")

@@ -319,8 +319,7 @@ estfun.stpm2 <- function(obj, weighted=FALSE, ...) {
   rr
 }
 applyTapplySum <- function(X,index) apply(X, 2, function(col) tapply(col, index, sum))
-meat.stpm2 <-
-function (x, adjust = FALSE, cluster=NULL, ...) 
+meat.stpm2 <- function (x, adjust = FALSE, cluster=NULL, ...) 
 {
     psi <- estfun.stpm2(x, ...)
     k <- NCOL(psi)
@@ -482,7 +481,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                   optimiser=c("BFGS","NelderMead"),
                      reltol=1.0e-8, trace = 0,
                      link.type=c("PH","PO","probit","AH","AO"), theta.AO=0, 
-                  frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"), recurrent = FALSE,
+                  frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"), recurrent = FALSE,
                   adaptive = TRUE, maxkappa = 1e3, Z = ~1,
                      contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
@@ -868,7 +867,7 @@ setMethod("predictnl", "stpm2",
 
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","li","gradli"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var,keep.attributes=TRUE,use.gr=TRUE,...)
   {
@@ -876,6 +875,17 @@ setMethod("predict", "stpm2",
     ## exposed is a function that takes newdata and returns the revised newdata
     ## var is a string for a variable that defines a unit change in exposure
     ##debug(local)
+    args <- object@args
+    if (type=="li") {
+        localargs <- args
+        localargs$return_type <- "li"
+        return(as.vector(.Call("model_output", localargs, package="rstpm2")))
+    }
+    if (type=="gradli") {
+        localargs <- args
+        localargs$return_type <- "gradli"
+        return(.Call("model_output", localargs, package="rstpm2"))
+    }
     if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr"))
       stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr') requires newdata to be specified.")
     if (grid) {
@@ -888,7 +898,6 @@ setMethod("predict", "stpm2",
       names(data.x) <- object@timeVar
       newdata <- merge(newdata,data.x)
     }
-    args <- object@args
         if (is.null(newdata)) {
           ##mm <- X <- model.matrix(object) # fails (missing timevar)
           X <- object@x
@@ -938,11 +947,13 @@ setMethod("predict", "stpm2",
         if (object@frailty) {
             theta <- exp(beta[length(beta)])
             beta <- beta[-length(beta)]
-            gauss_x <- object@args$gauss_x
-            gauss_w <- object@args$gauss_w
-            Z <- model.matrix(args$Z.formula, newdata)
-            if (ncol(Z)>1) stop("Current implementation only allows for a single random effect")
-            Z <- as.vector(Z)
+            if (object@args$RandDist=="LogN") {
+                gauss_x <- object@args$gauss_x
+                gauss_w <- object@args$gauss_w
+                Z <- model.matrix(args$Z.formula, newdata)
+                if (ncol(Z)>1) stop("Current implementation only allows for a single random effect")
+                Z <- as.vector(Z)
+                }
         }
         eta <- as.vector(X %*% beta)
         etaD <- as.vector(XD %*% beta)
@@ -1012,7 +1023,36 @@ setMethod("predict", "stpm2",
             S2 <- link$ilink(eta2)
             meanS <- tapply(S,newdata[[object@timeVar]],mean)
             meanS2 <- tapply(S2,newdata[[object@timeVar]],mean)
+            if (object@frailty) {
+                if (object@args$RandDist=="Gamma") {
+                meanS <- tapply((1+theta*(-log(S)))^(-1/theta), newdata[[object@timeVar]], mean)
+                meanS2 <- tapply((1+theta*(-log(S2)))^(-1/theta), newdata[[object@timeVar]], mean)
+                } else {
+                    meanS <- tapply(sapply(1:length(gauss_x),
+                                           function(i) link$ilink(eta+Z*sqrt(theta)*gauss_x[i])) %*%
+                                    gauss_w / sum(gauss_w),
+                                    newdata[[object@timeVar]],
+                                    mean)
+                    meanS2 <- tapply(sapply(1:length(gauss_x),
+                                           function(i) link$ilink(eta2+Z*sqrt(theta)*gauss_x[i])) %*%
+                                    gauss_w / sum(gauss_w),
+                                    newdata[[object@timeVar]],
+                                    mean)
+                    }
+                }
             return((meanS2 - meanS)/(1-meanS))
+        }
+        if (type=="stdmargsurv") {
+            stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
+            if (object@args$RandDist=="Gamma")
+                return(tapply((1+theta*H)^(-1/theta), newdata[[object@timeVar]], mean))
+            if (object@args$RandDist=="LogN") {
+                return(tapply(sapply(1:length(gauss_x),
+                                     function(i) link$ilink(eta+Z*sqrt(theta)*gauss_x[i])) %*%
+                              gauss_w / sum(gauss_w),
+                              newdata[[object@timeVar]],
+                              mean))
+            }
         }
         if (type=="margsurv") {
             stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
@@ -1070,17 +1110,17 @@ setMethod("predict", "stpm2",
         link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
                        hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meansurv="I",meanhaz="I",af="I")
       ## calculate gradients for some of the estimators
-      if (use.gr) {
+      if (use.gr && !object@frailty) {
           colMeans <- function(x) apply(x,2,mean)
           collapse <- function(gd)
               do.call("cbind",tapply(1:nrow(gd), newdata[[object@timeVar]], function(index) colMeans(gd[index, ,drop=FALSE])))
           collapse1 <- function(S)
               as.vector(tapply(S, newdata[[object@timeVar]], mean))
           if (type=="meansurv") {
-              gd <- collapse(object@link$gradS(X%*%beta,X))
+              gd <- collapse(object@link$gradS(X%*% beta,X))
           }
           if (type=="meansurvdiff") {
-              gd <- collapse(object@link$gradS(X2%*%beta,X2) - object@link$gradS(X%*%beta,X))
+              gd <- collapse(object@link$gradS(X2%*% beta,X2) - object@link$gradS(X%*% beta,X))
           }
           if (type=="af") {
               fd <- function(f,x,eps=1e-5)
@@ -1114,7 +1154,7 @@ setMethod("predict", "stpm2",
 plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", exposed=NULL, add=FALSE, ci=!add, rug=!add, recent=FALSE,
                           xlab=NULL, ylab=NULL, lty=1, line.col=1, ci.col="grey", seqLength=301, ...) {
     ## if (is.null(times)) stop("plot.meansurv: times argument should be specified")
-    if (is.null(newdata)) newdata <- x@data
+    if (is.null(newdata)) newdata <- as.data.frame(x@data)
     if (is.null(times)) {
       Y <- x@y
       event <- Y[,ncol(Y)]==1 | x@interval
@@ -1130,11 +1170,13 @@ plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", 
         newdata <- do.call("rbind",
                            lapply(times, 
                                   function(time) {
-                                      newdata[[x@timeVar]] <- newdata[[x@timeVar]]*0+time
-                                      newdata
+                                      newd <- newdata
+                                      newd[[x@timeVar]] <- newdata[[x@timeVar]]*0+time
+                                      newd
                                   }))
         pred <- predict(x, newdata=newdata, type=type, se.fit=ci, exposed=exposed) # requires recent version
-        pred <- if (ci) rbind(c(Estimate=1,lower=1,upper=1),pred) else c(1,pred)
+        if (type=="meansurv")
+            pred <- if (ci) rbind(c(Estimate=1,lower=1,upper=1),pred) else c(1,pred)
     } else {
         pred <- lapply(times, 
                        function(time) {
@@ -1168,7 +1210,7 @@ plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", 
     return(invisible(y))
 }
 setMethod("plot", signature(x="stpm2", y="missing"),
-          function(x,y,newdata,type="surv",
+          function(x,y,newdata=NULL,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
                    add=FALSE,ci=!add,rug=!add,
                    var=NULL,exposed=incrVar(var),times=NULL,...) {
@@ -1176,6 +1218,7 @@ setMethod("plot", signature(x="stpm2", y="missing"),
                   return(plot.meansurv(x,times=times,newdata=newdata,type=type,xlab=xlab,ylab=ylab,line.col=line.col,ci.col=ci.col,
                                        lty=lty,add=add,ci=ci,rug=rug, exposed=exposed, ...))
               }
+              if (is.null(newdata)) stop("newdata argument needs to be specified")
               y <- predict(x,newdata,type=switch(type,fail="surv",margfail="margsurv",type),var=var,exposed=exposed,
                            grid=!(x@timeVar %in% names(newdata)), se.fit=ci)
               if (type %in% c("fail","margfail")) {

@@ -18,6 +18,14 @@
 ##   require(bbmle)
 ## }
 
+
+## robust standard errors for clustered data
+refresh
+require(rstpm2)
+brcancer2 <- transform(brcancer, id=rep(1:(nrow(brcancer)/2),each=2))
+fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer2, cluster=brcancer2$id, logtheta=-6)
+summary(fit)
+
 # Aranda-Ordaz link
 refresh
 require(rstpm2)
@@ -41,7 +49,8 @@ newd <- merge(transform(brcancer,rectime=NULL), data.frame(rectime=c(500,1000)))
 unlist(predict(fit,newdata=newd,type="af",exposed=function(data) transform(data,hormon=1),keep.attributes=FALSE,se.fit=TRUE) -
        predict(fit,newdata=newd,type="af",exposed=function(data) transform(data,hormon=1),keep.attributes=FALSE,se.fit=TRUE,use.gr=FALSE))
 
-plot(fit,newdata=NULL,type="af",exposed=function(data) transform(data,hormon=1))
+system.time(plot(fit,type="af",exposed=function(data) transform(data,hormon=1),recent=TRUE))
+system.time(plot(fit,type="af",exposed=function(data) transform(data,hormon=1),recent=FALSE))
 plot(fit,newdata=NULL,type="meansurv",ci=F)
 plot(fit,newdata=NULL,type="meansurvdiff",exposed=function(data) transform(data,hormon=1))
 
@@ -52,6 +61,58 @@ unlist(predict(fit,newdata=newd,type="meansurvdiff",exposed=function(data) trans
       predict(fit,newdata=newd,type="meansurvdiff",exposed=function(data) transform(data,hormon=1),keep.attributes=FALSE,se.fit=TRUE,use.gr=FALSE))
 unlist(predict(fit,newdata=newd,type="meansurv",keep.attributes=FALSE,se.fit=TRUE)-
        predict(fit,newdata=newd,type="meansurv",keep.attributes=FALSE,se.fit=TRUE,use.gr=FALSE))
+
+
+## comparison with AF
+## Example 1: clustered data with frailty U
+require(AF)
+set.seed(12345)
+expit <- function(x) 1 / (1 + exp( - x))
+n <- 100
+m <- 2
+alpha <- 1.5
+eta <- 1
+phi <- 0.5
+beta <- 1
+id <- rep(1:n,each=m)
+U <- rep(rgamma(n, shape = 1 / phi, scale = phi), each = m)
+Z <- rnorm(n * m)
+X <- rbinom(n * m, size = 1, prob = expit(Z))
+## Reparametrize scale as in rweibull function
+weibull.scale <- alpha / (U * exp(beta * X)) ^ (1 / eta)
+t <- rweibull(n * m, shape = eta, scale = weibull.scale)
+## Right censoring
+c <- runif(n * m, 0, 10)
+delta <- as.numeric(t < c)
+t <- pmin(t, c)
+d <- data.frame(t, delta, X, Z, id)
+require(rstpm2)
+fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, df=1)
+diag(vcov(fit))
+fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, frailty=FALSE, cluster=d$id, robust=TRUE, df=1)
+diag(vcov(fit))
+fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, cluster=d$id, df=1)
+diag(vcov(fit))
+
+fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, cluster = d$id, df=1)
+predict(fit,type="af",newdata=transform(d,t=1),exposed=function(data) transform(data,X=0),keep.attributes=FALSE,se.fit=TRUE) 
+fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, cluster = d$id, df=4)
+predict(fit,type="af",newdata=transform(d,t=1),exposed=function(data) transform(data,X=0),keep.attributes=FALSE,se.fit=TRUE) 
+fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, cluster=d$id, df=1)
+predict(fit,type="af",newdata=transform(d,t=1),exposed=function(data) transform(data,X=0),keep.attributes=FALSE,se.fit=TRUE) 
+
+
+
+
+## Fit a frailty object
+library(stdReg)
+fit <- frailty(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, clusterid = "id")
+summary(fit)
+## Estimate the attributable fraction from the fitted frailty model
+time <- c(seq(from = 0.2, to = 1, by = 0.2))
+AFfrailty_est <- AFfrailty(object = fit, data = d, exposure = "X", times = time, clusterid = "id")
+AFfrailty_est
+##AF:::summary.AF(AFfrailty_est)
 
 
 ## tvc for Maarten Coemans
@@ -235,7 +296,12 @@ fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer)
 summary(fit)
 fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer, cluster=brcancer2$id, robust=TRUE)
 summary(fit)
-
+##
+require(rstpm2)
+brcancer2 <- transform(brcancer, id=rep(1:(nrow(brcancer)/2),each=2))
+fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer, cluster=brcancer2$id)
+summary(fit)
+predict(fit,type="gradli")
 
 
 
