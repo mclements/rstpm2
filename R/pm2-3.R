@@ -779,7 +779,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                y = y,
                link=link,
                args=args)
-    if (robust) # kludge
+    if (robust && !frailty) # kludge
       out@vcov <- sandwich.stpm2(out, cluster=cluster)
     return(out)
   }
@@ -874,7 +874,6 @@ setMethod("predict", "stpm2",
     type <- match.arg(type)
     ## exposed is a function that takes newdata and returns the revised newdata
     ## var is a string for a variable that defines a unit change in exposure
-    ##debug(local)
     args <- object@args
     if (type=="li") {
         localargs <- args
@@ -886,59 +885,124 @@ setMethod("predict", "stpm2",
         localargs$return_type <- "gradli"
         return(.Call("model_output", localargs, package="rstpm2"))
     }
+    lpfunc <- function(delta,fit,data,var) {
+        data[[var]] <- data[[var]]+delta
+        lpmatrix.lm(fit,data)
+    }
     if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr"))
       stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr') requires newdata to be specified.")
+    if (is.null(newdata)) {
+        ##mm <- X <- model.matrix(object) # fails (missing timevar)
+        X <- object@x
+        XD <- object@xd
+        ##y <- model.response(object@model.frame)
+        y <- object@y
+        time <- as.vector(y[,ncol(y)-1])
+        newdata <- as.data.frame(object@data)
+    }
+    else {
+        X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
+        XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
+        XD <- args$transXD(matrix(XD,nrow=nrow(X)))
+    }
+    ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
+    ## similarly for the derivatives
     if (grid) {
       Y <- object@y
       event <- Y[,ncol(Y)]==1 | object@interval
       time <- object@data[[object@timeVar]]
       eventTimes <- time[event]
-      X <- seq(min(eventTimes),max(eventTimes),length=seqLength)[-1]
-      data.x <- data.frame(X)
+      tt <- seq(min(eventTimes),max(eventTimes),length=seqLength)[-1]
+      data.x <- data.frame(tt)
       names(data.x) <- object@timeVar
+      newdata[[object@timeVar]] <- NULL
       newdata <- merge(newdata,data.x)
+      X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
+      XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
+      XD <- args$transXD(matrix(XD,nrow=nrow(X)))
     }
-        if (is.null(newdata)) {
-          ##mm <- X <- model.matrix(object) # fails (missing timevar)
-          X <- object@x
-          XD <- object@xd
-          ##y <- model.response(object@model.frame)
-          y <- object@y
-          time <- as.vector(y[,ncol(y)-1])
+    if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","or","marghaz","marghr")) {
+        ## how to elegantly extract the time variable?
+        ## timeExpr <- 
+        ##   lhs(object@call.formula)[[length(lhs(object@call.formula))-1]]
+        time <- eval(object@timeExpr,newdata)
+        ##
+    }
+    ## if (object@delayed && !object@interval) {
+    ##   newdata0 <- newdata
+    ##   newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
+    ##   X0 <- lpmatrix.lm(object@lm, newdata0)
+    ##   ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
+    ##   ## XD0 <- matrix(XD0,nrow=nrow(X0))
+    ## }
+    if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af")) {
+        if (missing(exposed))
+            stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr','af')")
+        newdata2 <- exposed(newdata)
+        X2 <- args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
+        XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
+        XD2 <- args$transXD(matrix(XD2,nrow=nrow(X)))
+    }
+    colMeans <- function(x) colSums(x)/apply(x,2,length)
+    if (object@frailty && type=="af" && args$RandDist=="Gamma" && !object@args$interval && !object@args$delayed) {
+        times <- newdata[[object@timeVar]]
+        utimes <- sort(unique(times))
+        n <- nrow(X)/length(utimes)
+        n.cluster <- length(unique(args$cluster))
+        link <- object@link
+        beta <- coef(object)
+        npar <- length(beta)
+        logtheta <- beta[npar]
+        theta <- exp(beta[npar])
+        beta <- beta[-npar]
+        Hessian <- solve(vcov(object))
+        eta <- as.vector(X %*% beta)
+        eta2 <- as.vector(X2 %*% beta)
+        S <- link$ilink(eta)
+        S2 <- link$ilink(eta2)
+        H <- -log(S)
+        H2 <- -log(S2)
+        marg <- function(logtheta,H) (1+exp(logtheta)*H)^(-1/exp(logtheta))
+        margS <- marg(logtheta,H)
+        margS2 <- marg(logtheta,H2)
+        dmarg.dlogtheta <- function(logtheta,H) {
+            theta <- exp(logtheta)
+            marg(logtheta,H)*(exp(-logtheta)*log(1+theta*H)-H/(1+theta*H))
         }
-        else {
-          lpfunc <- function(delta,fit,data,var) {
-            data[[var]] <- data[[var]]+delta
-            lpmatrix.lm(fit,data)
-          }
-          X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
-          XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
-          XD <- args$transXD(matrix(XD,nrow=nrow(X)))
-          ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
-          ## similarly for the derivatives
-          if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","or","marghaz","marghr")) {
-            ## how to elegantly extract the time variable?
-            ## timeExpr <- 
-            ##   lhs(object@call.formula)[[length(lhs(object@call.formula))-1]]
-            time <- eval(object@timeExpr,newdata)
-            ##
-          }
-          ## if (object@delayed && !object@interval) {
-          ##   newdata0 <- newdata
-          ##   newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
-          ##   X0 <- lpmatrix.lm(object@lm, newdata0)
-          ##   ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
-          ##   ## XD0 <- matrix(XD0,nrow=nrow(X0))
-          ## }
-          if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af")) {
-            if (missing(exposed))
-              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr','af')")
-            newdata2 <- exposed(newdata)
-            X2 <- args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
-            XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
-            XD2 <- args$transXD(matrix(XD2,nrow=nrow(X)))
-          }
+        ## eps <- 1e-5; dmarg.dlogtheta(3,.2); (marg(3+eps,.2)-marg(3-eps,.2))/2/eps
+        ##
+        meanS <- tapply(margS,times,mean)
+        meanS2 <- tapply(margS2,times,mean)
+        fit <- 1-(1-meanS2)/(1-meanS)
+        se.fit <- vector("numeric",length(utimes))
+        for (i in 1:length(utimes)) {
+            index <- which(times==utimes[i])
+            newobj <- object
+            newobj@args$X <- X[index,,drop=FALSE]
+            newobj@args$XD <- XD[index,,drop=FALSE]
+            gradli <- predict(newobj,type="gradli")
+            res <- cbind(margS[index]-mean(margS[index]),margS2[index]-mean(margS2[index]))
+            res <- apply(res,2,function(col) tapply(col,args$cluster,sum))
+            res <- cbind(res, gradli)
+            meat <- stats::var(res, na.rm=TRUE)
+            colnames(meat) <- rownames(meat) <- c("S","S0", names(beta),"logtheta")
+            S.hessian <- cbind(-diag(2)*n/n.cluster,
+                               rbind(colSums(margS[index]*(-link$gradH(eta[index],list(X=X[index,,drop=FALSE]))/(1+theta*H[index])))/n.cluster,
+                                     colSums(margS2[index]*(-link$gradH(eta2[index],list(X=X2[index,,drop=FALSE]))/(1+theta*H2[index])))/n.cluster),
+                               c(sum(dmarg.dlogtheta(logtheta,H[index]))/n.cluster,
+                                 sum(dmarg.dlogtheta(logtheta,H2[index]))/n.cluster))
+            par.hessian <- cbind(matrix(0, nrow = npar, ncol = 2), -Hessian / n.cluster)
+            bread <- rbind(S.hessian, par.hessian)
+            ibread <- solve(bread)
+            sandwich <- (ibread %*% meat %*% t(ibread) / n.cluster)[1:2, 1:2]
+            gradient <- as.matrix(c( - (1 - meanS2[i]) / (1 - meanS[i]) ^ 2, 1 / (1 - meanS[i])), nrow = 2, ncol = 1)
+            AF.var <- t(gradient) %*% sandwich %*% gradient
+            ## S.var <- sandwich[1, 1]
+            ## S0.var <- sandwich[2, 2]
+            se.fit[i] <- sqrt(AF.var)
         }
+        return(list(fit=fit, se.fit=se.fit))
+    }
     local <-  function (object, newdata=NULL, type="surv", exposed)
     {
         beta <- coef(object)

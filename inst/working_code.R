@@ -19,7 +19,7 @@
 ## }
 
 
-## robust standard errors for clustered data
+## Gamma frailty
 refresh
 require(rstpm2)
 brcancer2 <- transform(brcancer, id=rep(1:(nrow(brcancer)/2),each=2))
@@ -82,18 +82,34 @@ X <- rbinom(n * m, size = 1, prob = expit(Z))
 weibull.scale <- alpha / (U * exp(beta * X)) ^ (1 / eta)
 t <- rweibull(n * m, shape = eta, scale = weibull.scale)
 ## Right censoring
-c <- runif(n * m, 0, 10)
-delta <- as.numeric(t < c)
-t <- pmin(t, c)
+cen <- runif(n * m, 0, 10)
+delta <- as.numeric(t < cen)
+t <- pmin(t, cen)
 d <- data.frame(t, delta, X, Z, id)
+## Fit a frailty object
+library(stdReg)
+fit <- stdReg::frailty(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, clusterid = "id")
+summary(fit)
+## Estimate the attributable fraction from the fitted frailty model
+time <- c(seq(from = 0.2, to = 1, by = 0.2))
+time <- 1
+## debug(AFfrailty)
+AFfrailty_est <- AFfrailty(object = fit, data = d, exposure = "X", times = time, clusterid = "id")
+AFfrailty_est
+##AF:::summary.AF(AFfrailty_est)
+
+require(rstpm2)
+fit2 <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, df=1, cluster=d$id, smooth.formula=~log(t))
+predict(fit2, type="af", newdata=d,grid=TRUE,exposed=function(data) transform(data, X=0), se.fit=TRUE)
+
 require(rstpm2)
 fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, df=1)
 diag(vcov(fit))
-fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, frailty=FALSE, cluster=d$id, robust=TRUE, df=1)
+fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, frailty=FALSE, cluster=d$id, df=1)
 diag(vcov(fit))
 fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, cluster=d$id, df=1)
 diag(vcov(fit))
-
+##
 fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, cluster = d$id, df=1)
 predict(fit,type="af",newdata=transform(d,t=1),exposed=function(data) transform(data,X=0),keep.attributes=FALSE,se.fit=TRUE) 
 fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, cluster = d$id, df=4)
@@ -104,15 +120,6 @@ predict(fit,type="af",newdata=transform(d,t=1),exposed=function(data) transform(
 
 
 
-## Fit a frailty object
-library(stdReg)
-fit <- frailty(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, clusterid = "id")
-summary(fit)
-## Estimate the attributable fraction from the fitted frailty model
-time <- c(seq(from = 0.2, to = 1, by = 0.2))
-AFfrailty_est <- AFfrailty(object = fit, data = d, exposure = "X", times = time, clusterid = "id")
-AFfrailty_est
-##AF:::summary.AF(AFfrailty_est)
 
 
 ## tvc for Maarten Coemans

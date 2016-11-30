@@ -1228,13 +1228,14 @@ namespace rstpm2 {
     double objective(vec beta) {
       vec vbeta = beta;
       vbeta.resize(this->nbeta);
+      // copy across to this->bfgs.coef?
       li_constraint s = li(this->X * vbeta, this->XD * vbeta, this->X0 * vbeta, this->X1 * vbeta);
       return -sum(s.li) + s.constraint;
     }
     vec getli(vec beta) {
       vec vbeta = beta;
       vbeta.resize(this->nbeta);
-      li_constraint lic = this->li(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta);
+      li_constraint lic = li(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta);
       return lic.li;
     }
     mat getgradli(vec beta) {
@@ -1243,13 +1244,12 @@ namespace rstpm2 {
       gradli_constraint gradlic = gradli(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, this->X, this->XD, this->X0, this->X1);
       return gradlic.gradli;
     }
-
     li_constraint li(vec eta, vec etaD, vec eta0, vec eta1) {
       vec ll(clusters.size(), fill::zeros);
       vec beta = as<vec>(this->bfgs.coef);
       int n = beta.size();
       vec vbeta(beta); // logtheta is the last parameter in beta
-      vbeta.resize(nbeta);
+      vbeta.resize(this->nbeta);
       double theta = exp(beta[n-1]);
       eta = this->X * vbeta;
       etaD = this->XD * vbeta;
@@ -1294,16 +1294,28 @@ namespace rstpm2 {
       out.li = ll;
       return out;
     }
-
     vec gradient(vec beta) {
+      vec vbeta = beta;
+      vbeta.resize(this->nbeta);
+      gradli_constraint gc = gradli(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, this->X, this->XD, this->X0, this->X1);
+      rowvec dconstraint = sum(gc.constraint,0);
+      rowvec vgr = sum(gc.gradli,0);
+      vec gr(beta.size());
+      for (size_t i = 0; i<beta.size(); ++i) {
+	gr[i] = vgr[i];// - dconstraint[i];
+      }
+      return -gr;
+    }
+    gradli_constraint gradli(vec eta, vec etaD, vec eta0, vec eta1, mat X, mat XD, mat X0, mat X1) { 
+      vec beta = as<vec>(this->bfgs.coef);
       int n = beta.size();
-      vec gr = zeros<vec>(n);
-      vec grconstraint = zeros<vec>(n);
+      mat gr = zeros<mat>(clusters.size(), n);
+      mat grconstraint = zeros<mat>(clusters.size(), n);
       vec vbeta(beta); // theta is the last parameter in beta
       vbeta.resize(n-1);
       double theta = exp(beta[n-1]);
-      vec eta = this->X * vbeta;
-      vec etaD = this->XD * vbeta;
+      // eta = this->X * vbeta;
+      // etaD = this->XD * vbeta;
       vec h = this->link->h(eta,etaD);
       vec H = this->link->H(eta);
       mat gradh = this->link->gradh(eta,etaD,this->X,this->XD);
@@ -1314,18 +1326,19 @@ namespace rstpm2 {
       vec H0;
       mat gradH0;
       if (this->delayed) {
-	vec eta0 = this->X0 * vbeta;
+	// vec eta0 = this->X0 * vbeta;
 	// vec etaD0 = this->XD0 * vbeta;
 	H0 = this->link->H(eta0);
 	gradH0 = this->link->gradH(eta0,this->X0);
       }
-      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it) {
+      int i=0;
+      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it, ++i) {
 	int mi=0;
 	double sumH = 0.0, sumHenter = 0.0;
 	vec gradi = zeros<vec>(n-1);
 	vec gradHi = zeros<vec>(n-1);
 	vec gradH0i = zeros<vec>(n-1);
-	vec grconstraint = zeros<vec>(n-1);
+	// vec grconstraint = zeros<vec>(n-1);
 	for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
 	  sumH += H(*j);
 	  gradHi += gradH.row(*j).t();
@@ -1337,35 +1350,36 @@ namespace rstpm2 {
 	    int jj = this->map0[*j];
 	    sumHenter += H0(jj);
 	    gradH0i += gradH0.row(jj).t();
-	    grconstraint += this->kappa * (gradH0.row(jj).t() * H0(jj) * (H0(jj)<0));
+	    grconstraint(i,span(0,n-2)) += this->kappa * (gradH0.row(jj) * H0(jj) * (H0(jj)<0));
 	  }
-	  grconstraint += this->kappa * ((gradh.row(*j).t() * h(*j) * (h(*j)<0)) + (gradH.row(*j).t() * H(*j) * (H(*j)<0)));
+	  grconstraint(i,span(0,n-2)) += this->kappa * ((gradh.row(*j) * h(*j) * (h(*j)<0)) + (gradH.row(*j) * H(*j) * (H(*j)<0)));
 	}
 	for (int k=0; k<n-1; ++k) {
 	  if (recurrent) {
-	  gr(k) += gradi(k) - (1.0/theta+mi)*theta*(gradHi(k)-gradH0i(k))/(1+theta*(sumH-sumHenter)) - grconstraint(k); // Gutierrez
+	    gr(i,k) += gradi(k) - (1.0/theta+mi)*theta*(gradHi(k)-gradH0i(k))/(1+theta*(sumH-sumHenter)) - grconstraint(k); // Gutierrez
 	  } else {
-	    gr(k) += gradi(k) - theta*(1.0/theta+mi)*gradHi(k)/(1+theta*sumH) + 1.0/(1+theta*sumHenter)*gradH0i(k) - grconstraint(k); // Rondeau et al
+	    gr(i,k) += gradi(k) - theta*(1.0/theta+mi)*gradHi(k)/(1+theta*sumH) + 1.0/(1+theta*sumHenter)*gradH0i(k) - grconstraint(k); // Rondeau et al
 	  }
 	}
 	if (recurrent) {
 	  // axiom: D(-(1/exp(btheta)+mi)*log(1+exp(btheta)*H),btheta)
 	  // axiom: D(log(Gamma(1/exp(btheta)+mi))-log(Gamma(1/exp(btheta)))+mi*btheta,btheta)
 	  double H = sumH - sumHenter;
-	  gr(n-1) += ((1+theta*H)*log(1+H*theta)-H*mi*theta*theta - H*theta)/(H*theta*theta + theta) + (-R::digamma(1.0/theta+mi)+R::digamma(1/theta)+mi*theta)/theta;
+	  gr(i,n-1) += ((1+theta*H)*log(1+H*theta)-H*mi*theta*theta - H*theta)/(H*theta*theta + theta) + (-R::digamma(1.0/theta+mi)+R::digamma(1/theta)+mi*theta)/theta;
 	} else {
 	  // axiom: D(-(1/exp(btheta)+mi)*log(1+exp(btheta)*H),btheta)
 	  // axiom: D(1.0/exp(btheta)*log(1+exp(btheta)*H0),btheta)
-	  gr(n-1) += ((1+sumH*theta)*log(1+sumH*theta)-sumH*mi*theta*theta-sumH*theta)/(sumH*theta*theta+theta);
-	  gr(n-1) += (-(1+sumHenter*theta)*log(sumHenter*theta+1)+sumHenter*theta)/(sumHenter*theta*theta+theta); 
+	  gr(i,n-1) += ((1+sumH*theta)*log(1+sumH*theta)-sumH*mi*theta*theta-sumH*theta)/(sumH*theta*theta+theta);
+	  gr(i,n-1) += (-(1+sumHenter*theta)*log(sumHenter*theta+1)+sumHenter*theta)/(sumHenter*theta*theta+theta); 
 	  if (mi>0) {
 	    for (int k=1; k<=mi; ++k)
 	      // axiom: D(log(1+exp(btheta)*(mi-k)),btheta)
-	      gr(n-1) += theta*(mi-k)/(1.0+theta*(mi-k));
+	      gr(i,n-1) += theta*(mi-k)/(1.0+theta*(mi-k));
 	  }
 	}
       }
-      return -gr;  
+      gradli_constraint grli = {gr, grconstraint};
+      return grli;  
     }
     bool feasible(vec beta) {
       vec coef(beta);
