@@ -944,7 +944,7 @@ setMethod("predict", "stpm2",
         XD2 <- args$transXD(matrix(XD2,nrow=nrow(X)))
     }
     colMeans <- function(x) colSums(x)/apply(x,2,length)
-    if (object@frailty && type=="af" && args$RandDist=="Gamma" && !object@args$interval && !object@args$delayed) {
+    if (object@frailty && type %in% c("af","meansurvdiff") && args$RandDist=="Gamma" && !object@args$interval && !object@args$delayed) {
         times <- newdata[[object@timeVar]]
         utimes <- sort(unique(times))
         n <- nrow(X)/length(utimes)
@@ -973,7 +973,7 @@ setMethod("predict", "stpm2",
         ##
         meanS <- tapply(margS,times,mean)
         meanS2 <- tapply(margS2,times,mean)
-        fit <- 1-(1-meanS2)/(1-meanS)
+        fit <- switch(type,af=1-(1-meanS2)/(1-meanS),meansurvdiff=meanS-meanS2)
         se.fit <- vector("numeric",length(utimes))
         for (i in 1:length(utimes)) {
             index <- which(times==utimes[i])
@@ -995,13 +995,69 @@ setMethod("predict", "stpm2",
             bread <- rbind(S.hessian, par.hessian)
             ibread <- solve(bread)
             sandwich <- (ibread %*% meat %*% t(ibread) / n.cluster)[1:2, 1:2]
-            gradient <- as.matrix(c( - (1 - meanS2[i]) / (1 - meanS[i]) ^ 2, 1 / (1 - meanS[i])), nrow = 2, ncol = 1)
+            gradient <- switch(type,
+                               af=as.matrix(c( - (1 - meanS2[i]) / (1 - meanS[i]) ^ 2, 1 / (1 - meanS[i])), nrow = 2, ncol = 1),
+                               meansurvdiff=matrix(c(1,-1),nrow=2))
             AF.var <- t(gradient) %*% sandwich %*% gradient
             ## S.var <- sandwich[1, 1]
             ## S0.var <- sandwich[2, 2]
             se.fit[i] <- sqrt(AF.var)
         }
-        return(list(fit=fit, se.fit=se.fit))
+        pred <- data.frame(Estimate=fit, lower=fit-1.96*se.fit, upper=fit+1.96*se.fit) 
+        if (keep.attributes)
+            attr(pred,"newdata") <- newdata
+        return(pred)
+    }
+    if (object@frailty && type %in% c("meansurv") && args$RandDist=="Gamma" && !object@args$interval && !object@args$delayed) {
+        ## browser()
+        times <- newdata[[object@timeVar]]
+        utimes <- sort(unique(times))
+        n <- nrow(X)/length(utimes)
+        n.cluster <- length(unique(args$cluster))
+        link <- object@link
+        beta <- coef(object)
+        npar <- length(beta)
+        logtheta <- beta[npar]
+        theta <- exp(beta[npar])
+        beta <- beta[-npar]
+        Hessian <- solve(vcov(object))
+        eta <- as.vector(X %*% beta)
+        S <- link$ilink(eta)
+        H <- -log(S)
+        marg <- function(logtheta,H) (1+exp(logtheta)*H)^(-1/exp(logtheta))
+        margS <- marg(logtheta,H)
+        dmarg.dlogtheta <- function(logtheta,H) {
+            theta <- exp(logtheta)
+            marg(logtheta,H)*(exp(-logtheta)*log(1+theta*H)-H/(1+theta*H))
+        }
+        ## eps <- 1e-5; dmarg.dlogtheta(3,.2); (marg(3+eps,.2)-marg(3-eps,.2))/2/eps
+        ##
+        meanS <- tapply(margS,times,mean)
+        fit <- meanS
+        se.fit <- vector("numeric",length(utimes))
+        for (i in 1:length(utimes)) {
+            index <- which(times==utimes[i])
+            newobj <- object
+            newobj@args$X <- X[index,,drop=FALSE]
+            newobj@args$XD <- XD[index,,drop=FALSE]
+            gradli <- predict(newobj,type="gradli")
+            res <- tapply(margS[index]-mean(margS[index]),args$cluster,sum)
+            res <- cbind(res, gradli)
+            meat <- stats::var(res, na.rm=TRUE)
+            colnames(meat) <- rownames(meat) <- c("S", names(beta),"logtheta")
+            S.hessian <- c(-n/n.cluster,
+                               colSums(margS[index]*(-link$gradH(eta[index],list(X=X[index,,drop=FALSE]))/(1+theta*H[index])))/n.cluster,
+                               sum(dmarg.dlogtheta(logtheta,H[index]))/n.cluster)
+            par.hessian <- cbind(matrix(0, nrow = npar, ncol = 1), -Hessian / n.cluster)
+            bread <- rbind(S.hessian, par.hessian)
+            ibread <- solve(bread)
+            sandwich <- (ibread %*% meat %*% t(ibread) / n.cluster)[1, 1]
+            se.fit[i] <- sqrt(sandwich)
+        }
+        pred <- data.frame(Estimate=fit, lower=fit-1.96*se.fit, upper=fit+1.96*se.fit) 
+        if (keep.attributes)
+            attr(pred,"newdata") <- newdata
+        return(pred)
     }
     local <-  function (object, newdata=NULL, type="surv", exposed)
     {

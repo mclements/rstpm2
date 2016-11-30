@@ -100,7 +100,10 @@ AFfrailty_est
 
 require(rstpm2)
 fit2 <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, df=1, cluster=d$id, smooth.formula=~log(t))
-predict(fit2, type="af", newdata=d,grid=TRUE,exposed=function(data) transform(data, X=0), se.fit=TRUE)
+predict(fit2, type="af", newdata=transform(d,t=1),exposed=function(data) transform(data, X=0), se.fit=TRUE)
+plot(fit2, type="af", exposed=function(data) transform(data, X=0))
+plot(fit2, type="meansurvdiff", exposed=function(data) transform(data, X=0))
+plot(fit2, type="meansurv")
 
 require(rstpm2)
 fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, df=1)
@@ -113,7 +116,8 @@ diag(vcov(fit))
 fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, cluster = d$id, df=1)
 predict(fit,type="af",newdata=transform(d,t=1),exposed=function(data) transform(data,X=0),keep.attributes=FALSE,se.fit=TRUE) 
 fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, cluster = d$id, df=4)
-predict(fit,type="af",newdata=transform(d,t=1),exposed=function(data) transform(data,X=0),keep.attributes=FALSE,se.fit=TRUE) 
+predict(fit,type="af",newdata=transform(d,t=1),exposed=function(data) transform(data,X=0),keep.attributes=FALSE,se.fit=TRUE)
+
 fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, cluster=d$id, df=1)
 predict(fit,type="af",newdata=transform(d,t=1),exposed=function(data) transform(data,X=0),keep.attributes=FALSE,se.fit=TRUE) 
 
