@@ -865,13 +865,15 @@ setMethod("predictnl", "stpm2",
   })
 ##
 
-setMethod("predict", "stpm2",
+predict.stpm2.base <- 
           function(object,newdata=NULL,
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","li","gradli"),
                    grid=FALSE,seqLength=300,
-                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var,keep.attributes=TRUE,use.gr=TRUE,...)
+                   se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=TRUE,use.gr=TRUE,...)
   {
-    type <- match.arg(type)
+      type <- match.arg(type)
+      if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af"))
+          stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","or","marghr","af")')
     ## exposed is a function that takes newdata and returns the revised newdata
     ## var is a string for a variable that defines a unit change in exposure
     args <- object@args
@@ -885,10 +887,6 @@ setMethod("predict", "stpm2",
         localargs$return_type <- "gradli"
         return(.Call("model_output", localargs, package="rstpm2"))
     }
-    lpfunc <- function(delta,fit,data,var) {
-        data[[var]] <- data[[var]]+delta
-        lpmatrix.lm(fit,data)
-    }
     if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr"))
         stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr') requires newdata to be specified.")
     calcX <- !is.null(newdata)
@@ -901,11 +899,20 @@ setMethod("predict", "stpm2",
         time <- as.vector(y[,ncol(y)-1])
         newdata <- as.data.frame(object@data)
     }
+    lpfunc <- if (inherits(object,"pstpm2")) 
+        function(x,...) {
+            newdata2 <- newdata
+            newdata2[[object@timeVar]] <- x
+            predict(object@gam,newdata2,type="lpmatrix")
+        } else  function(delta,fit,data,var) {
+            data[[var]] <- data[[var]]+delta
+            lpmatrix.lm(fit,data)
+        }
     ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
     ## similarly for the derivatives
     if (grid) {
       Y <- object@y
-      event <- Y[,ncol(Y)]==1 | object@interval
+      event <- Y[,ncol(Y)]==1 | object@args$interval
       time <- object@data[[object@timeVar]]
       eventTimes <- time[event]
       tt <- seq(min(eventTimes),max(eventTimes),length=seqLength)[-1]
@@ -913,14 +920,21 @@ setMethod("predict", "stpm2",
       names(data.x) <- object@timeVar
       newdata[[object@timeVar]] <- NULL
       newdata <- merge(newdata,data.x)
-      X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
-      XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
-      XD <- args$transXD(matrix(XD,nrow=nrow(X)))
+      calcX <- TRUE
     }
     if (calcX)  {
-        X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
-        XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
-        XD <- args$transXD(matrix(XD,nrow=nrow(X)))
+      if (inherits(object, "stpm2")) {
+          X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
+          XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
+          XD <- args$transXD(matrix(XD,nrow=nrow(X)))
+      }
+      if (inherits(object, "pstpm2")) {
+           X <- args$transX(predict(object@gam, newdata, type="lpmatrix"), newdata)      
+           XD <- args$transXD(grad1(lpfunc,newdata[[object@timeVar]]))
+      }
+        ## X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
+        ## XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
+        ## XD <- args$transXD(matrix(XD,nrow=nrow(X)))
     }
     if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","or","marghaz","marghr")) {
         ## how to elegantly extract the time variable?
@@ -937,12 +951,19 @@ setMethod("predict", "stpm2",
     ##   ## XD0 <- matrix(XD0,nrow=nrow(X0))
     ## }
     if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af")) {
-        if (missing(exposed) && missing(var))
-            stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr','af')")
         newdata2 <- exposed(newdata)
-        X2 <- args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
-        XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
-        XD2 <- args$transXD(matrix(XD2,nrow=nrow(X)))
+      if (inherits(object, "stpm2")) {
+          X2 <- args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
+          XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
+          XD2 <- args$transXD(matrix(XD2,nrow=nrow(X)))
+      }
+      if (inherits(object, "pstpm2")) {
+           X2 <- args$transX(predict(object@gam, newdata2, type="lpmatrix"), newdata2)      
+           XD2 <- args$transXD(grad1(lpfunc,newdata2[[object@timeVar]]))
+      }
+        ## X2 <- args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
+        ## XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
+        ## XD2 <- args$transXD(matrix(XD2,nrow=nrow(X)))
     }
     colMeans <- function(x) colSums(x)/apply(x,2,length)
     if (object@frailty && type %in% c("af","meansurvdiff") && args$RandDist=="Gamma" && !object@args$interval && !object@args$delayed) {
@@ -1037,14 +1058,26 @@ setMethod("predict", "stpm2",
         fit <- meanS
         se.fit <- vector("numeric",length(utimes))
         for (i in 1:length(utimes)) {
+            ## browser()
             index <- which(times==utimes[i])
             newobj <- object
             newobj@args$X <- X[index,,drop=FALSE]
             newobj@args$XD <- XD[index,,drop=FALSE]
+            ## ## Attempt to use the sandwich estimator for the covariance matrix with the delta method (-> inflated SEs)
+            ## res <- predict(newobj,type="gradli")
+            ## meat <- stats::var(res, na.rm=TRUE) # crossprod(res)/n.cluster
+            ## colnames(meat) <- rownames(meat) <- c(names(beta),"logtheta")
+            ## bread <- -Hessian / n.cluster
+            ## ibread <- solve(bread)
+            ## sandwich <- ibread %*% meat %*% t(ibread) / n.cluster
+            ## g <- c(colSums(margS[index]*(-link$gradH(eta[index],list(X=X[index,,drop=FALSE]))/(1+theta*H[index])))/n.cluster,
+            ##                    sum(dmarg.dlogtheta(logtheta,H[index]))/n.cluster)
+            ## se.fit[i] <- sqrt(sum(matrix(g,nrow=1)%*%(sandwich %*% g)))
             gradli <- predict(newobj,type="gradli")
             res <- tapply(margS[index]-mean(margS[index]),args$cluster,sum)
             res <- cbind(res, gradli)
             meat <- stats::var(res, na.rm=TRUE)
+            ## meat <- crossprod(res)/n.cluster
             colnames(meat) <- rownames(meat) <- c("S", names(beta),"logtheta")
             S.hessian <- c(-n/n.cluster,
                                colSums(margS[index]*(-link$gradH(eta[index],list(X=X[index,,drop=FALSE]))/(1+theta*H[index])))/n.cluster,
@@ -1269,7 +1302,15 @@ setMethod("predict", "stpm2",
     if (keep.attributes)
         attr(pred,"newdata") <- newdata
     return(pred)
-  })
+  }
+
+setMethod("predict", "stpm2",
+          function(object,newdata=NULL,
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","li","gradli"),
+                   grid=FALSE,seqLength=300,
+                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,use.gr=TRUE,...)
+              predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
+                                 link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr, ...))
 
 ##`%c%` <- function(f,g) function(...) g(f(...)) # function composition
 plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", exposed=NULL, add=FALSE, ci=!add, rug=!add, recent=FALSE,
@@ -1278,7 +1319,7 @@ plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", 
     if (is.null(newdata)) newdata <- as.data.frame(x@data)
     if (is.null(times)) {
       Y <- x@y
-      event <- Y[,ncol(Y)]==1 | x@interval
+      event <- Y[,ncol(Y)]==1 | x@args$interval
       time <- x@data[[x@timeVar]]
       eventTimes <- time[event]
       times <- seq(min(eventTimes),max(eventTimes),length=seqLength)[-1]
@@ -1330,7 +1371,7 @@ plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", 
     }
     return(invisible(y))
 }
-setMethod("plot", signature(x="stpm2", y="missing"),
+plot.stpm2.base <- 
           function(x,y,newdata=NULL,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
                    add=FALSE,ci=!add,rug=!add,
@@ -1371,17 +1412,16 @@ setMethod("plot", signature(x="stpm2", y="missing"),
                   rug(eventTimes,col=line.col)
               }
               return(invisible(y))
-          })
-if (FALSE) {
-    lpfunc <- function(delta,fit,dataset,var) {
-      dataset[[var]] <- dataset[[var]]+delta
-      lpmatrix.lm(fit,dataset)
-    }
-    XD <- grad(lpfunc,0,lm.obj,data,timeVar)
-    XD <- matrix(XD,nrow=nrow(X))
-    #
-    XD <- grad1(lpfunc,data[[timeVar]])    
-}
+          }
+setMethod("plot", signature(x="stpm2", y="missing"),
+          function(x,y,newdata=NULL,type="surv",
+                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
+                   add=FALSE,ci=!add,rug=!add,
+                   var=NULL,exposed=incrVar(var),times=NULL,...)
+              plot.stpm2.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
+                              ylab=ylab, line.col=line.col, lty=lty, add=add,
+                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
+          )
 derivativeDesign <- 
 function (functn, lower = -1, upper = 1, rule = NULL,
     ...) 
@@ -2166,278 +2206,230 @@ setMethod("predictnl", "pstpm2",
 ##
 setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","li","gradli"),
                    grid=FALSE,seqLength=300,
-                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
-  {
-    type <- match.arg(type)
-    ## exposed is a function that takes newdata and returns the revised newdata
-    ## var is a string for a variable that defines a unit change in exposure
-    local <-  function (object, newdata=NULL, type="surv", exposed)
-    {
-        args <- object@args
-        tt <- object@terms 
-        link <- object@link
-        if (is.null(newdata)) {
-          ##mm <- X <- model.matrix(object) # fails (missing timevar)
-          X <- object@x
-          XD <- object@xd
-          ##y <- model.response(object@model.frame)
-          y <- object@y
-          time <- as.vector(y[,ncol(y)-1])
-        }
-        else {
-          X <- args$transX(predict(object@gam, newdata, type="lpmatrix"), newdata)
-          ## lpfunc <- function(delta,fit,data,var) {
-          ##   data[[var]] <- data[[var]]+delta
-          ##   predict(fit,data,type="lpmatrix")
-          ## }
-          ## XD <- grad(lpfunc,0,object@gam,newdata,object@timeVar)
-          ## XD <- matrix(XD,nrow=nrow(X))
-          lpfunc <- function(x,...) {
-            newdata2 <- newdata
-            newdata2[[object@timeVar]] <- x
-            predict(object@gam,newdata2,type="lpmatrix")
-          }
-          XD <- args$transXD(grad1(lpfunc,newdata[[object@timeVar]]))
-          ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
-          ## similarly for the derivatives
-          ## if (object@delayed) {
-          ##   newdata0 <- newdata
-          ##   newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
-          ##   X0 <- predict(object@gam, newdata0,type="lpmatrix")
-          ##   ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
-          ##   ## XD0 <- matrix(XD0,nrow=nrow(X0))
-          ## }
-          if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","meansurvdiff","or",
-                          "marghaz","marghr")) {
-            time <- eval(object@timeExpr,newdata)
-            ##
-          }
-          if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr")) {
-            if (missing(exposed))
-              stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr')")
-            newdata2 <- exposed(newdata)
-            lpfunc <- function(x,...) {
-                newdata3 <- newdata2
-                newdata3[[object@timeVar]] <- x
-                predict(object@gam,newdata3,type="lpmatrix")
-            }
-            X2 <- args$transX(predict(object@gam, newdata2, type="lpmatrix"), newdata2)
-            XD2 <- args$transXD(grad1(lpfunc,newdata2[[object@timeVar]]))
-            ## XD2 <- grad(lpfunc,0,object@gam,newdata2,object@timeVar)
-            ## XD2 <- matrix(XD2,nrow=nrow(X))
-          }
-        }
-        beta <- coef(object)
-        if (object@frailty) {
-            theta <- exp(beta[length(beta)])
-            beta <- beta[-length(beta)]
-            gauss_x <- object@args$gauss_x
-            gauss_w <- object@args$gauss_w
-            Z <- model.matrix(args$Z.formula, newdata)
-            if (ncol(Z)>1) stop("Current implementation only allows for a single random effect")
-            Z <- as.vector(Z)
-        }
-        eta <- as.vector(X %*% beta)
-        etaD <- as.vector(XD %*% beta)
-        S <- link$ilink(eta)
-        h <- link$h(eta,etaD)
-        if (any(h<0)) warning(sprintf("Predicted hazards less than zero (n=%i).",sum(h<0)))
-        H = link$H(eta)
-        Sigma = vcov(object)
-        if (type=="link") { # delayed entry?
-          return(eta)
-        }
-        if (type=="density")
-            return (S*h)
-        if (type=="cumhaz") { # delayed entry?
-            return(H)
-        }
-        if (type=="surv") { # delayed entry?
-          return(S)
-        }
-        if (type=="odds") { # delayed entry?
-          return((1-S)/S)
-        }
-        if (type=="sdiff")
-          return(link$ilink(as.vector(X2 %*% beta)) - S)
-        if (type=="or") {
-            S2 <- link$ilink(as.vector(X2 %*% beta)) 
-            return((1-S2)/S2/((1-S)/S))
-        }
-        if (type=="hazard") {
-          return(h)
-        }
-        if (type=="loghazard") {
-          return(log(h))
-        }
-        if (type=="hdiff") {
-            eta2 <- as.vector(X2 %*% beta)
-            etaD2 <- as.vector(XD2 %*% beta)
-            h2 <- link$h(eta2,etaD2)
-            return(h2 - h)
-        }
-        if (type=="hr") {
-            eta2 <- as.vector(X2 %*% beta)
-            etaD2 <- as.vector(XD2 %*% beta)
-            h2 <- link$h(eta2,etaD2)
-          return(h2/h)
-        }
-        if (type=="meansurv") {
-            return(mean(S))
-        }
-        if (type=="meanhaz") {
-            return(sum(h*S)/sum(S))
-        }
-        if (type=="meansurvdiff") {
-            eta2 <- as.vector(X2 %*% beta)
-            S2 <- link$ilink(eta2)
-            return(mean(S2-S))
-        }
-        if (type=="margsurv") {
-            stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
-            if (object@args$RandDist=="Gamma")
-                return((1+theta*H)^(-1/theta))
-            if (object@args$RandDist=="LogN") {
-                return(sapply(1:length(gauss_x),
-                              function(i) link$ilink(eta+Z*sqrt(theta)*gauss_x[i])) %*%
-                       gauss_w / sum(gauss_w))
-            }
-        }
-        if (type=="marghaz") {
-            stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
-            if (object@args$RandDist=="Gamma") {
-                margsurv <- (1+theta*H)^(-1/theta)
-                return(h*margsurv^theta)
-            }
-            if (object@args$RandDist=="LogN") {
-                return(sapply(1:length(gauss_x),
-                              function(i) link$h(eta+Z*sqrt(theta)*gauss_x[i],etaD)) %*%
-                       gauss_w / sum(gauss_w))
-            }
-        }
-        if (type=="marghr") {
-            stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
-            eta2 <- as.vector(X2 %*% beta)
-            etaD2 <- as.vector(XD2 %*% beta)
-            if (object@args$RandDist=="Gamma") {
-                H2 <- link$H(eta2)
-                h2 <- link$h(eta2,etaD2)
-                margsurv <- (1+theta*H)^(-1/theta)
-                marghaz <- h*margsurv^theta
-                margsurv2 <- (1+theta*H2)^(-1/theta)
-                marghaz2 <- h2*margsurv2^theta
-            }
-            if (object@args$RandDist=="LogN") {
-                marghaz <- sapply(1:length(gauss_x),
-                                  function(i) as.vector(link$h(eta+Z*sqrt(theta)*gauss_x[i],etaD))) %*%
-                                  gauss_w / sum(gauss_w)
-                marghaz2 <- sapply(1:length(gauss_x),
-                                   function(i) as.vector(link$h(eta2+Z*sqrt(theta)*gauss_x[i],etaD2))) %*%
-                                       gauss_w / sum(gauss_w)
-            }
-            return(marghaz2/marghaz)
-        }
-      }
-    ##debug(local)
-    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr"))
-      stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr') requires newdata to be specified.")
-    if (grid) {
-      Y <- object@y
-      event <- Y[,ncol(Y)]==1
-      time <- object@data[[object@timeVar]]
-      eventTimes <- time[event]
-      X <- seq(min(eventTimes),max(eventTimes),length=seqLength)[-1]
-      data.x <- data.frame(X)
-      names(data.x) <- object@timeVar
-      newdata <- merge(newdata,data.x)
-    }
-    pred <- if (!se.fit) {
-      local(object,newdata,type=type,exposed=exposed,
-            ...)
-    }
-    else {
-      if (is.null(link))
-        link <- switch(type,surv="cloglog",density="log",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                       hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meanhaz="I",meansurv="I")
-      predictnl(object,local,link=link,newdata=newdata,type=type,
-                exposed=exposed,...) 
-    }
-    attr(pred,"newdata") <- newdata
-    ##if (grid) cbind(newdata,as.data.frame(pred)) else pred
-    return(pred)
-  })
+                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,use.gr=TRUE,...)
+              predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
+                                 link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr, ...))
+
+## setMethod("predict", "pstpm2",
+##           function(object,newdata=NULL,
+##                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz"),
+##                    grid=FALSE,seqLength=300,
+##                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
+##   {
+##     type <- match.arg(type)
+##     ## exposed is a function that takes newdata and returns the revised newdata
+##     ## var is a string for a variable that defines a unit change in exposure
+##     local <-  function (object, newdata=NULL, type="surv", exposed)
+##     {
+##         args <- object@args
+##         tt <- object@terms 
+##         link <- object@link
+##         if (is.null(newdata)) {
+##           ##mm <- X <- model.matrix(object) # fails (missing timevar)
+##           X <- object@x
+##           XD <- object@xd
+##           ##y <- model.response(object@model.frame)
+##           y <- object@y
+##           time <- as.vector(y[,ncol(y)-1])
+##         }
+##         else {
+##           X <- args$transX(predict(object@gam, newdata, type="lpmatrix"), newdata)
+##           ## lpfunc <- function(delta,fit,data,var) {
+##           ##   data[[var]] <- data[[var]]+delta
+##           ##   predict(fit,data,type="lpmatrix")
+##           ## }
+##           ## XD <- grad(lpfunc,0,object@gam,newdata,object@timeVar)
+##           ## XD <- matrix(XD,nrow=nrow(X))
+##           lpfunc <- function(x,...) {
+##             newdata2 <- newdata
+##             newdata2[[object@timeVar]] <- x
+##             predict(object@gam,newdata2,type="lpmatrix")
+##           }
+##           XD <- args$transXD(grad1(lpfunc,newdata[[object@timeVar]]))
+##           ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
+##           ## similarly for the derivatives
+##           ## if (object@delayed) {
+##           ##   newdata0 <- newdata
+##           ##   newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
+##           ##   X0 <- predict(object@gam, newdata0,type="lpmatrix")
+##           ##   ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
+##           ##   ## XD0 <- matrix(XD0,nrow=nrow(X0))
+##           ## }
+##           if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","meansurvdiff","or",
+##                           "marghaz","marghr")) {
+##             time <- eval(object@timeExpr,newdata)
+##             ##
+##           }
+##           if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr")) {
+##             if (missing(exposed))
+##               stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr')")
+##             newdata2 <- exposed(newdata)
+##             lpfunc <- function(x,...) {
+##                 newdata3 <- newdata2
+##                 newdata3[[object@timeVar]] <- x
+##                 predict(object@gam,newdata3,type="lpmatrix")
+##             }
+##             X2 <- args$transX(predict(object@gam, newdata2, type="lpmatrix"), newdata2)
+##             XD2 <- args$transXD(grad1(lpfunc,newdata2[[object@timeVar]]))
+##             ## XD2 <- grad(lpfunc,0,object@gam,newdata2,object@timeVar)
+##             ## XD2 <- matrix(XD2,nrow=nrow(X))
+##           }
+##         }
+##         beta <- coef(object)
+##         if (object@frailty) {
+##             theta <- exp(beta[length(beta)])
+##             beta <- beta[-length(beta)]
+##             gauss_x <- object@args$gauss_x
+##             gauss_w <- object@args$gauss_w
+##             Z <- model.matrix(args$Z.formula, newdata)
+##             if (ncol(Z)>1) stop("Current implementation only allows for a single random effect")
+##             Z <- as.vector(Z)
+##         }
+##         eta <- as.vector(X %*% beta)
+##         etaD <- as.vector(XD %*% beta)
+##         S <- link$ilink(eta)
+##         h <- link$h(eta,etaD)
+##         if (any(h<0)) warning(sprintf("Predicted hazards less than zero (n=%i).",sum(h<0)))
+##         H = link$H(eta)
+##         Sigma = vcov(object)
+##         if (type=="link") { # delayed entry?
+##           return(eta)
+##         }
+##         if (type=="density")
+##             return (S*h)
+##         if (type=="cumhaz") { # delayed entry?
+##             return(H)
+##         }
+##         if (type=="surv") { # delayed entry?
+##           return(S)
+##         }
+##         if (type=="odds") { # delayed entry?
+##           return((1-S)/S)
+##         }
+##         if (type=="sdiff")
+##           return(link$ilink(as.vector(X2 %*% beta)) - S)
+##         if (type=="or") {
+##             S2 <- link$ilink(as.vector(X2 %*% beta)) 
+##             return((1-S2)/S2/((1-S)/S))
+##         }
+##         if (type=="hazard") {
+##           return(h)
+##         }
+##         if (type=="loghazard") {
+##           return(log(h))
+##         }
+##         if (type=="hdiff") {
+##             eta2 <- as.vector(X2 %*% beta)
+##             etaD2 <- as.vector(XD2 %*% beta)
+##             h2 <- link$h(eta2,etaD2)
+##             return(h2 - h)
+##         }
+##         if (type=="hr") {
+##             eta2 <- as.vector(X2 %*% beta)
+##             etaD2 <- as.vector(XD2 %*% beta)
+##             h2 <- link$h(eta2,etaD2)
+##           return(h2/h)
+##         }
+##         if (type=="meansurv") {
+##             return(mean(S))
+##         }
+##         if (type=="meanhaz") {
+##             return(sum(h*S)/sum(S))
+##         }
+##         if (type=="meansurvdiff") {
+##             eta2 <- as.vector(X2 %*% beta)
+##             S2 <- link$ilink(eta2)
+##             return(mean(S2-S))
+##         }
+##         if (type=="margsurv") {
+##             stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
+##             if (object@args$RandDist=="Gamma")
+##                 return((1+theta*H)^(-1/theta))
+##             if (object@args$RandDist=="LogN") {
+##                 return(sapply(1:length(gauss_x),
+##                               function(i) link$ilink(eta+Z*sqrt(theta)*gauss_x[i])) %*%
+##                        gauss_w / sum(gauss_w))
+##             }
+##         }
+##         if (type=="marghaz") {
+##             stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
+##             if (object@args$RandDist=="Gamma") {
+##                 margsurv <- (1+theta*H)^(-1/theta)
+##                 return(h*margsurv^theta)
+##             }
+##             if (object@args$RandDist=="LogN") {
+##                 return(sapply(1:length(gauss_x),
+##                               function(i) link$h(eta+Z*sqrt(theta)*gauss_x[i],etaD)) %*%
+##                        gauss_w / sum(gauss_w))
+##             }
+##         }
+##         if (type=="marghr") {
+##             stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
+##             eta2 <- as.vector(X2 %*% beta)
+##             etaD2 <- as.vector(XD2 %*% beta)
+##             if (object@args$RandDist=="Gamma") {
+##                 H2 <- link$H(eta2)
+##                 h2 <- link$h(eta2,etaD2)
+##                 margsurv <- (1+theta*H)^(-1/theta)
+##                 marghaz <- h*margsurv^theta
+##                 margsurv2 <- (1+theta*H2)^(-1/theta)
+##                 marghaz2 <- h2*margsurv2^theta
+##             }
+##             if (object@args$RandDist=="LogN") {
+##                 marghaz <- sapply(1:length(gauss_x),
+##                                   function(i) as.vector(link$h(eta+Z*sqrt(theta)*gauss_x[i],etaD))) %*%
+##                                   gauss_w / sum(gauss_w)
+##                 marghaz2 <- sapply(1:length(gauss_x),
+##                                    function(i) as.vector(link$h(eta2+Z*sqrt(theta)*gauss_x[i],etaD2))) %*%
+##                                        gauss_w / sum(gauss_w)
+##             }
+##             return(marghaz2/marghaz)
+##         }
+##       }
+##     ##debug(local)
+##     if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr"))
+##       stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr') requires newdata to be specified.")
+##     if (grid) {
+##       Y <- object@y
+##       event <- Y[,ncol(Y)]==1
+##       time <- object@data[[object@timeVar]]
+##       eventTimes <- time[event]
+##       X <- seq(min(eventTimes),max(eventTimes),length=seqLength)[-1]
+##       data.x <- data.frame(X)
+##       names(data.x) <- object@timeVar
+##       newdata <- merge(newdata,data.x)
+##     }
+##     pred <- if (!se.fit) {
+##       local(object,newdata,type=type,exposed=exposed,
+##             ...)
+##     }
+##     else {
+##         if (is.null(link))
+##         link <- switch(type,surv="cloglog",density="log",cumhaz="log",hazard="log",hr="log",sdiff="I",
+##                        hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meanhaz="I",meansurv="I")
+##       predictnl(object,local,link=link,newdata=newdata,type=type,
+##                 exposed=exposed,...) 
+##     }
+##     attr(pred,"newdata") <- newdata
+##     ##if (grid) cbind(newdata,as.data.frame(pred)) else pred
+##     return(pred)
+##   })
+
 ##`%c%` <- function(f,g) function(...) g(f(...)) # function composition
 ## to do:
 ## (*) Stata-compatible knots
-## setMethod("plot", signature(x="pstpm2", y="missing"),
-##           function(x,y,newdata,type="surv",
-##                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
-##                    lwd=par("lwd"),
-##                    add=FALSE,ci=!add,rug=!add,exposed=incrVar(var),
-##                    var=NULL,...) {
-##               y <- predict(x,newdata,type=if (type=="fail") "surv" else type,var=var,exposed=exposed,
-##                            grid=!(x@timeVar %in% names(newdata)), se.fit=TRUE)
-##               if (type=="fail") y <- if (ci) data.frame(Estimate=1-y$Estimate, lower=1-y$upper, upper=1-y$lower) else data.frame(Estimate=y)
-##               if (is.null(xlab)) xlab <- deparse(x@timeExpr)
-##               if (is.null(ylab))
-##                   ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
-##                                  sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard",
-##                                  loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
-##                                  meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
-##                                  margsurv="Marginal survival",marghaz="Marginal hazard",
-##                                  marghr="Marginal hazard ratio", haz="Hazard", fail="Failure", meanhaz="Mean hazard")
-##               xx <- attr(y,"newdata")
-##               xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
-##               if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
-##               if (ci) {
-##                   polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
-##                   lines(xx,y[,1],col=line.col,lty=lty,lwd=lwd)
-##                   } else lines(xx,y,col=line.col,lty=lty,lwd=lwd)
-##               if (rug) {
-##                   Y <- x@y
-##                   eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]
-##                   rug(eventTimes,col=line.col)
-##               }
-##               return(invisible(y))
-##           })
 
 setMethod("plot", signature(x="pstpm2", y="missing"),
-          function(x,y,newdata,type="surv",
+          function(x,y,newdata=NULL,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
                    add=FALSE,ci=!add,rug=!add,
-                   var=NULL,exposed=incrVar(var),times=NULL,...) {
-              if (type=="meansurv") {
-                  return(plot.meansurv(x,times=times,newdata=newdata,xlab=xlab,ylab=ylab,line.col=line.col,ci.col=ci.col,
-                                       lty=lty,add=add,ci=ci,rug=rug, ...))
-                  }
-              y <- predict(x,newdata,type=if (type=="fail") "surv" else type,var=var,exposed=exposed,
-                           grid=!(x@timeVar %in% names(newdata)), se.fit=ci)
-              if (type=="fail") y <- if (ci) data.frame(Estimate=1-y$Estimate, lower=1-y$upper, upper=1-y$lower) else data.frame(Estimate=1-y)
-              if (is.null(xlab)) xlab <- deparse(x@timeExpr)
-              if (is.null(ylab))
-                  ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
-                                 sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard",
-                                 loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
-                                 meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
-                                 margsurv="Marginal survival",marghaz="Marginal hazard",marghr="Marginal hazard ratio", haz="Hazard",fail="Failure",
-                                 meanhaz="Mean hazard")
-              xx <- attr(y,"newdata")
-              xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
-              if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
-              if (ci) {
-                  polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
-                  lines(xx,y[,1],col=line.col,lty=lty)
-              } else lines(xx,y,col=line.col,lty=lty)
-              if (rug) {
-                  Y <- x@y
-                  eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]
-                  rug(eventTimes,col=line.col)
-              }
-              return(invisible(y))
-          })
-
+                   var=NULL,exposed=incrVar(var),times=NULL,...)
+              plot.stpm2.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
+                              ylab=ylab, line.col=line.col, lty=lty, add=add,
+                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
+          )
 
 ## sandwich variance estimator (from the sandwich package)
 

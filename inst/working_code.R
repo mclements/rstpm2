@@ -86,17 +86,7 @@ cen <- runif(n * m, 0, 10)
 delta <- as.numeric(t < cen)
 t <- pmin(t, cen)
 d <- data.frame(t, delta, X, Z, id)
-## Fit a frailty object
-library(stdReg)
-fit <- stdReg::frailty(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, clusterid = "id")
-summary(fit)
-## Estimate the attributable fraction from the fitted frailty model
-time <- c(seq(from = 0.2, to = 1, by = 0.2))
-time <- 1
-## debug(AFfrailty)
-AFfrailty_est <- AFfrailty(object = fit, data = d, exposure = "X", times = time, clusterid = "id")
-AFfrailty_est
-##AF:::summary.AF(AFfrailty_est)
+
 
 require(rstpm2)
 fit2 <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, df=1, cluster=d$id, smooth.formula=~log(t))
@@ -104,6 +94,18 @@ predict(fit2, type="af", newdata=transform(d,t=1),exposed=function(data) transfo
 plot(fit2, type="af", exposed=function(data) transform(data, X=0))
 plot(fit2, type="meansurvdiff", exposed=function(data) transform(data, X=0))
 plot(fit2, type="meansurv")
+
+fit3 <- pstpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, df=1, cluster=d$id)
+predict(fit3, type="af", newdata=transform(d,t=1),exposed=function(data) transform(data, X=0), se.fit=TRUE)
+plot(fit3, type="meansurv")
+
+predict(fit2, newdata=transform(d,t=1), type="meansurv")
+
+require(boot)
+meansurv <- function(data,index) predict(fit2, newdata=transform(data[index,,drop=FALSE],t=1), type="meansurv")
+meansurv(d,TRUE)
+boot1 <- boot(d, meansurv, R=1000)
+boot.ci(boot1)
 
 require(rstpm2)
 fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, df=1)
@@ -121,6 +123,17 @@ predict(fit,type="af",newdata=transform(d,t=1),exposed=function(data) transform(
 fit <- stpm2(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, cluster=d$id, df=1)
 predict(fit,type="af",newdata=transform(d,t=1),exposed=function(data) transform(data,X=0),keep.attributes=FALSE,se.fit=TRUE) 
 
+## Fit a frailty object
+library(stdReg)
+fit <- stdReg::frailty(formula = Surv(t, delta) ~ X + Z + X * Z, data = d, clusterid = "id")
+summary(fit)
+## Estimate the attributable fraction from the fitted frailty model
+time <- c(seq(from = 0.2, to = 1, by = 0.2))
+time <- 1
+## debug(AFfrailty)
+AFfrailty_est <- AFfrailty(object = fit, data = d, exposure = "X", times = time, clusterid = "id")
+AFfrailty_est
+##AF:::summary.AF(AFfrailty_est)
 
 
 

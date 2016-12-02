@@ -25,9 +25,11 @@
     \S4method{predict}{pstpm2}(object, newdata=NULL,
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
                "hdiff","loghazard","link","meansurv","meansurvdiff",
-               "odds","or","margsurv","marghaz","marghr","meanhaz"),
+               "odds","or","margsurv","marghaz","marghr","meanhaz","af",
+               "li", "gradli"),
                grid=FALSE,seqLength=300,
-               se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
+               se.fit=FALSE,link=NULL,exposed=incrVar(var),var,
+               keep.attributes=TRUE, use.gr=TRUE,...)
 }
 \arguments{
   \item{object}{an \code{stpm2} or \code{pstpm2} object}
