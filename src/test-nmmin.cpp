@@ -1954,7 +1954,7 @@ namespace rstpm2 {
       Sigma(0,1) = Sigma(1,0) = corr*sqrt(Sigma(1,1)*Sigma(0,0)); // covariance
       if (calc_inverse)
 	flag = inv(invSigma, Sigma);
-      flag = sqrtmat_sympd(SqrtSigma,Sigma); // which version of RcppArmadillo??
+      flag = chol(SqrtSigma,Sigma); // which version of RcppArmadillo??
       if (!flag) { Rprintf("Sigma:\n"); Rprint(Sigma); Rcpp::stop("Matrix sqrt invalid"); } 
       return SqrtSigma;
     }
@@ -1978,7 +1978,7 @@ namespace rstpm2 {
       arma::mat tau, sqrttau;
       bool flag = inv(tau,
 		      as<mat>(opt.calc_hessian(call_gradient_clusterND<This>, (void *) this)));
-      flag = sqrtmat_sympd(sqrttau,tau); // which version of RcppArmadillo??
+      flag = chol(sqrttau,tau); // which version of RcppArmadillo??
       if (!flag) { Rprintf("tau:\n"); Rprint(tau); Rcpp::stop("Matrix sqrt invalid"); }
       return sqrttau;
     }
@@ -2034,7 +2034,7 @@ namespace rstpm2 {
 			as<mat>(opt.calc_hessian(call_gradient_clusterND<This>, (void *) this)));
 	double dettau = det(tau); // logdet would be more precise
 	dettauhat[it->first] = dettau;
-	flag = sqrtmat_sympd(sqrttau,tau); // which version of RcppArmadillo?
+	flag = chol(sqrttau,tau); // which version of RcppArmadillo?
 	if (!flag) { Rprintf("tau:\n"); Rprint(tau); Rcpp::stop("Matrix sqrt invalid."); }
 	sqrttauhat[it->first] = sqrttau;
 	if (this->optimiser=="BFGS")
@@ -2265,7 +2265,7 @@ namespace rstpm2 {
 			as<mat>(opt.calc_hessian(call_gradient_clusterND<This>, (void *) this)));
 	double dettau = det(tau);
 	dettauhat[it->first] = dettau;
-	flag = sqrtmat_sympd(sqrttau,tau); // which version of RcppArmadillo?
+	flag = chol(sqrttau,tau); // which version of RcppArmadillo?
 	if (!flag) { Rprintf("tau:\n"); Rprint(tau); Rcpp::stop("Matrix sqrt invalid."); }
 	sqrttauhat[it->first] = sqrttau;
 	gradsqrttauhat[it->first] = gradSqrtSigma_adaptive(opt); 

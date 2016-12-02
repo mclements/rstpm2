@@ -1884,8 +1884,8 @@ summary(stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
 
 pred <- predict(fit.tvc,newdata=data.frame(hormon=0:3),grid=TRUE,se.fit=TRUE,type="cumhaz")
 pred.all <- cbind(pred,attr(pred,"newdata"))
-require(lattice)
-xyplot(Estimate ~ rectime, data=pred.all, group=hormon,type="l",xlab="Time")
+## require(lattice)
+## xyplot(Estimate ~ rectime, data=pred.all, group=hormon,type="l",xlab="Time")
 
 
 ## relative survival

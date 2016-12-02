@@ -11,7 +11,7 @@
   standard errors 
 }
 \usage{
-numDeltaMethod(object, fun, ...)
+numDeltaMethod(object, fun, gd=NULL, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -21,6 +21,9 @@ numDeltaMethod(object, fun, ...)
   \item{fun}{
     An independent prediction function with signature
     \code{function(coef, ...)}.
+}
+  \item{gd}{
+    Specified gradients
 }
   \item{\dots}{
     Other arguments passed to \code{fun}.

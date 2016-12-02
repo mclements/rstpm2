@@ -17,9 +17,11 @@
     \S4method{predict}{stpm2}(object, newdata=NULL,
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
                "hdiff","loghazard","link","meansurv","meansurvdiff",
-               "odds","or","margsurv","marghaz","marghr","meanhaz"),
+               "odds","or","margsurv","marghaz","marghr","meanhaz","af",
+               "li", "gradli"),
                grid=FALSE,seqLength=300,
-               se.fit=FALSE,link=NULL,exposed=incrVar(var),var,...)
+               se.fit=FALSE,link=NULL,exposed=incrVar(var),var,
+               keep.attributes=TRUE, use.gr=TRUE,...)
     \S4method{predict}{pstpm2}(object, newdata=NULL,
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
                "hdiff","loghazard","link","meansurv","meansurvdiff",
@@ -31,7 +33,7 @@
   \item{object}{an \code{stpm2} or \code{pstpm2} object}
   \item{newdata}{optional list of new data (required if type in
                ("hr","sdiff","hdiff","meansurvdiff","or")). For type in
-               ("hr","sdiff","hdiff","meansurvdiff","or"), this defines the unexposed
+               ("hr","sdiff","hdiff","meansurvdiff","or","af"), this defines the unexposed
                newdata. This can be combined with \code{grid} to get a
                regular set of event times (i.e. newdata would \emph{not}
                include the event times). }
@@ -53,6 +55,9 @@
       \item{"marghaz"}{marginal (population) hazard}
       \item{"marghr"}{marginal (population) hazard ratio}
       \item{"meanhaz"}{mean hazard}
+      \item{"af"}{attributable fraction}
+      \item{"li"}{log-likelihood components}
+      \item{"gradli"}{log-likelihood gradient components}
     }
   }
   \item{grid}{whether to merge newdata with a regular sequence of event
@@ -65,9 +70,13 @@
     hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",
     marghaz="log",marghr="log"))}
   \item{exposed}{a function that takes newdata and returns a transformed
-               data-frame for those exposed (defaults to incrementing ``var'')}
+               data-frame for those exposed or the counterfactual (defaults to incrementing ``var'')}
   \item{var}{specify the variable name or names for the
                exposed/unexposed (names are given as characters)}
+  \item{keep.attributes}{Boolean to determine whether the output should
+               include the newdata as an attribute (default=TRUE)}
+  \item{use.gr}{Boolean to determine whether to use gradients in the
+               variance calculations when they are available (default=TRUE)}
   \item{\dots}{additional arguments (for generic compatibility)}
 }
 

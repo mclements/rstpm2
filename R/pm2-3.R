@@ -481,7 +481,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                   optimiser=c("BFGS","NelderMead"),
                      reltol=1.0e-8, trace = 0,
                      link.type=c("PH","PO","probit","AH","AO"), theta.AO=0, 
-                  frailty = !is.null(cluster), cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"), recurrent = FALSE,
+                  frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"), recurrent = FALSE,
                   adaptive = TRUE, maxkappa = 1e3, Z = ~1,
                      contrasts = NULL, subset = NULL, ...) {
     link.type <- match.arg(link.type)
@@ -890,7 +890,8 @@ setMethod("predict", "stpm2",
         lpmatrix.lm(fit,data)
     }
     if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr"))
-      stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr') requires newdata to be specified.")
+        stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr') requires newdata to be specified.")
+    calcX <- !is.null(newdata)
     if (is.null(newdata)) {
         ##mm <- X <- model.matrix(object) # fails (missing timevar)
         X <- object@x
@@ -899,11 +900,6 @@ setMethod("predict", "stpm2",
         y <- object@y
         time <- as.vector(y[,ncol(y)-1])
         newdata <- as.data.frame(object@data)
-    }
-    else {
-        X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
-        XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
-        XD <- args$transXD(matrix(XD,nrow=nrow(X)))
     }
     ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
     ## similarly for the derivatives
@@ -921,6 +917,11 @@ setMethod("predict", "stpm2",
       XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
       XD <- args$transXD(matrix(XD,nrow=nrow(X)))
     }
+    if (calcX)  {
+        X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
+        XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
+        XD <- args$transXD(matrix(XD,nrow=nrow(X)))
+    }
     if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","or","marghaz","marghr")) {
         ## how to elegantly extract the time variable?
         ## timeExpr <- 
@@ -936,7 +937,7 @@ setMethod("predict", "stpm2",
     ##   ## XD0 <- matrix(XD0,nrow=nrow(X0))
     ## }
     if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af")) {
-        if (missing(exposed))
+        if (missing(exposed) && missing(var))
             stop("exposed needs to be specified for type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr','af')")
         newdata2 <- exposed(newdata)
         X2 <- args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)

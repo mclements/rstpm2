@@ -11,7 +11,7 @@
   standard errors using the numeric delta method.
 }
 \usage{
-predictnl.default(object, fun, newdata = NULL, ...)
+predictnl.default(object, fun, newdata = NULL, gd=NULL, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -27,6 +27,9 @@ predictnl.default(object, fun, newdata = NULL, ...)
     A list or data-frame that is passed to \code{fun}. If
     \code{newdata} is \code{NULL} and \code{object} has a non-NULL
     \code{data} component, then \code{newdata <- object$data}. 
+}
+  \item{gd}{
+    specified gradients (default=NULL)
 }
   \item{\dots}{
     Other arguments to \code{fun}.
