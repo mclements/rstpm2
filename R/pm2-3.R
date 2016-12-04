@@ -387,41 +387,41 @@ which.dim <- function (X, silent = TRUE)
 }
 
 ## link families
-link.PH <- list(link=function(S) log(-log(S)),
-                ilink=function(eta) exp(-exp(eta)),
-                gradS=function(eta,X) -as.vector(exp(eta)*exp(-exp(eta)))*X,
-                h=function(eta,etaD) etaD*exp(eta),
-                H=function(eta) exp(eta),
-                gradh=function(eta,etaD,obj) obj$XD*exp(eta)+obj$X*etaD*exp(eta),
-                gradH=function(eta,obj) obj$X*exp(eta))
-link.PO <- list(link=function(S) -logit(S),
-                ilink=function(eta) expit(-eta),
-                gradS=function(eta,X) -as.vector(exp(eta)/(1+exp(eta)))^2*X,
-                H=function(eta) log(1+exp(eta)),
-                h=function(eta,etaD) etaD*exp(eta)*expit(-eta),
+link.PH <- list(link=function(S) log(-log(as.vector(S))),
+                ilink=function(eta) exp(-exp(as.vector(eta))),
+                gradS=function(eta,X) -exp(as.vector(eta))*exp(-exp(as.vector(eta)))*X,
+                h=function(eta,etaD) as.vector(etaD)*exp(as.vector(eta)),
+                H=function(eta) exp(as.vector(eta)),
+                gradh=function(eta,etaD,obj) obj$XD*exp(as.vector(eta))+obj$X*as.vector(etaD)*exp(as.vector(eta)),
+                gradH=function(eta,obj) obj$X*exp(as.vector(eta)))
+link.PO <- list(link=function(S) -logit(as.vector(S)),
+                ilink=function(eta) expit(-as.vector(eta)),
+                gradS=function(eta,X) -(exp(as.vector(eta))/(1+exp(as.vector(eta)))^2)*X,
+                H=function(eta) log(1+exp(as.vector(eta))),
+                h=function(eta,etaD) as.vector(etaD)*exp(as.vector(eta))*expit(-as.vector(eta)),
                 gradh=function(eta,etaD,obj) {
-                    etaD*exp(eta)*obj$X*expit(-eta) -
-                        exp(2*eta)*obj$X*etaD*expit(-eta)^2 +
-                            exp(eta)*obj$XD*expit(-eta)
+                    as.vector(etaD)*exp(as.vector(eta))*obj$X*expit(-as.vector(eta)) -
+                        exp(2*as.vector(eta))*obj$X*as.vector(etaD)*expit(-as.vector(eta))^2 +
+                            exp(as.vector(eta))*obj$XD*expit(-as.vector(eta))
                     },
-                gradH=function(eta,obj) obj$X*exp(eta)*expit(-eta))
+                gradH=function(eta,obj) obj$X*exp(as.vector(eta))*expit(-as.vector(eta)))
 link.probit <-
-    list(link=function(S) -qnorm(S),
-         ilink=function(eta) pnorm(-eta),
-         gradS=function(eta,X) -dnorm(-eta)*X,
-         H=function(eta) -log(pnorm(-eta)),
-         h=function(eta,etaD) dnorm(eta)/pnorm(-eta)*etaD,
+    list(link=function(S) -qnorm(as.vector(S)),
+         ilink=function(eta) pnorm(-as.vector(eta)),
+         gradS=function(eta,X) -dnorm(-as.vector(eta))*X,
+         H=function(eta) -log(pnorm(-as.vector(eta))),
+         h=function(eta,etaD) dnorm(as.vector(eta))/pnorm(-as.vector(eta))*as.vector(etaD),
          gradh=function(eta,etaD,obj) {
-             -eta*obj$X*dnorm(eta)*etaD/pnorm(-eta) +
-                 obj$X*dnorm(eta)^2/pnorm(-eta)^2*etaD +
-                     dnorm(eta)/pnorm(-eta)*obj$XD
+             -as.vector(eta)*obj$X*dnorm(as.vector(eta))*as.vector(etaD)/pnorm(-as.vector(eta)) +
+                 obj$X*dnorm(as.vector(eta))^2/pnorm(-as.vector(eta))^2*as.vector(etaD) +
+                     dnorm(as.vector(eta))/pnorm(-as.vector(eta))*obj$XD
          },
-         gradH=function(eta,obj) obj$X*dnorm(eta)/pnorm(-eta))
+         gradH=function(eta,obj) obj$X*dnorm(as.vector(eta))/pnorm(-as.vector(eta)))
 link.AH <- list(link=function(S) -log(S),
-                ilink=function(eta) exp(-eta),
-                gradS=function(eta,X) -as.vector(exp(-eta))*X,
-                h=function(eta,etaD) etaD,
-                H=function(eta) eta,
+                ilink=function(eta) exp(-as.vector(eta)),
+                gradS=function(eta,X) -as.vector(exp(-as.vector(eta)))*X,
+                h=function(eta,etaD) as.vector(etaD),
+                H=function(eta) as.vector(eta),
                 gradh=function(eta,etaD,obj) obj$XD,
                 gradH=function(eta,obj) obj$X)
 link.AO <- function(theta) { # Aranda-Ordaz
@@ -429,11 +429,11 @@ link.AO <- function(theta) { # Aranda-Ordaz
         return(link.PH)
         } else {
             list(link = function(S) log((S^(-theta)-1)/theta),
-                 ilink = function(eta) exp(-log(theta*exp(eta)+1)/theta),
-                 gradS = function(eta,X) -as.vector(exp(eta)*exp(-log(theta*exp(eta)+1)/theta)/(1+theta*exp(eta)))*X,
-                 H = function(eta) log(theta*exp(eta)+1)/theta,
-                 h = function(eta,etaD) exp(eta)*etaD/(theta*exp(eta)+1),
-                 gradH = function(eta,obj) exp(eta)*obj$X/(1+theta*exp(eta)),
+                 ilink = function(eta) exp(-log(theta*exp(as.vector(eta))+1)/theta),
+                 gradS = function(eta,X) -as.vector(exp(as.vector(eta))*exp(-log(theta*exp(as.vector(eta))+1)/theta)/(1+theta*exp(as.vector(eta))))*X,
+                 H = function(eta) log(theta*exp(as.vector(eta))+1)/theta,
+                 h = function(eta,etaD) exp(as.vector(eta))*as.vector(etaD)/(theta*exp(as.vector(eta))+1),
+                 gradH = function(eta,obj) exp(as.vector(eta))*obj$X/(1+theta*exp(as.vector(eta))),
                  gradh = function(eta,etaD,obj) {
                      eta <- as.vector(eta)
                      etaD <- as.vector(etaD)
@@ -442,10 +442,29 @@ link.AO <- function(theta) { # Aranda-Ordaz
                  })
         }
     }
-## test code
 ## fd <- function(f,x,eps=1e-5) (f(x+eps)-f(x-eps))/2/eps
-## for(link in list(rstpm2:::link.PH,rstpm2:::link.PO,rstpm2:::link.probit,rstpm2:::link.AH,rstpm2:::link.AO(.3))) 
-##     cat(c(fd(link$ilink,1),link$gradS(1), "\n"))
+fd <- function(f,x,eps=1e-5)
+    t(sapply(1:length(x),
+             function(i) {
+                 upper <- lower <- x
+                 upper[i]=x[i]+eps
+                 lower[i]=x[i]-eps
+                 (f(upper)-f(lower))/2/eps
+             }))
+## test code for the link functions
+if (FALSE) {
+    Xstar <- cbind(1,1:3) # beta[1] + beta[2]*t
+    betastar <- c(-4,0.5)
+    XDstar <- cbind(0,Xstar[,2])
+    etastar <- as.vector(Xstar %*% betastar)
+    etaDstar <- as.vector(XDstar %*% betastar)
+    obj <- list(X=Xstar,XD=XDstar)
+    for(link in list(rstpm2:::link.PH,rstpm2:::link.PO,rstpm2:::link.probit,rstpm2:::link.AH,rstpm2:::link.AO(.3))) {
+        print(rstpm2:::fd(function(beta) link$ilink(Xstar%*%beta), betastar)-t(link$gradS(etastar,Xstar)))
+        print(rstpm2:::fd(function(beta) link$h(Xstar%*%beta, XDstar%*%beta), betastar)-t(link$gradh(etastar,etaDstar,obj)))
+        print(rstpm2:::fd(function(beta) link$H(Xstar%*%beta), betastar)-t(link$gradH(etastar,obj)))
+    }
+}
 
 ## general link functions
 setClass("stpm2", representation(xlevels="list",
@@ -691,7 +710,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     names(parscale) <- names(init)
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
-                 kappa=1, trace = trace, oldcluster=cluster, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
+                 kappa=1, trace = trace, oldcluster=cluster, frailty=frailty, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
                  RandDist=RandDist, optimiser=optimiser,
                  type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD, maxkappa=maxkappa, Z.formula = Z, thetaAO = theta.AO)
     if (frailty) {
@@ -870,10 +889,12 @@ predict.stpm2.base <-
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","li","gradli"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=TRUE,use.gr=TRUE,...)
-  {
+{
       type <- match.arg(type)
       if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af"))
           stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","or","marghr","af")')
+      if (type %in% c('margsurv','marghaz','marghr') && !object@args$frailty)
+          stop("Marginal prediction only for frailty models")
     ## exposed is a function that takes newdata and returns the revised newdata
     ## var is a string for a variable that defines a unit change in exposure
     args <- object@args
@@ -991,6 +1012,11 @@ predict.stpm2.base <-
             theta <- exp(logtheta)
             marg(logtheta,H)*(exp(-logtheta)*log(1+theta*H)-H/(1+theta*H))
         }
+        ## dmarg.dbeta <- function(logtheta,H,gradH) {
+        ##     theta <- exp(logtheta)
+        ##     -marg(logtheta,H)*gradH/(1+theta*H)
+        ## }
+        ## link <- link.PH; eps <- 1e-5; dmarg.dlogtheta(3,.2); (marg(3+eps,.2)-marg(3-eps,.2))/2/eps
         ## eps <- 1e-5; dmarg.dlogtheta(3,.2); (marg(3+eps,.2)-marg(3-eps,.2))/2/eps
         ##
         meanS <- tapply(margS,times,mean)
@@ -1209,7 +1235,7 @@ predict.stpm2.base <-
             }
         }
         if (type=="margsurv") {
-            stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
+            stopifnot(object@args$frailty && object@args$RandDist %in% c("Gamma","LogN"))
             if (object@args$RandDist=="Gamma")
                 return((1+theta*H)^(-1/theta))
             if (object@args$RandDist=="LogN") {
@@ -1221,8 +1247,9 @@ predict.stpm2.base <-
         if (type=="marghaz") {
             stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
             if (object@args$RandDist=="Gamma") {
-                margsurv <- (1+theta*H)^(-1/theta)
-                return(h*margsurv^theta)
+                ## margsurv <- (1+theta*H)^(-1/theta)
+                ## return(h*margsurv^theta)
+                return(h/(1+H*theta))
             }
             if (object@args$RandDist=="LogN") {
                 return(sapply(1:length(gauss_x),
@@ -1264,27 +1291,70 @@ predict.stpm2.base <-
         link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
                        hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meansurv="I",meanhaz="I",af="I")
       ## calculate gradients for some of the estimators
-      if (use.gr && !object@frailty) {
+      if (use.gr) {
           colMeans <- function(x) apply(x,2,mean)
           collapse <- function(gd)
               do.call("cbind",tapply(1:nrow(gd), newdata[[object@timeVar]], function(index) colMeans(gd[index, ,drop=FALSE])))
           collapse1 <- function(S)
               as.vector(tapply(S, newdata[[object@timeVar]], mean))
-          if (type=="meansurv") {
+          fd <- function(f,x,eps=1e-5)
+              t(sapply(1:length(x),
+                       function(i) {
+                           upper <- lower <- x
+                           upper[i]=x[i]+eps
+                           lower[i]=x[i]-eps
+                           (f(upper)-f(lower))/2/eps
+                       }))
+          if (type=="hazard" && link %in% c("I","log")) {
+              ## Case: frailty model (assumes baseline hazard for frailty=1)
+              betastar <- if(args$frailty) beta[-length(beta)] else beta
+              gd <- switch(link,
+                           I=object@link$gradh(X %*% betastar, XD %*% betastar, list(X=X, XD=XD)),
+                           log=object@link$gradh(X %*% betastar, XD %*% betastar, list(X=X, XD=XD))/
+                               object@link$h(X %*% betastar, XD %*% betastar))
+          }
+          if (type=="meansurv" && !object@frailty) {
               gd <- collapse(object@link$gradS(X%*% beta,X))
           }
-          if (type=="meansurvdiff") {
+          if (type=="meansurvdiff" && !object@frailty) {
               gd <- collapse(object@link$gradS(X2%*% beta,X2) - object@link$gradS(X%*% beta,X))
           }
-          if (type=="af") {
-              fd <- function(f,x,eps=1e-5)
-                  t(sapply(1:length(x),
-                           function(i) {
-                               upper <- lower <- x
-                               upper[i]=x[i]+eps
-                               lower[i]=x[i]-eps
-                               (f(upper)-f(lower))/2/eps
-                           }))
+          if (type=="margsurv" && link %in% c("I","cloglog") && args$RandDist=="Gamma") {
+              theta <- exp(beta[length(beta)])
+              betastar <- beta[-length(beta)]
+              eta <- as.vector(X %*% betastar)
+              H <- as.vector(object@link$H(eta))
+              gradH <- object@link$gradH(eta,list(X=X))
+              S0 <- 1+theta*H
+              margS <- S0^(-1/theta)
+              ## This depends on the transformation link
+              if (link=="I")
+                  gd <- t(cbind(-margS * gradH/(1+theta*H),
+                                margS*(1/theta*log(1+theta*H)-H/(1+theta*H))))
+              if (link=="cloglog")
+                  gd <- t(cbind(-(theta^2*S0^(-theta-1)*gradH/(S0^(-theta)*(-theta)*log(S0))),
+                                (theta*log(S0)*S0^(-theta)-theta^2*H*S0^(-1-theta))/(S0^(-theta)*(-theta*log(S0)))))
+          }
+          if (type=="marghaz" && link %in% c("I","log") && args$RandDist=="Gamma") {
+              theta <- exp(beta[length(beta)])
+              betastar <- beta[-length(beta)]
+              eta <- as.vector(X %*% betastar)
+              etaD <- as.vector(XD %*% betastar)
+              H <- as.vector(object@link$H(eta))
+              h <- as.vector(object@link$h(eta,etaD))
+              gradH <- object@link$gradH(eta,list(X=X))
+              gradh <- object@link$gradh(eta,etaD,list(X=X,XD=XD))
+              S0 <- 1+theta*H
+              margS <- S0^(-1/theta)
+              ## This depends on the transformation link
+              if (link=="I")
+                  gd <- t(cbind((S0*gradh-theta*h*gradH)/(theta^2*H^2+S0),
+                                -(theta*H*h/theta^2*H^2+S0)))
+              if (link=="log")
+                  gd <- t(cbind((S0*gradh-theta*h*gradH)/(S0*h),
+                                -theta*H/S0))
+          }
+          if (type=="af" && !object@frailty) {
               meanS <- collapse1(as.vector(object@link$ilink(X%*%beta)))
               meanS2 <- collapse1(as.vector(object@link$ilink(X2%*%beta)))
               gradS <- collapse(object@link$gradS(X%*%beta,X))
@@ -1792,7 +1862,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  sp=sp, reltol_search=reltol$search, reltol=reltol$final, reltol_outer=reltol$outer, trace=trace,
                  kappa=1.0,outer_optim=outer_optim,
                  alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2),
-                 oldcluster=cluster, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL,
+                 oldcluster=cluster, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL, frailty=frailty,
                  map0 = map0 - 1L, ind0 = ind0, which0=which0 - 1L, link = link.type,
                  penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser=optimiser,
                  type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2", recurrent = recurrent, maxkappa=maxkappa,

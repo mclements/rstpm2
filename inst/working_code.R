@@ -101,6 +101,11 @@ plot(fit3, type="meansurv")
 
 predict(fit2, newdata=transform(d,t=1), type="meansurv")
 
+## check analytical gradients for margsurv and marghaz
+predict(fit2, newdata=data.frame(t=1,X=1,Z=1), type="margsurv", use.gr=TRUE, se.fit=TRUE)-predict(fit2, newdata=data.frame(t=1,X=1,Z=1), type="margsurv", use.gr=FALSE, se.fit=TRUE)
+predict(fit2, newdata=data.frame(t=1,X=1,Z=1), type="marghaz", use.gr=TRUE, se.fit=TRUE)-predict(fit2, newdata=data.frame(t=1,X=1,Z=1), type="marghaz", use.gr=FALSE, se.fit=TRUE)
+predict(fit2, newdata=data.frame(t=1,X=1,Z=1), type="hazard", use.gr=TRUE, se.fit=TRUE)-predict(fit2, newdata=data.frame(t=1,X=1,Z=1), type="hazard", use.gr=FALSE, se.fit=TRUE)
+
 require(boot)
 meansurv <- function(data,index) predict(fit2, newdata=transform(data[index,,drop=FALSE],t=1), type="meansurv")
 meansurv(d,TRUE)
