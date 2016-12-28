@@ -2079,8 +2079,25 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                edf_var=edf_var,
                df=edf,
                args=args)
-    if (robust) # kludge
-        out@vcov <- sandwich.stpm2(out, cluster=cluster)
+    # if (robust) # kludge
+    #     out@vcov <- sandwich.stpm2(out, cluster=cluster)
+    if (robust && !frailty) {
+    	## Bread matrix
+    	bread.mat <- solve(fit$hessian) 
+    	## Meat matirx calculated with individual penalized score functions
+    	beta.est <- fit$coef
+    	sp.opt <- fit$sp
+    	eta <- as.vector(args$X %*% beta.est)
+    	etaD <- as.vector(XD %*% beta.est)
+    	h <- link$h(eta,etaD) + bhazard
+    	H <- link$H(eta)
+    	gradh <- link$gradh(eta,etaD,args)
+    	gradH <- link$gradH(eta,args)
+    	## right censored data
+    	score.ind <- t(wt*(gradH - ifelse(event,1/h,0)*gradh)) + dpfun(beta.est, sp.opt)/nrow(gradH)
+    	meat.mat <- var(t(score.ind))*nrow(gradH)
+    	out@vcov <- bread.mat %*% meat.mat %*% t(bread.mat)
+    }
     return(out)
 }
 ## Could this inherit from summary.stpm2?

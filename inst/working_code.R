@@ -315,6 +315,11 @@ fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer,link="AH",
 plot(fit,newdata=data.frame(hormon=0),type="haz")
 plot(fit,newdata=data.frame(hormon=1),add=TRUE,lty=2,type="haz")
 
+## test robust estimators from penalized models
+## most spline coefficients become statistically significant
+require(rstpm2)
+summary(pstpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,robust=FALSE))
+summary(pstpm2(Surv(rectime/365,censrec==1)~hormon,data=brcancer,robust=TRUE))
 
 ## robust standard errors for clustered data
 refresh
