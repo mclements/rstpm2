@@ -637,6 +637,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ##
     bhazard <- substitute(bhazard)
     bhazard <- if (is.null(bhazard)) rep(0,nrow(data)) else eval(bhazard,data,parent.frame())
+    excess <- !all(bhazard==0)
     ## initialise values specific to either delayed entry or interval-censored
     ind0 <- FALSE
     map0 <- 0L
@@ -712,7 +713,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
                  kappa=1, trace = trace, oldcluster=cluster, frailty=frailty, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
                  RandDist=RandDist, optimiser=optimiser,
-                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD, maxkappa=maxkappa, Z.formula = Z, thetaAO = theta.AO)
+                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD, maxkappa=maxkappa, Z.formula = Z, thetaAO = theta.AO, excess=excess)
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x
@@ -884,19 +885,8 @@ setMethod("predictnl", "stpm2",
   })
 ##
 
-predict.stpm2.base <- 
-          function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","li","gradli"),
-                   grid=FALSE,seqLength=300,
-                   se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=TRUE,use.gr=TRUE,...)
-{
-      type <- match.arg(type)
-      if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af"))
-          stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","or","marghr","af")')
-      if (type %in% c('margsurv','marghaz','marghr') && !object@args$frailty)
-          stop("Marginal prediction only for frailty models")
-    ## exposed is a function that takes newdata and returns the revised newdata
-    ## var is a string for a variable that defines a unit change in exposure
+residuals.stpm2.base <- function(object, type=c("li","gradli")) {
+    type <- match.arg(type)
     args <- object@args
     if (type=="li") {
         localargs <- args
@@ -908,6 +898,30 @@ predict.stpm2.base <-
         localargs$return_type <- "gradli"
         return(.Call("model_output", localargs, package="rstpm2"))
     }
+}    
+setMethod("residuals", "stpm2",
+          function(object, type=c("li","gradli"))
+              residuals.stpm2.base(object=object, type=type))   
+
+predict.stpm2.base <- 
+          function(object,newdata=NULL,
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv"),
+                   grid=FALSE,seqLength=300,
+                   se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=TRUE,use.gr=TRUE,...)
+{
+    type <- match.arg(type)
+    args <- object@args
+    if (type %in% c("fail","margfail")) {
+        out <- 1-predict.stpm2.base(object,swich(type, fail="surv", margfail="margsurv"),grid,seqLength,se.fit,link,exposed,var,keep.attributes,use.gr,...)
+        if (se.fit) {temp <- out$lower; out$lower <- out$upper; out$upper <- temp}
+        return(out)
+    }
+      if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af"))
+          stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","or","marghr","af")')
+      if (type %in% c('margsurv','marghaz','marghr','margfail','meanmargsurv') && !object@args$frailty)
+          stop("Marginal prediction only for frailty models")
+    ## exposed is a function that takes newdata and returns the revised newdata
+    ## var is a string for a variable that defines a unit change in exposure
     if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr"))
         stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr') requires newdata to be specified.")
     calcX <- !is.null(newdata)
@@ -945,19 +959,19 @@ predict.stpm2.base <-
     }
     if (calcX)  {
       if (inherits(object, "stpm2")) {
-          X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
+          X <- object@args$transX(lpmatrix.lm(object@lm, newdata), newdata)
           XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
-          XD <- args$transXD(matrix(XD,nrow=nrow(X)))
+          XD <- object@args$transXD(matrix(XD,nrow=nrow(X)))
       }
       if (inherits(object, "pstpm2")) {
-           X <- args$transX(predict(object@gam, newdata, type="lpmatrix"), newdata)      
-           XD <- args$transXD(grad1(lpfunc,newdata[[object@timeVar]]))
+           X <- object@args$transX(predict(object@gam, newdata, type="lpmatrix"), newdata)      
+           XD <- object@args$transXD(grad1(lpfunc,newdata[[object@timeVar]]))
       }
         ## X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
         ## XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
         ## XD <- args$transXD(matrix(XD,nrow=nrow(X)))
     }
-    if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","or","marghaz","marghr")) {
+    if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","or","marghaz","marghr","fail","margsurv","meanmargsurv")) {
         ## how to elegantly extract the time variable?
         ## timeExpr <- 
         ##   lhs(object@call.formula)[[length(lhs(object@call.formula))-1]]
@@ -974,13 +988,13 @@ predict.stpm2.base <-
     if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af")) {
         newdata2 <- exposed(newdata)
       if (inherits(object, "stpm2")) {
-          X2 <- args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
+          X2 <- object@args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
           XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
-          XD2 <- args$transXD(matrix(XD2,nrow=nrow(X)))
+          XD2 <- object@args$transXD(matrix(XD2,nrow=nrow(X)))
       }
       if (inherits(object, "pstpm2")) {
-           X2 <- args$transX(predict(object@gam, newdata2, type="lpmatrix"), newdata2)      
-           XD2 <- args$transXD(grad1(lpfunc,newdata2[[object@timeVar]]))
+           X2 <- object@args$transX(predict(object@gam, newdata2, type="lpmatrix"), newdata2)      
+           XD2 <- object@args$transXD(grad1(lpfunc,newdata2[[object@timeVar]]))
       }
         ## X2 <- args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
         ## XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
@@ -1028,7 +1042,7 @@ predict.stpm2.base <-
             newobj <- object
             newobj@args$X <- X[index,,drop=FALSE]
             newobj@args$XD <- XD[index,,drop=FALSE]
-            gradli <- predict(newobj,type="gradli")
+            gradli <- residuals(newobj,type="gradli")
             res <- cbind(margS[index]-mean(margS[index]),margS2[index]-mean(margS2[index]))
             res <- apply(res,2,function(col) tapply(col,args$cluster,sum))
             res <- cbind(res, gradli)
@@ -1056,7 +1070,7 @@ predict.stpm2.base <-
             attr(pred,"newdata") <- newdata
         return(pred)
     }
-    if (object@frailty && type %in% c("meansurv") && args$RandDist=="Gamma" && !object@args$interval && !object@args$delayed) {
+    if (object@frailty && type %in% c("meanmargsurv") && args$RandDist=="Gamma" && !object@args$interval && !object@args$delayed) {
         ## browser()
         times <- newdata[[object@timeVar]]
         utimes <- sort(unique(times))
@@ -1090,7 +1104,7 @@ predict.stpm2.base <-
             newobj@args$X <- X[index,,drop=FALSE]
             newobj@args$XD <- XD[index,,drop=FALSE]
             ## ## Attempt to use the sandwich estimator for the covariance matrix with the delta method (-> inflated SEs)
-            ## res <- predict(newobj,type="gradli")
+            ## res <- residuals(newobj,type="gradli")
             ## meat <- stats::var(res, na.rm=TRUE) # crossprod(res)/n.cluster
             ## colnames(meat) <- rownames(meat) <- c(names(beta),"logtheta")
             ## bread <- -Hessian / n.cluster
@@ -1099,7 +1113,7 @@ predict.stpm2.base <-
             ## g <- c(colSums(margS[index]*(-link$gradH(eta[index],list(X=X[index,,drop=FALSE]))/(1+theta*H[index])))/n.cluster,
             ##                    sum(dmarg.dlogtheta(logtheta,H[index]))/n.cluster)
             ## se.fit[i] <- sqrt(sum(matrix(g,nrow=1)%*%(sandwich %*% g)))
-            gradli <- predict(newobj,type="gradli")
+            gradli <- residuals(newobj,type="gradli")
             res <- tapply(margS[index]-mean(margS[index]),args$cluster,sum)
             res <- cbind(res, gradli)
             meat <- stats::var(res, na.rm=TRUE)
@@ -1139,7 +1153,7 @@ predict.stpm2.base <-
         etaD <- as.vector(XD %*% beta)
         S <- link$ilink(eta)
         h <- link$h(eta,etaD)
-        if (any(h<0)) warning(sprintf("Predicted hazards less than zero (n=%i).",sum(h<0)))
+        if (!object@args$excess && any(h<0)) warning(sprintf("Predicted hazards less than zero (n=%i).",sum(h<0)))
         H = link$H(eta)
         Sigma = vcov(object)
         if (type=="link") {
@@ -1159,6 +1173,9 @@ predict.stpm2.base <-
             return (S*h)
         if (type=="surv") {
           return(S)
+        }
+        if (type=="fail") {
+          return(1-S)
         }
         if (type=="odds") { # delayed entry?
           return((1-S)/S)
@@ -1222,7 +1239,7 @@ predict.stpm2.base <-
                 }
             return((meanS2 - meanS)/(1-meanS))
         }
-        if (type=="stdmargsurv") {
+        if (type=="meanmargsurv") {
             stopifnot(object@frailty && object@args$RandDist %in% c("Gamma","LogN"))
             if (object@args$RandDist=="Gamma")
                 return(tapply((1+theta*H)^(-1/theta), newdata[[object@timeVar]], mean))
@@ -1309,9 +1326,9 @@ predict.stpm2.base <-
               ## Case: frailty model (assumes baseline hazard for frailty=1)
               betastar <- if(args$frailty) beta[-length(beta)] else beta
               gd <- switch(link,
-                           I=object@link$gradh(X %*% betastar, XD %*% betastar, list(X=X, XD=XD)),
-                           log=object@link$gradh(X %*% betastar, XD %*% betastar, list(X=X, XD=XD))/
-                               object@link$h(X %*% betastar, XD %*% betastar))
+                           I=t(object@link$gradh(X %*% betastar, XD %*% betastar, list(X=X, XD=XD))),
+                           log=t(object@link$gradh(X %*% betastar, XD %*% betastar, list(X=X, XD=XD))/
+                               object@link$h(X %*% betastar, XD %*% betastar)))
           }
           if (type=="meansurv" && !object@frailty) {
               gd <- collapse(object@link$gradS(X%*% beta,X))
@@ -1376,7 +1393,7 @@ predict.stpm2.base <-
 
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","li","gradli"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,use.gr=TRUE,...)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
@@ -1430,9 +1447,9 @@ plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", 
     if (!add) matplot(times, pred, type="n", xlab=xlab, ylab=ylab, ...)
     if (ci) {
         polygon(c(times,rev(times)),c(pred$lower,rev(pred$upper)),col=ci.col,border=ci.col)
-        lines(times,pred$Estimate,col=line.col,lty=lty)
+        lines(times,pred$Estimate,col=line.col,lty=lty,...)
     } else {
-        lines(times,pred,col=line.col,lty=lty)
+        lines(times,pred,col=line.col,lty=lty,...)
     }
     if (rug) {
         Y <- x@y
@@ -1441,6 +1458,7 @@ plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", 
     }
     return(invisible(y))
 }
+
 plot.stpm2.base <- 
           function(x,y,newdata=NULL,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
@@ -1468,14 +1486,14 @@ plot.stpm2.base <-
                                  loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
                                  meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
                                  margsurv="Marginal survival",marghaz="Marginal hazard",marghr="Marginal hazard ratio", haz="Hazard",fail="Failure",
-                                 meanhaz="Mean hazard",margfail="Marginal failure",af="Attributable fraction")
+                                 meanhaz="Mean hazard",margfail="Marginal failure",af="Attributable fraction",meanmargsurv="Mean marginal survival")
               xx <- attr(y,"newdata")
               xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
               if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
               if (ci) {
                   polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
-                  lines(xx,y[,1],col=line.col,lty=lty)
-              } else lines(xx,y,col=line.col,lty=lty)
+                  lines(xx,y[,1],col=line.col,lty=lty,...)
+              } else lines(xx,y,col=line.col,lty=lty,...)
               if (rug) {
                   Y <- x@y
                   eventTimes <- Y[Y[,ncol(Y)]==1,ncol(Y)-1]
@@ -1755,6 +1773,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ##
     bhazard <- substitute(bhazard)
     bhazard <- if (is.null(bhazard)) rep(0,nrow(data)) else eval(bhazard,data,parent.frame())
+    excess <- !all(bhazard==0)
     ## initialise values specific to either delayed entry or interval-censored
     ind0 <- FALSE
     map0 <- 0L
@@ -1866,7 +1885,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  map0 = map0 - 1L, ind0 = ind0, which0=which0 - 1L, link = link.type,
                  penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser=optimiser,
                  type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2", recurrent = recurrent, maxkappa=maxkappa,
-                 transX=transX, transXD=transXD, Z.formula = Z, thetaAO = theta.AO,
+                 transX=transX, transXD=transXD, Z.formula = Z, thetaAO = theta.AO, excess=excess,
                  return_type="optim")
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
@@ -2276,11 +2295,14 @@ setMethod("predictnl", "pstpm2",
 ##
 setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","li","gradli"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,use.gr=TRUE,...)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
                                  link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr, ...))
+setMethod("residuals", "pstpm2",
+          function(object, type=c("li","gradli"))
+              residuals.stpm2.base(object=object, type=type))
 
 ## setMethod("predict", "pstpm2",
 ##           function(object,newdata=NULL,

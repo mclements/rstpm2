@@ -6,7 +6,7 @@ S3method(makepredictcall, nsx)
 S3method(predict, nsx)
 ## All methods for imported generics:
 exportMethods(plot,predict,predictnl,coef,confint,summary,update,anova,vcov,formula,
-              BIC,AIC,AICc,qAICc,simulate)
+              BIC,AIC,AICc,qAICc,simulate,residuals)
 
 importFrom(graphics,plot,lines,matplot,par,polygon,abline,matlines)
 ## importFrom(splines,bs,ns,spline.des,splineDesign)
@@ -14,7 +14,7 @@ importFrom(stats, quantile, lm, as.formula, coef, makepredictcall, na.fail, pred
            contrasts,delete.response, get_all_vars, model.extract, model.frame, 
            model.matrix, model.weights, na.pass, optimHess, pweibull, 
            terms, terms.formula, .checkMFClasses, .getXlevels, pchisq, printCoefmat,
-           anova, var)
+           anova, var, residuals)
 importFrom(mgcv,gam,s)
 importFrom(Rcpp,sourceCpp)
 import(bbmle,methods,survival,splines,numDeriv)

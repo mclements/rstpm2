@@ -18,6 +18,27 @@
 ##   require(bbmle)
 ## }
 
+## Fix error in code for gradli
+library(rstpm2)
+data(brcancer)
+fit <- stpm2(Surv(rectime,censrec==1) ~ hormon,data=brcancer)
+X <- fit@args$X
+XD <- fit@args$XD
+args <- fit@args
+beta.est <- coef(fit)
+eta <- as.vector(X %*% beta.est)
+etaD <- as.vector(XD %*% beta.est)
+link <- switch(fit@args$link,PH=rstpm2:::link.PH,PO=rstpm2:::link.PO)
+h <- link$h(eta,etaD)  # - as.vector(predict(fit, type="haz")) ## Ok!
+H <- link$H(eta)  #- as.vector(predict(fit, type="cumhaz")) ## Ok!
+gradh <- as.matrix(link$gradh(eta,etaD, args))
+gradH <- as.matrix(link$gradH(eta, args))
+
+gradli <- residuals(fit, type="gradli") ## n*npar
+dim(gradli)
+gradli2 <- gradH - ifelse(fit@args$event,1/h,0)*gradh
+head(gradli + gradli2)
+
 
 ## Gamma frailty
 refresh
@@ -25,6 +46,7 @@ require(rstpm2)
 brcancer2 <- transform(brcancer, id=rep(1:(nrow(brcancer)/2),each=2))
 fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer2, cluster=brcancer2$id, logtheta=-6)
 summary(fit)
+plot(fit,newdata=data.frame(one=1),type="margsurv")
 
 # Aranda-Ordaz link
 refresh

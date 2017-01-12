@@ -58,7 +58,7 @@ This has a useful interpretation for causal inference.
 $E_Z(S(t|Z,X=1))-E_Z(S(t|Z,X=0))$
 
 \begin{verbatim}
-fit <- stpm(...)
+fit <- stpm2(...)
 predict(fit,type="meansurv",newdata=data)
 \end{verbatim}
 

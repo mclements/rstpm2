@@ -18,7 +18,7 @@
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
                "hdiff","loghazard","link","meansurv","meansurvdiff",
                "odds","or","margsurv","marghaz","marghr","meanhaz","af",
-               "li", "gradli"),
+               "fail","margfail","meanmargsurv"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var,
                keep.attributes=TRUE, use.gr=TRUE,...)
@@ -26,7 +26,7 @@
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
                "hdiff","loghazard","link","meansurv","meansurvdiff",
                "odds","or","margsurv","marghaz","marghr","meanhaz","af",
-               "li", "gradli"),
+               "fail","margfail","meanmargsurv"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var,
                keep.attributes=TRUE, use.gr=TRUE,...)
@@ -58,8 +58,10 @@
       \item{"marghr"}{marginal (population) hazard ratio}
       \item{"meanhaz"}{mean hazard}
       \item{"af"}{attributable fraction}
-      \item{"li"}{log-likelihood components}
-      \item{"gradli"}{log-likelihood gradient components}
+      \item{"fail"}{failure (=1-survival)}
+      \item{"margfail"}{marginal failure (=1-marginal survival)}
+      \item{"meanmargsurv"}{mean marginal survival, averaged over the
+               frailty distribution}
     }
   }
   \item{grid}{whether to merge newdata with a regular sequence of event
