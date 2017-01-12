@@ -572,7 +572,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ##
     ## get variables
     time <- eval(timeExpr, data, parent.frame())
-    if (any(time>0 & times<1e-4))
+    if (any(time>0 & time<1e-4))
         warning("Some event times < 1e-4: consider transforming time to avoid problems with finite differences")
     time0Expr <- NULL # initialise
     if (delayed) {
@@ -580,7 +580,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
       if (time0Var == "")
         time0Var <- all.vars(time0Expr)
       time0 <- eval(time0Expr, data, parent.frame())
-      if (any(time0>0 & times0<1e-4))
+      if (any(time0>0 & time0<1e-4))
           warning("Some entry times < 1e-4: consider transforming time to avoid problems with finite differences")
     }
     event <- eval(eventExpr,data)

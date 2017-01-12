@@ -2114,7 +2114,7 @@ namespace rstpm2 {
 	    dk(0) = d(k);
 	    dk(1) = d(kk); 
 	    bi = SqrtSigma * dk;
-	    cube dbic = gradSqrt.each_slice() * dk;
+	    cube dbic = gradSqrt.each_slice() % dk;
 	    mat dbi = reshape( mat(dbic.memptr(), dbic.n_elem, 1, false), redim, reparm);
 	    betastar(span(betastar.size()-redim,betastar.size()-1)) = bi;
 	    vec etastar = Xstar * betastar;
@@ -2174,7 +2174,7 @@ namespace rstpm2 {
 	    dk(0) = d(k);
 	    dk(1) = d(kk); 
 	    bi = mu + sqrttau * dk;
-	    cube dbic = gradsqrttau.each_slice() * dk;
+	    cube dbic = gradsqrttau.each_slice() % dk;
 	    mat dbi = reshape( mat(dbic.memptr(), dbic.n_elem, 1, false), redim, reparm);
 	    betastar(span(betastar.size()-redim,betastar.size()-1)) = bi;
 	    vec etastar = Xstar * betastar;
