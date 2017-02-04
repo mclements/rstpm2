@@ -717,7 +717,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
                  kappa=1, trace = trace, oldcluster=cluster, frailty=frailty, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
                  RandDist=RandDist, optimiser=optimiser,
-                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD, maxkappa=maxkappa, Z.formula = Z, thetaAO = theta.AO, excess=excess)
+                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD, maxkappa=maxkappa, Z.formula = Z, thetaAO = theta.AO, excess=excess, data=data)
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x
@@ -916,7 +916,7 @@ predict.stpm2.base <-
     type <- match.arg(type)
     args <- object@args
     if (type %in% c("fail","margfail")) {
-        out <- 1-predict.stpm2.base(object,swich(type, fail="surv", margfail="margsurv"),grid,seqLength,se.fit,link,exposed,var,keep.attributes,use.gr,...)
+        out <- 1-predict.stpm2.base(object,newdata=newdata,type=switch(type, fail="surv", margfail="margsurv"),grid,seqLength,se.fit,link,exposed,var,keep.attributes,use.gr,...)
         if (se.fit) {temp <- out$lower; out$lower <- out$upper; out$upper <- temp}
         return(out)
     }

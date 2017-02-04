@@ -331,6 +331,7 @@ namespace rstpm2 {
       Rprintf("beta="); Rprint(coef);
       Rprintf("objective=%g\n",value);
     };
+    // R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
     return value;
   }
   template<class T>
