@@ -735,13 +735,13 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         localargs <- args
         localargs$return_type <- "objective"
         localargs$init <- beta
-        return(.Call("model_output", localargs, package="rstpm2"))
+        return(.Call("model_output", localargs, PACKAGE="rstpm2"))
     }
     gradnegll <- function(beta) {
         localargs <- args
         localargs$init <- beta
         localargs$return_type <- "gradient"
-        return(.Call("model_output", localargs, package="rstpm2"))
+        return(.Call("model_output", localargs, PACKAGE="rstpm2"))
     }
     fdgradnegll <- function(beta, eps=1e-6) {
         sapply(1:length(beta), function(i) {
@@ -755,11 +755,11 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         localargs <- args
         localargs$init <- beta
         localargs$return_type <- "li"
-        return(.Call("model_output", localargs, package="rstpm2"))
+        return(.Call("model_output", localargs, PACKAGE="rstpm2"))
     }
     parnames(negll) <- parnames(gradnegll) <- names(init)
     ## MLE
-    fit <- .Call("model_output", args, package="rstpm2")
+    fit <- .Call("model_output", args, PACKAGE="rstpm2")
     args$init <- coef <- as.vector(fit$coef)
     args$kappa.final <- fit$kappa
     hessian <- fit$hessian
@@ -895,12 +895,12 @@ residuals.stpm2.base <- function(object, type=c("li","gradli")) {
     if (type=="li") {
         localargs <- args
         localargs$return_type <- "li"
-        return(as.vector(.Call("model_output", localargs, package="rstpm2")))
+        return(as.vector(.Call("model_output", localargs, PACKAGE="rstpm2")))
     }
     if (type=="gradli") {
         localargs <- args
         localargs$return_type <- "gradli"
-        return(.Call("model_output", localargs, package="rstpm2"))
+        return(.Call("model_output", localargs, PACKAGE="rstpm2"))
     }
 }    
 setMethod("residuals", "stpm2",
@@ -1890,7 +1890,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser=optimiser,
                  type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2", recurrent = recurrent, maxkappa=maxkappa,
                  transX=transX, transXD=transXD, Z.formula = Z, thetaAO = theta.AO, excess=excess,
-                 return_type="optim")
+                 return_type="optim", data=data)
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x
@@ -1914,9 +1914,9 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         localargs$sp <- sp
         localargs$init <- beta
         localargs$return_type <- "objective"
-        negll <- .Call("model_output", localargs, package="rstpm2")
+        negll <- .Call("model_output", localargs, PACKAGE="rstpm2")
         localargs$return_type <- "feasible"
-        feasible <- .Call("model_output", localargs, package="rstpm2")
+        feasible <- .Call("model_output", localargs, PACKAGE="rstpm2")
         attr(negll,"feasible") <- feasible
         return(negll)
     }
@@ -1925,9 +1925,9 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         localargs$sp <- sp
         localargs$init <- beta
         localargs$return_type <- "objective0"
-        negll <- .Call("model_output", localargs, package="rstpm2")
+        negll <- .Call("model_output", localargs, PACKAGE="rstpm2")
         localargs$return_type <- "feasible"
-        feasible <- .Call("model_output", localargs, package="rstpm2")
+        feasible <- .Call("model_output", localargs, PACKAGE="rstpm2")
         attr(negll,"feasible") <- feasible
         return(negll)
     }
@@ -1979,19 +1979,19 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         localargs <- args
         localargs$init <- beta
         localargs$return_type <- "gradient"
-        .Call("model_output", localargs, package="rstpm2")
+        .Call("model_output", localargs, PACKAGE="rstpm2")
       }
     gradnegll0sp <- function(beta,sp) {
         localargs <- args
         localargs$init <- beta
         localargs$return_type <- "gradient0"
-        .Call("model_output", localargs, package="rstpm2")
+        .Call("model_output", localargs, PACKAGE="rstpm2")
       }
     logli <- function(beta) {
         localargs <- args
         localargs$init <- beta
         localargs$return_type <- "li"
-        return(.Call("model_output", localargs, package="rstpm2"))
+        return(.Call("model_output", localargs, PACKAGE="rstpm2"))
     }
     like <- function(beta) {
         eta <- as.vector(X %*% beta)
@@ -2040,7 +2040,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     } else {
         "optim_first"
     }
-    fit <- .Call("model_output", args, package = "rstpm2")
+    fit <- .Call("model_output", args, PACKAGE = "rstpm2")
     fit$coef <- as.vector(fit$coef)
     fit$sp <- as.vector(fit$sp)
     names(fit$coef) <- names(init)

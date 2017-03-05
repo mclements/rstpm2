@@ -20,9 +20,9 @@ cox.tvc <- function(obj,var=NULL,method="logt") {
     beta <- c(coef(obj),0)
     names(beta) <- c(names(coef(obj)),sprintf("%s:log(t)",var))
     minuslogl <- function(beta) -.Call("test_cox_tvc2",
-                                   list(time=time,event=status,X=X,beta=beta,k=k-1),package="rstpm2")
+                                   list(time=time,event=status,X=X,beta=beta,k=k-1),PACKAGE="rstpm2")
     gr <- function(beta) -.Call("test_cox_tvc2_grad",
-                                list(time=time,event=status,X=X,beta=beta,k=k-1),package="rstpm2")
+                                list(time=time,event=status,X=X,beta=beta,k=k-1),PACKAGE="rstpm2")
     parnames(minuslogl) <- parnames(gr) <- names(beta)
     fit <- mle2(start=beta,
                  minuslogl = minuslogl,
