@@ -35,7 +35,7 @@ pstpm2(formula, data, smooth.formula = NULL, smooth.args = NULL,
        logtheta=-6, nodes=9,
        RandDist=c("Gamma","LogN"), adaptive = TRUE, maxkappa=1000, Z = ~1, 
        reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-5),outer_optim=1,
-       contrasts = NULL, subset = NULL, ...)
+       contrasts = NULL, subset = NULL, robust_initial = FALSE, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -123,6 +123,9 @@ hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta
 \item{Z}{formula for the design matrix for the random effects}
 \item{reltol}{list with components for search and final relative tolerances.}
 \item{outer_optim}{Integer to indicate the algorithm for outer optimisation. If outer_optim=1, then use Neldear-Mead, otherwise use Nlm.}
+\item{robust_initial}{logical for whether to use Nelder-Mead
+  to find initial values (max 50 iterations). This is useful for
+  ill-posed initial values.}  
 \item{\dots}{
   additional arguments to be passed to the \code{\link{mle2}} .
 }
