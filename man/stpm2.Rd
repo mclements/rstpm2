@@ -29,7 +29,7 @@ stpm2(formula, data,
       RandDist=c("Gamma","LogN"), recurrent = FALSE, adaptive=TRUE,
       maxkappa=1000, Z=~1,
       contrasts = NULL,
-      subset = NULL, ...)
+      subset = NULL, robust_initial = FALSE, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -129,6 +129,9 @@ hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta
 \item{maxkappa}{double float value for the maximum value of the weight
   used in the constraint}
 \item{Z}{formula for the design matrix for the random effects}
+\item{robust_initial}{logical for whether to use Nelder-Mead
+  to find initial values (max 50 iterations). This is useful for
+  ill-posed initial values.}  
 \item{\dots}{
   additional arguments to be passed to the \code{\link{mle2}} .
 }
