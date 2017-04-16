@@ -1302,18 +1302,16 @@ namespace rstpm2 {
 	  uvec ind00 = conv_to<uvec>::from(cluster_delayed[it->first]);
 	  sumHenter = sum(H0(Base::map0f(ind00)));
 	}
-	if (recurrent) {
-	  ll(i) += -(1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // Gutierrez (2002)
-	} else {
-	  ll(i) += -(1.0/theta+mi)*log(1.0+theta*sumH) + 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
+	if (recurrent) { // for calendar timescale
+		ll(i) += -(1.0/theta+mi)*log(1.0+theta*(sumH - sumHenter)); // Rondeau et al (2005)
+	} else { // for clustered data or gap timescale
+		ll(i) += -(1.0/theta+mi)*log(1.0+theta*sumH) + 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
 	}
-	if (!recurrent && mi>0) { 
-	  for (int k=1; k<=mi; ++k)
-	    ll(i) += log(1.0+theta*(mi-k));
-	}
-	if (recurrent && mi>0) {
-	  ll(i) += R::lgammafn(1.0/theta+mi)-R::lgammafn(1.0/theta)+mi*log(theta); // Gutierrez (2002)
-	}
+	// Note: log(gamma(1/theta+mi)/gamma(1/theta)*theta^mi) = sum_k=1^mi (log(1+theta(mi-k))) (mi>0); 0 (otherwise)
+	if (mi>0) { 
+		for (int k=1; k<=mi; ++k)
+			ll(i) += log(1.0+theta*(mi-k));
+	} 
       }
       li_constraint out;
       out.constraint=constraint;
@@ -1382,7 +1380,7 @@ namespace rstpm2 {
 	}
 	for (int k=0; k<n-1; ++k) {
 	  if (recurrent) {
-	    gr(i,k) += gradi(k) - (1.0/theta+mi)*theta*(gradHi(k)-gradH0i(k))/(1+theta*(sumH-sumHenter)) - grconstraint(k); // Gutierrez
+	    gr(i,k) += gradi(k) - (1.0/theta+mi)*theta*(gradHi(k)-gradH0i(k))/(1+theta*(sumH-sumHenter)) - grconstraint(k); // Rondeau et al (2005)
 	  } else {
 	    gr(i,k) += gradi(k) - theta*(1.0/theta+mi)*gradHi(k)/(1+theta*sumH) + 1.0/(1+theta*sumHenter)*gradH0i(k) - grconstraint(k); // Rondeau et al
 	  }
@@ -1391,17 +1389,18 @@ namespace rstpm2 {
 	  // axiom: D(-(1/exp(btheta)+mi)*log(1+exp(btheta)*H),btheta)
 	  // axiom: D(log(Gamma(1/exp(btheta)+mi))-log(Gamma(1/exp(btheta)))+mi*btheta,btheta)
 	  double H = sumH - sumHenter;
-	  gr(i,n-1) += ((1+theta*H)*log(1+H*theta)-H*mi*theta*theta - H*theta)/(H*theta*theta + theta) + (-R::digamma(1.0/theta+mi)+R::digamma(1/theta)+mi*theta)/theta;
+	  // gr(i,n-1) += ((1+theta*H)*log(1+H*theta)-H*mi*theta*theta - H*theta)/(H*theta*theta + theta) + (-R::digamma(1.0/theta+mi)+R::digamma(1/theta)+mi*theta)/theta;
+	  gr(i,n-1) += ((1+theta*H)*log(1+H*theta)-H*mi*theta*theta - H*theta)/(H*theta*theta + theta);
 	} else {
 	  // axiom: D(-(1/exp(btheta)+mi)*log(1+exp(btheta)*H),btheta)
 	  // axiom: D(1.0/exp(btheta)*log(1+exp(btheta)*H0),btheta)
 	  gr(i,n-1) += ((1+sumH*theta)*log(1+sumH*theta)-sumH*mi*theta*theta-sumH*theta)/(sumH*theta*theta+theta);
 	  gr(i,n-1) += (-(1+sumHenter*theta)*log(sumHenter*theta+1)+sumHenter*theta)/(sumHenter*theta*theta+theta); 
-	  if (mi>0) {
-	    for (int k=1; k<=mi; ++k)
-	      // axiom: D(log(1+exp(btheta)*(mi-k)),btheta)
-	      gr(i,n-1) += theta*(mi-k)/(1.0+theta*(mi-k));
-	  }
+	}
+	if (mi>0) {
+		for (int k=1; k<=mi; ++k)
+			// axiom: D(log(1+exp(btheta)*(mi-k)),btheta)
+			gr(i,n-1) += theta*(mi-k)/(1.0+theta*(mi-k));
 	}
       }
       gradli_constraint grli = {gr, grconstraint};
