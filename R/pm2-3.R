@@ -584,7 +584,8 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
           warning("Some entry times < 1e-4: consider transforming time to avoid problems with finite differences")
     }
     event <- eval(eventExpr,data)
-    event <- event > min(event) ## ???
+    ## if all the events are the same, we assume that they are all events, else events are those greater than min(event)
+    event <- if (length(unique(event))==1) rep(TRUE, length(event)) else event <- event > min(event)
     ## setup for initial values
     if (!interval) {
         ## Cox regression
@@ -910,7 +911,7 @@ setMethod("residuals", "stpm2",
 
 predict.stpm2.base <- 
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=TRUE,use.gr=TRUE,...)
 {
@@ -921,14 +922,14 @@ predict.stpm2.base <-
         if (se.fit) {temp <- out$lower; out$lower <- out$upper; out$upper <- temp}
         return(out)
     }
-      if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af"))
-          stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","or","marghr","af")')
+      if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af","uncured"))
+          stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","or","marghr","af","uncured")')
       if (type %in% c('margsurv','marghaz','marghr','margfail','meanmargsurv') && !object@args$frailty)
           stop("Marginal prediction only for frailty models")
     ## exposed is a function that takes newdata and returns the revised newdata
     ## var is a string for a variable that defines a unit change in exposure
-    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr"))
-        stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr') requires newdata to be specified.")
+    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","uncured"))
+        stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr','uncured') requires newdata to be specified.")
     calcX <- !is.null(newdata)
     if (is.null(newdata)) {
         ##mm <- X <- model.matrix(object) # fails (missing timevar)
@@ -976,7 +977,7 @@ predict.stpm2.base <-
         ## XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
         ## XD <- args$transXD(matrix(XD,nrow=nrow(X)))
     }
-    if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","or","marghaz","marghr","fail","margsurv","meanmargsurv")) {
+    if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","or","marghaz","marghr","fail","margsurv","meanmargsurv","uncured")) {
         ## how to elegantly extract the time variable?
         ## timeExpr <- 
         ##   lhs(object@call.formula)[[length(lhs(object@call.formula))-1]]
@@ -990,7 +991,7 @@ predict.stpm2.base <-
     ##   ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
     ##   ## XD0 <- matrix(XD0,nrow=nrow(X0))
     ## }
-    if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af")) {
+    if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af","uncured")) {
         newdata2 <- exposed(newdata)
       if (inherits(object, "stpm2")) {
           X2 <- object@args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
@@ -1199,6 +1200,10 @@ predict.stpm2.base <-
             h2 <- link$h(eta2,etaD2)
             return(h2 - h)
         }
+        if (type=="uncured") {
+            S2 <- link$ilink(as.vector(X2 %*% beta))
+            return((S-S2)/(1-S2))
+        }
         if (type=="hr") {
             eta2 <- as.vector(X2 %*% beta)
             etaD2 <- as.vector(XD2 %*% beta)
@@ -1311,7 +1316,7 @@ predict.stpm2.base <-
       beta <- coef(object)
       if (is.null(link))
         link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                       hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meansurv="I",meanhaz="I",af="I")
+                       hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meansurv="I",meanhaz="I",af="I",uncured="cloglog")
       ## calculate gradients for some of the estimators
       if (use.gr) {
           colMeans <- function(x) apply(x,2,mean)
@@ -1398,7 +1403,7 @@ predict.stpm2.base <-
 
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,use.gr=TRUE,...)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
@@ -1491,7 +1496,8 @@ plot.stpm2.base <-
                                  loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
                                  meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
                                  margsurv="Marginal survival",marghaz="Marginal hazard",marghr="Marginal hazard ratio", haz="Hazard",fail="Failure",
-                                 meanhaz="Mean hazard",margfail="Marginal failure",af="Attributable fraction",meanmargsurv="Mean marginal survival")
+                                 meanhaz="Mean hazard",margfail="Marginal failure",af="Attributable fraction",meanmargsurv="Mean marginal survival",
+                                 uncured="Uncured distribution")
               xx <- attr(y,"newdata")
               xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
               if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)

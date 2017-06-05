@@ -18,7 +18,7 @@
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
                "hdiff","loghazard","link","meansurv","meansurvdiff",
                "odds","or","margsurv","marghaz","marghr","meanhaz","af",
-               "fail","margfail","meanmargsurv"),
+               "fail","margfail","meanmargsurv","uncured"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var,
                keep.attributes=TRUE, use.gr=TRUE,...)
@@ -34,8 +34,8 @@
 \arguments{
   \item{object}{an \code{stpm2} or \code{pstpm2} object}
   \item{newdata}{optional list of new data (required if type in
-               ("hr","sdiff","hdiff","meansurvdiff","or")). For type in
-               ("hr","sdiff","hdiff","meansurvdiff","or","af"), this defines the unexposed
+               ("hr","sdiff","hdiff","meansurvdiff","or","uncured")). For type in
+               ("hr","sdiff","hdiff","meansurvdiff","or","af","uncured"), this defines the unexposed
                newdata. This can be combined with \code{grid} to get a
                regular set of event times (i.e. newdata would \emph{not}
                include the event times). }
@@ -62,6 +62,7 @@
       \item{"margfail"}{marginal failure (=1-marginal survival)}
       \item{"meanmargsurv"}{mean marginal survival, averaged over the
                frailty distribution}
+      \item{"uncured"}{distribution for the uncured}
     }
   }
   \item{grid}{whether to merge newdata with a regular sequence of event
