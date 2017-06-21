@@ -485,15 +485,27 @@ namespace rstpm2 {
 #define OPTIM_FUNCTIONS							\
     void optimWithConstraintBFGS(NumericVector init) {			\
       bool satisfied;							\
+      this->bfgs.coef = init;						\
+      if (this->robust_initial) {					\
+	optimNoHessianNM(this->bfgs.coef,50);				\
+      }									\
       this->kappa = this->kappa_init;					\
       do {								\
-	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, init, (void *) this); \
+	this->bfgs.optim(&optimfunction<This>, &optimgradient<This>, this->bfgs.coef, (void *) this); \
 	vec vcoef(&this->bfgs.coef[0],this->n);				\
 	satisfied = this->feasible(vcoef % this->parscale);		\
 	if (!satisfied) this->kappa *= 2.0;				\
       } while ((!satisfied) && this->kappa < 1.0e3);			\
       if (this->bfgs.trace > 0 && this->kappa>1.0) Rprintf("kappa=%f\n",this->kappa); \
       this->bfgs.hessian = this->bfgs.calc_hessian(&optimgradient<This>, (void *) this); \
+    }									\
+    void optimNoHessianNM(NumericVector init, int maxit = 50) {		\
+      NelderMead2 nm;							\
+      nm.hessianp = false;						\
+      nm.parscale = this->parscale;					\
+      nm.maxit = maxit;							\
+      nm.optim(&optimfunction<This>, init, (void *) this);		\
+      this->bfgs.coef = nm.coef;					\
     }									\
     void optimWithConstraintNM(NumericVector init) {			\
       bool satisfied;							\
@@ -595,6 +607,7 @@ namespace rstpm2 {
       optimiser = as<std::string>(list["optimiser"]);
       bfgs.trace = as<int>(list["trace"]);
       reltol = bfgs.reltol = as<double>(list["reltol"]);
+      robust_initial = as<bool>(list["robust_initial"]);
       bfgs.hessianp = false;
       bfgs.parscale = parscale = as<vec>(list["parscale"]);
       which0 = removeNaN(full_which0);
@@ -876,7 +889,7 @@ namespace rstpm2 {
     NumericVector init;
     vec parscale, ttype, full_which0;
     double kappa_init, kappa, maxkappa, reltol;
-    bool delayed, interval;
+    bool delayed, interval, robust_initial;
     int n, N, nbeta;
     BFGS2 bfgs;
     std::string optimiser;
@@ -890,6 +903,7 @@ namespace rstpm2 {
     struct Smoother {
       int first_para, last_para;
       mat S;
+      bool first;
     };
     SmoothLogH(SEXP sexp) {
       List list = as<List>(sexp);
@@ -900,9 +914,19 @@ namespace rstpm2 {
 	Smoother smoothi =  {
 	  as<int>(lsmoothi["first.para"]) - 1, 
 	  as<int>(lsmoothi["last.para"]) - 1, 
-	  as<mat>(lsmoothiS[0])
+	  as<mat>(lsmoothiS[0]),
+	  true
 	};
 	smooth.push_back(smoothi);
+	if (lsmoothiS.size()==2) {
+	  Smoother smoothi2 =  {
+	    as<int>(lsmoothi["first.para"]) - 1, 
+	    as<int>(lsmoothi["last.para"]) - 1, 
+	    as<mat>(lsmoothiS[1]),
+	    false
+	  };
+	  smooth.push_back(smoothi2);
+	}
       }
     }
     double penalty(vec vbeta, vec sp) {
@@ -933,6 +957,7 @@ namespace rstpm2 {
 	Smoother smoothi = smooth[i];
 	for (size_t j=smoothi.first_para; j <= static_cast<size_t>(smoothi.last_para); ++j)
 	  values[i] += X(j,j);
+	// if (!smoothi.first) values[i]=0.0; // edf for second smoother matrix: ignore
       }
       return values;
     }
@@ -1282,14 +1307,18 @@ namespace rstpm2 {
 	} else {
 	  ll(i) += -(1.0/theta+mi)*log(1.0+theta*sumH) + 1.0/theta*log(1.0+theta*sumHenter); // Rondeau et al
 	}
-	if (!recurrent && mi>0) { 
+	// if (!recurrent && mi>0) { 
+	//   for (int k=1; k<=mi; ++k)
+	//     ll(i) += log(1.0+theta*(mi-k));
+	// }
+	// if (recurrent && mi>0) {
+	//   ll(i) += R::lgammafn(1.0/theta+mi)-R::lgammafn(1.0/theta)+mi*log(theta); // Gutierrez (2002)
+	// }
+	if (mi>0) { 
 	  for (int k=1; k<=mi; ++k)
 	    ll(i) += log(1.0+theta*(mi-k));
 	}
-	if (recurrent && mi>0) {
-	  ll(i) += R::lgammafn(1.0/theta+mi)-R::lgammafn(1.0/theta)+mi*log(theta); // Gutierrez (2002)
-	}
-      }
+     }
       li_constraint out;
       out.constraint=constraint;
       out.li = ll;
