@@ -18,10 +18,16 @@
 ##   require(bbmle)
 ## }
 
+require(coxme)
+
 ## Fix error in code for gradli
 library(rstpm2)
 data(brcancer)
+fit <- stpm2(Surv(rectime,censrec) ~ hormon,data=transform(brcancer,censrec=1))
+fit <- stpm2(Surv(rectime,censrec==1) ~ hormon,data=brcancer,cure=TRUE)
 fit <- stpm2(Surv(rectime,censrec==1) ~ hormon,data=brcancer)
+
+plot(fit,newdata=data.frame(hormon=1),type="uncured",exposed=function(data) transform(data,rectime=2500))
 X <- fit@args$X
 XD <- fit@args$XD
 args <- fit@args

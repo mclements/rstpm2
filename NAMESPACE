@@ -1,4 +1,4 @@
-useDynLib(rstpm2)
+useDynLib(rstpm2, .registration=TRUE)
 
 export(stpm2,pstpm2,incrVar,nsx,predictnl,"coef<-",cox.tvc)
 exportClasses(stpm2,pstpm2,tvcCoxph)
