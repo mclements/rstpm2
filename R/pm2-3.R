@@ -600,7 +600,9 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         coxph.call$model <- TRUE
         coxph.obj <- eval(coxph.call, envir=parent.frame())
         y <- model.extract(model.frame(coxph.obj),"response")
-        data$logHhat <- pmax(-18,link$link(Shat(coxph.obj)))
+        data$logHhat <- if (is.null(bhazard)) {
+                            pmax(-18,link$link(Shat(coxph.obj)))
+                        } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-bhazard*time)))
     }
     if (interval) {
         ## survref regression
