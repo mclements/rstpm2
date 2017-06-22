@@ -18,6 +18,24 @@
 ##   require(bbmle)
 ## }
 
+## 2017-06-21 
+## Verify: the choice of basis dimension (default: k=10) for penalized regression splines is not sensitive to estimates
+## Adjusted by a constant coefficient (e.g. alpha=2) to correct potential overfitting by GCV for lambda
+## alpha = 1.4 suggested by Kim and Gu (2004)
+library(rstpm2)
+## k = 7
+pfit7 <- pstpm2(Surv(rectime, censrec==1) ~ hormon, data = brcancer, smooth.formula = ~ s(log(rectime), k=7), alpha=2)
+plot(pfit7, newdata = data.frame(hormon=0), type="hazard")
+
+## k = 27
+pfit27 <- pstpm2(Surv(rectime, censrec==1) ~ hormon, data = brcancer, smooth.formula = ~ s(log(rectime), k=27), alpha=2)
+plot(pfit27, newdata = data.frame(hormon=0), type="hazard")
+
+## Estimated effective degree of freedom (EDF)
+pfit7@edf  ## 5.36
+pfit27@edf ## 5.96
+
+
 require(coxme)
 
 ## Fix error in code for gradli
