@@ -1238,13 +1238,13 @@ predict.stpm2.base <-
                 meanS2 <- tapply((1+theta*(-log(S2)))^(-1/theta), newdata[[object@timeVar]], mean)
                 } else {
                     meanS <- tapply(sapply(1:length(gauss_x),
-                                           function(i) link$ilink(eta+Z*sqrt(theta)*gauss_x[i])) %*%
-                                    gauss_w / sum(gauss_w),
+                                           function(i) link$ilink(eta+Z*sqrt(2)*sqrt(theta)*gauss_x[i])) %*%
+                                    gauss_w / sqrt(pi),
                                     newdata[[object@timeVar]],
                                     mean)
                     meanS2 <- tapply(sapply(1:length(gauss_x),
-                                           function(i) link$ilink(eta2+Z*sqrt(theta)*gauss_x[i])) %*%
-                                    gauss_w / sum(gauss_w),
+                                           function(i) link$ilink(eta2+Z*sqrt(2)*sqrt(theta)*gauss_x[i])) %*%
+                                    gauss_w / sqrt(pi),
                                     newdata[[object@timeVar]],
                                     mean)
                     }
@@ -1257,8 +1257,8 @@ predict.stpm2.base <-
                 return(tapply((1+theta*H)^(-1/theta), newdata[[object@timeVar]], mean))
             if (object@args$RandDist=="LogN") {
                 return(tapply(sapply(1:length(gauss_x),
-                                     function(i) link$ilink(eta+Z*sqrt(theta)*gauss_x[i])) %*%
-                              gauss_w / sum(gauss_w),
+                                     function(i) link$ilink(eta+Z*sqrt(2)*sqrt(theta)*gauss_x[i])) %*%
+                              gauss_w / sqrt(pi),
                               newdata[[object@timeVar]],
                               mean))
             }
@@ -1269,8 +1269,8 @@ predict.stpm2.base <-
                 return((1+theta*H)^(-1/theta))
             if (object@args$RandDist=="LogN") {
                 return(sapply(1:length(gauss_x),
-                              function(i) link$ilink(eta+Z*sqrt(theta)*gauss_x[i])) %*%
-                       gauss_w / sum(gauss_w))
+                              function(i) link$ilink(eta+Z*sqrt(2)*sqrt(theta)*gauss_x[i])) %*%
+                       gauss_w / sqrt(pi))
             }
         }
         if (type=="marghaz") {
@@ -1282,8 +1282,8 @@ predict.stpm2.base <-
             }
             if (object@args$RandDist=="LogN") {
                 return(sapply(1:length(gauss_x),
-                              function(i) link$h(eta+Z*sqrt(theta)*gauss_x[i],etaD)) %*%
-                       gauss_w / sum(gauss_w))
+                              function(i) link$h(eta+Z*sqrt(2)*sqrt(theta)*gauss_x[i],etaD)) %*%
+                       gauss_w / sqrt(pi))
             }
         }
         if (type=="marghr") {
@@ -1300,11 +1300,11 @@ predict.stpm2.base <-
             }
             if (object@args$RandDist=="LogN") {
                 marghaz <- sapply(1:length(gauss_x),
-                                  function(i) as.vector(link$h(eta+Z*sqrt(theta)*gauss_x[i],etaD))) %*%
-                                  gauss_w / sum(gauss_w)
+                                  function(i) as.vector(link$h(eta+Z*sqrt(2)*sqrt(theta)*gauss_x[i],etaD))) %*%
+                                  gauss_w / sqrt(pi)
                 marghaz2 <- sapply(1:length(gauss_x),
-                                   function(i) as.vector(link$h(eta2+Z*sqrt(theta)*gauss_x[i],etaD2))) %*%
-                                       gauss_w / sum(gauss_w)
+                                   function(i) as.vector(link$h(eta2+Z*sqrt(2)*sqrt(theta)*gauss_x[i],etaD2))) %*%
+                                       gauss_w / sqrt(pi)
             }
             return(marghaz2/marghaz)
         }
@@ -2471,8 +2471,8 @@ setMethod("residuals", "pstpm2",
 ##                 return((1+theta*H)^(-1/theta))
 ##             if (object@args$RandDist=="LogN") {
 ##                 return(sapply(1:length(gauss_x),
-##                               function(i) link$ilink(eta+Z*sqrt(theta)*gauss_x[i])) %*%
-##                        gauss_w / sum(gauss_w))
+##                               function(i) link$ilink(eta+Z*sqrt(2)*sqrt(theta)*gauss_x[i])) %*%
+##                        gauss_w / sqrt(pi))
 ##             }
 ##         }
 ##         if (type=="marghaz") {
@@ -2483,8 +2483,8 @@ setMethod("residuals", "pstpm2",
 ##             }
 ##             if (object@args$RandDist=="LogN") {
 ##                 return(sapply(1:length(gauss_x),
-##                               function(i) link$h(eta+Z*sqrt(theta)*gauss_x[i],etaD)) %*%
-##                        gauss_w / sum(gauss_w))
+##                               function(i) link$h(eta+Z*sqrt(2)*sqrt(theta)*gauss_x[i],etaD)) %*%
+##                        gauss_w / sqrt(pi))
 ##             }
 ##         }
 ##         if (type=="marghr") {
@@ -2501,11 +2501,11 @@ setMethod("residuals", "pstpm2",
 ##             }
 ##             if (object@args$RandDist=="LogN") {
 ##                 marghaz <- sapply(1:length(gauss_x),
-##                                   function(i) as.vector(link$h(eta+Z*sqrt(theta)*gauss_x[i],etaD))) %*%
-##                                   gauss_w / sum(gauss_w)
+##                                   function(i) as.vector(link$h(eta+Z*sqrt(2)*sqrt(theta)*gauss_x[i],etaD))) %*%
+##                                   gauss_w / sqrt(pi)
 ##                 marghaz2 <- sapply(1:length(gauss_x),
-##                                    function(i) as.vector(link$h(eta2+Z*sqrt(theta)*gauss_x[i],etaD2))) %*%
-##                                        gauss_w / sum(gauss_w)
+##                                    function(i) as.vector(link$h(eta2+Z*sqrt(2)*sqrt(theta)*gauss_x[i],etaD2))) %*%
+##                                        gauss_w / sqrt(pi)
 ##             }
 ##             return(marghaz2/marghaz)
 ##         }
