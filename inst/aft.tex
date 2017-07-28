@@ -1,0 +1,70 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+
+\begin{document}
+
+\section{Smooth accelerated failure time models}
+
+\subsection{Time-constant acceleration factors}
+
+Let survival to time $t$ for covariates $x$ be modelled as an accelerated failure time model using
+\begin{align*}
+  S(t|x) &= S_0(t \exp(-\eta(x;\beta)))
+\end{align*}
+where $\eta$ is a linear predictor. Moreover, let the baseline survival function be modelled as
+\begin{align*}
+  S_0(t) &= \exp(-\exp(\eta_0(\log(t);\beta_0)))
+\end{align*}
+where $\eta_0$ is a linear predictor. Then the combined regression model is
+\begin{align*}
+  S(t|x) &= \exp(-\exp(\eta_0(\log(t) -\eta(x; \beta);\beta_0))) 
+\end{align*}
+We can calculate the hazard, such that
+\begin{align*}
+  h(t|x) &= \frac{\partial}{\partial t} \left(-\log(S(t|x))\right) \\
+         &= \exp(\eta_0(\log(t) -\eta(x; \beta);\beta_0)) \eta_0'(\log(t) -\eta(x; \beta);\beta_0)/t
+\end{align*}
+
+\subsection{Time-dependent acceleration factors}
+
+We can model survival as an accelerated failure time model with time-dependent effects as
+\begin{align*}
+  S(t|x) &= S_0\left(\int_0^t\exp(-\eta_1(x,u;\beta)) \mathrm{d}u\right) = S_0\left(t\exp(-\eta(x,t;\beta))\right)
+\end{align*}
+for a time-specific linear predictor $\eta_1$ and where $\eta$ now models for cumulative time-dependent effects.
+By differentiation with respect to time $t$, we have that
+\begin{align*}
+  \exp(-\eta_1(x,t;\beta)) &= \frac{\partial}{\partial t} t\exp(-\eta(x,t;\beta)) \\
+                            &= \exp(-\eta(x,t;\beta)) \left(1- t \frac{\partial}{\partial t} \eta(x,t;\beta)\right)
+\end{align*}
+so that $\eta_1(x,t;\beta)=\eta(x,t;\beta) - \log\left(1- t \frac{\partial}{\partial t} \eta(x,t;\beta)\right)$. This shows that we can recover the time-specific acceleration factors from $\eta$.
+
+The combined regression model is then
+\begin{align*}
+  S(t|x) &= \exp(-\exp(\eta_0(\log(t) -\eta(x,t; \beta);\beta_0)))
+\end{align*}
+
+The hazard is then
+\begin{align*}
+  h(t|x) &= \frac{\partial}{\partial t} -\log(S(t|x)) \\
+         &= \exp(\eta_0(\log(t) -\eta(x,t; \beta);\beta_0))\, \eta_0'(\log(t) -\eta(x,t; \beta);\beta_0)\times \\
+         &\qquad \left(1/t-\frac{\partial}{\partial t}\eta(x,t; \beta)\right)
+\end{align*}
+
+
+\subsection{R implementation}
+
+The linear predictor $\eta_0$ is modelled using natural splines. The linear predictor $\eta$ can be modelled freely provided the linear predictor is a smooth function of time.
+
+Initial values for the time-constant log acceleration factors were calculated from a Weibull regression. The time-varying log acceleration factors were assumed to be zero.  Cox regression and the Breslow estimator was used to calculate baseline survival; parameters for the baseline were estimated using linear regression with natural splines fitted to the log-times at the event times. 
+
+We included quadratic penalties to ensure that $\eta_0'(\log(t) -\eta(x,t; \beta);\beta_0)$ and $1/t-\frac{\partial}{\partial t}\eta(x,t; \beta)$ were positive. For speed, the model has been implemented in C++, with optimisation using the Nelder-Mead algorithm.
+
+\end{document}
+
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:
