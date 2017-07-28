@@ -64,6 +64,7 @@ function (x, df = NULL, knots = NULL, intercept = FALSE,
         basis <- basis[, -1, drop = FALSE]
     }
     qr.const <- qr(t(const))
+    q.const <- qr.Q(qr.const, complete=TRUE)[, -(1L:2L), drop = FALSE] # NEW
     basis <- as.matrix((t(qr.qty(qr.const, t(basis))))[, -(1L:nrow(const)), drop = FALSE])
     n.col <- ncol(basis)
     if (nas) {
@@ -83,7 +84,7 @@ function (x, df = NULL, knots = NULL, intercept = FALSE,
     }
     a <- list(degree = 3, knots = if (is.null(knots)) numeric(0) else knots, 
         Boundary.knots = Boundary.knots, intercept = intercept, derivs=derivs,
-              centre=centre, log=log)
+              centre=centre, log=log, q.const=q.const)
     attributes(basis) <- c(attributes(basis), a)
     class(basis) <- c("nsx", "basis", "matrix")
     basis
@@ -892,6 +893,28 @@ setMethod("predictnl", "stpm2",
     return(out)
   })
 ##
+setMethod("predictnl", "aft",
+          function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
+  {
+    link <- match.arg(link)
+    invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
+    linkf <- eval(parse(text=link))
+    if (is.null(newdata) && !is.null(object@args$data))
+      newdata <- object@args$data
+    localf <- function(coef,...)
+      {
+          object@args$init <- object@fullcoef <- coef
+        linkf(fun(object,...))
+      }
+    dm <- numDeltaMethod(object,localf,newdata=newdata,gd=gd,...)
+    out <- invlinkf(data.frame(Estimate=dm$Estimate,
+                               lower=dm$Estimate-1.96*dm$SE,
+                               upper=dm$Estimate+1.96*dm$SE))
+    ## cloglog switches the bounds
+    if (link=="cloglog") 
+      out <- data.frame(Estimate=out$Estimate,lower=out$upper,upper=out$lower)
+    return(out)
+  })
 
 residuals.stpm2.base <- function(object, type=c("li","gradli")) {
     type <- match.arg(type)
@@ -933,6 +956,7 @@ predict.stpm2.base <-
     if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","uncured"))
         stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr','uncured') requires newdata to be specified.")
     calcX <- !is.null(newdata)
+    time <- NULL
     if (is.null(newdata)) {
         ##mm <- X <- model.matrix(object) # fails (missing timevar)
         X <- object@x
@@ -979,11 +1003,12 @@ predict.stpm2.base <-
         ## XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
         ## XD <- args$transXD(matrix(XD,nrow=nrow(X)))
     }
-    if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","or","marghaz","marghr","fail","margsurv","meanmargsurv","uncured")) {
+    ## if (type %in% c("hazard","hr","sdiff","hdiff","loghazard","or","marghaz","marghr","fail","margsurv","meanmargsurv","uncured")) {
+    if (is.null(time)) {
         ## how to elegantly extract the time variable?
         ## timeExpr <- 
         ##   lhs(object@call.formula)[[length(lhs(object@call.formula))-1]]
-        time <- eval(object@timeExpr,newdata)
+        time <- eval(object@timeExpr,newdata,parent.frame())
         ##
     }
     ## if (object@delayed && !object@interval) {

@@ -2478,4 +2478,4 @@ namespace rstpm2 {
 			_("fail")=nm.fail,
 			_("hessian")=wrap(nm.hessian));
   }
-} // anonymous namespace
+} // rstpm2 namespace

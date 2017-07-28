@@ -160,6 +160,9 @@ namespace rstpm2 {
     return Brent_fmin(a,b,&Brent_fmin_functor<T,double>,(void *) &obj,eps);
   }
 
+  Rcpp::NumericMatrix qr_q(const Rcpp::NumericMatrix& X, double tol = 1E-12); 
+
+  
 } // anonymous rstpm2
 
 #endif /* c_optim_h */

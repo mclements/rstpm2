@@ -1,9 +1,11 @@
 useDynLib(rstpm2, .registration=TRUE)
 
-export(stpm2,pstpm2,incrVar,nsx,predictnl,"coef<-",cox.tvc)
-exportClasses(stpm2,pstpm2,tvcCoxph)
+export(stpm2,pstpm2,incrVar,nsx,predictnl,"coef<-",cox.tvc,aft,nsxD)
+exportClasses(stpm2,pstpm2,tvcCoxph,aft)
 S3method(makepredictcall, nsx)
 S3method(predict, nsx)
+S3method(makepredictcall, nsxD)
+S3method(predict, nsxD)
 ## All methods for imported generics:
 exportMethods(plot,predict,predictnl,coef,confint,summary,update,anova,vcov,formula,
               BIC,AIC,AICc,qAICc,simulate,residuals)
