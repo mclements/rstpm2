@@ -1,0 +1,108 @@
+-- Axiom/Fricas source file
+-- Translate into .org?
+
+-- general case
+)cl p all
+)pile
+eta := operator 'eta
+G := operator 'G
+rule1 := rule (D(eta(t,beta),beta)==X; D(eta(t,beta),t)==XD*beta; D(eta(t,beta),[t,beta])==XD; eta(t,beta)==X*beta)
+S := G(eta(t,beta))
+H := -log(S)
+h := D(H,t)
+[D(expr,beta) for expr in [S,H,h]]
+[rule1 expr for expr in [S,H,h]]
+[rule1 D(expr,beta) for expr in [S,H,h]]
+
+-- Proportional hazards
+G(x) == exp(-exp(x))
+S := G(eta(t,beta))
+H := -log(S)
+h := D(H,t)
+D(G(x),x)
+[rule1 expr for expr in [S,H,h]]
+[rule1 D(expr,beta) for expr in [S,H,h]]
+
+-- Proportional odds
+G(x) == 1/(1+exp(x))
+S := G(eta(t,beta))
+H := -log(S)
+h := D(H,t)
+D(G(x),x)
+[rule1 expr for expr in [S,H,h]]
+[rule1 D(expr,beta) for expr in [S,H,h]]
+
+-- Probit (is there a more canonical approach in Axiom?)
+Phi := operator 'Phi
+phi := operator 'phi
+rule2 == rule D(Phi(x),x)==phi(x)
+G(x) == Phi(-x)
+S := G(eta(t,beta))
+H := -log(S)
+h := D(H,t)
+rule2 D(G(x),x)
+[rule1 rule2 expr for expr in [S,H,h]]
+[rule1 rule2 D(expr,beta) for expr in [S,H,h]]
+
+-- Additive hazards
+G(x) == exp(-x)
+S := G(eta(t,beta))
+H := -log(S)
+h := D(H,t)
+D(G(x),x)
+[rule1 expr for expr in [S,H,h]]
+[rule1 D(expr,beta) for expr in [S,H,h]]
+
+-- Aranda-Ordaz
+G(x) == exp(-log(theta*exp(x)+1)/theta)
+S := G(eta(t,beta))
+H := -log(S)
+h := D(H,t)
+D(G(x),x)
+[rule1 expr for expr in [S,H,h]]
+[rule1 D(expr,beta) for expr in [S,H,h]]
+
+-- Any other links?
+
+
+-- Estimators
+)cl p all
+
+h := operator 'h
+H := operator 'H
+rule3 := rule (exp(logtheta)==theta; 1+theta*H(beta)==S0)
+
+-- hazard
+loghaz := log(h(beta))
+rule3 D(loghaz,beta)
+
+-- marginal hazard
+marghaz := h(beta)/(1+exp(logtheta)*H(beta))
+rule3 D(marghaz,beta)
+rule3 D(marghaz,logtheta)
+D(marghaz,beta) / (((1+exp(logtheta)*H(beta))*D(h(beta),beta)-exp(logtheta)*h(beta)*D(H(beta),beta))/(1+exp(logtheta)*H(beta))^2)
+D(marghaz,logtheta) / (-exp(logtheta)*H(beta)*h(beta)/(1+exp(logtheta)*H(beta))^2)
+
+logmarghaz := log(h(beta)/(1+exp(logtheta)*H(beta)))
+rule3 D(logmarghaz,beta)
+rule3 D(logmarghaz,logtheta)
+
+
+-- marginal survival (identity link)
+margS := (1+exp(logtheta)*H(beta))^(-exp(-logtheta)) -- identity transformation link
+rule3 D(margS,beta)
+rule3 D(margS,logtheta)
+D(margS,beta) / (-(1+H(beta)*exp(logtheta))^(-exp(-logtheta)-1)*D(H(beta),beta))
+eval(%,logtheta=1.5)
+D(margS,beta) / (-margS*D(H(beta),beta)/(1+exp(logtheta)*H(beta)))
+eval(%,[logtheta=1.5, H(beta)=2.0])
+D(margS,logtheta) / (margS*(exp(-logtheta)*log(1+exp(logtheta)*H(beta))-H(beta)/(1+exp(logtheta)*H(beta))))
+eval(%,[logtheta=1.5, H(beta)=2.0])
+
+-- marginal survival (log-log link)
+margS := log(-log((1+exp(logtheta)*H(beta))^(-exp(-logtheta))))
+rule3 D(margS,beta)
+rule3 D(margS,logtheta)
+
+
+
