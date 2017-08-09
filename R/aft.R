@@ -203,7 +203,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     coef1 <- coef1[-1] # assumes intercept included in the formula; ignores smooth.formula
     pred1 <- predict(survreg1)
     data$logtstar <- log(time)    
-    ## data$logtstar <- log(time*pred1)    
+    ## data$logtstar <- log(time/pred1)    
     ## initial values and object for lpmatrix predictions
     lm.call <- mf
     lm.call[[1L]] <- as.name("lm")
@@ -280,7 +280,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
                  timeVar=timeVar,timeExpr=timeExpr,terms=mt,
                  delayed=delayed, X0=X0, wt0=wt0, parscale=parscale, reltol=reltol,
                  trace = trace, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L,
-                 boundaryKnots=attr(design,"Boundary.knots"),
+                 boundaryKnots=attr(design,"Boundary.knots"), q.const=t(attr(design,"q.const")),
                  interiorKnots=attr(design,"knots"), design=design, designD=designD,
                  data=data, lm.obj = lm.obj, return_type="optim")
     negll <- function(beta) {
@@ -444,7 +444,6 @@ setMethod("predict", "aft",
                   attr(pred,"newdata") <- newdata
               return(pred)
           })
-
 plot.aft.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", exposed=NULL, add=FALSE, ci=!add, rug=!add, recent=FALSE,
                           xlab=NULL, ylab=NULL, lty=1, line.col=1, ci.col="grey", seqLength=301, ...) {
     ## if (is.null(times)) stop("plot.meansurv: times argument should be specified")
@@ -501,7 +500,6 @@ plot.aft.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansur
     }
     return(invisible(y))
 }
-
 plot.aft.base <- 
           function(x,y,newdata=NULL,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
@@ -555,7 +553,6 @@ setMethod("plot", signature(x="aft", y="missing"),
                               ylab=ylab, line.col=line.col, lty=lty, add=add,
                               ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
           )
-
 predictSurvival.aft <- function(obj, time=obj@args$time, X=obj@args$X) {
     localargs <- obj@args
     localargs$return_type <- "survival"

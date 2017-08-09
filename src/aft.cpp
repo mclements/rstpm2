@@ -203,21 +203,21 @@ namespace rstpm2 {
     vec tl0, tl1, tr0, tr1;
     mat q_matrix;
     ns() {} // default constructor
-    ns(vec boundary_knots, vec interior_knots, int intercept=0) :
-      bs(boundary_knots, interior_knots, intercept) {
-      // calculate the Q matrix
-      mat const_basis = bs::basis(boundary_knots, 2);
-      mat qd = qr_q(const_basis.t());
-      mat qsub(qd.n_rows, qd.n_cols-2);
-      for (size_t i=0; i<qsub.n_rows; i++)
-	for (size_t j=0; j<qsub.n_cols; j++)
-	  qsub(i,j) = qd(i,j+2);
-      q_matrix = qsub.t();
-      tl0 = q_matrix * bs::eval(boundary_knots(0), 0);
-      tl1 = q_matrix * bs::eval(boundary_knots(0), 1);
-      tr0 = q_matrix * bs::eval(boundary_knots(1), 0);
-      tr1 = q_matrix * bs::eval(boundary_knots(1), 1);
-    }
+    // ns(vec boundary_knots, vec interior_knots, int intercept=0) :
+    //   bs(boundary_knots, interior_knots, intercept) {
+    //   // calculate the Q matrix
+    //   mat const_basis = bs::basis(boundary_knots, 2);
+    //   mat qd = qr_q(const_basis.t());
+    //   mat qsub(qd.n_rows, qd.n_cols-2);
+    //   for (size_t i=0; i<qsub.n_rows; i++)
+    // 	for (size_t j=0; j<qsub.n_cols; j++)
+    // 	  qsub(i,j) = qd(i,j+2);
+    //   q_matrix = qsub.t();
+    //   tl0 = q_matrix * bs::eval(boundary_knots(0), 0);
+    //   tl1 = q_matrix * bs::eval(boundary_knots(0), 1);
+    //   tr0 = q_matrix * bs::eval(boundary_knots(1), 0);
+    //   tr1 = q_matrix * bs::eval(boundary_knots(1), 1);
+    // }
     ns(vec boundary_knots, vec interior_knots, mat _q_matrix, int intercept=0) :
       bs(boundary_knots, interior_knots, intercept), q_matrix(_q_matrix) {
       tl0 = q_matrix * bs::eval(boundary_knots(0), 0);
@@ -262,6 +262,7 @@ namespace rstpm2 {
     vec time;
     vec boundaryKnots;
     vec interiorKnots;
+    mat q_matrix;
     ns s;
     aft(SEXP list) : args(as<List>(list)) {
       init = as<vec>(args["init"]);
@@ -271,7 +272,8 @@ namespace rstpm2 {
       time = as<vec>(args["time"]);
       boundaryKnots = as<vec>(args["boundaryKnots"]);
       interiorKnots = as<vec>(args["interiorKnots"]);
-      s = ns(boundaryKnots, interiorKnots, 1);
+      q_matrix = as<mat>(args["q.const"]);
+      s = ns(boundaryKnots, interiorKnots, q_matrix, 1);
     }
     double objective(vec betafull)
     {
