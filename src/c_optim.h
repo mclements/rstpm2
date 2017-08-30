@@ -43,7 +43,8 @@ namespace rstpm2 {
     void adapt_gradient(int n, double * beta, double * grad, void * par) {
     T * model = (T *) par;
     Rcpp::NumericVector x(beta,beta+n);
-    grad = model->gradient(x);
+    Rcpp::NumericVector vgrad = model->gradient(x);
+    for (int i=0; i<n; ++i) grad[i] = vgrad[i];
   }
 
   class NelderMead {
@@ -76,6 +77,10 @@ namespace rstpm2 {
     virtual double calc_objective(optimfn fn, Rcpp::NumericVector coef, void * ex);
     virtual double calc_objective(optimfn fn, void * ex);
     virtual Rcpp::NumericMatrix calc_hessian(optimgr gr, void * ex);
+    template<class T>
+      void optim(Rcpp::NumericVector init, T object) {
+      optim(&adapt_objective<T>,&adapt_gradient<T>,init,(void *) &object);
+    }
     int n, trace, maxit, report, fncount, grcount, fail;
     double abstol, reltol, Fmin, epshess;
     bool hessianp;

@@ -107,7 +107,111 @@ function (object, newx, ...)
     do.call("nsxD", a)
 }
 
-## test nsxD
+
+nsxDD <- 
+function (x, df = NULL, knots = NULL, intercept = FALSE, Boundary.knots = range(x), 
+    derivs = if (cure) c(2, 1) else c(2, 2), log = FALSE, centre = FALSE, 
+    cure = FALSE, stata.stpm2.compatible = FALSE) 
+{
+    nx <- names(x)
+    x <- as.vector(x)
+    nax <- is.na(x)
+    if (nas <- any(nax)) 
+        x <- x[!nax]
+    if (!missing(Boundary.knots)) {
+        Boundary.knots <- sort(Boundary.knots)
+        outside <- (ol <- x < Boundary.knots[1L]) | (or <- x > 
+            Boundary.knots[2L])
+    }
+    else outside <- FALSE
+    if (!missing(df) && missing(knots)) {
+        nIknots <- df - 1 - intercept + 4 - sum(derivs)
+        if (nIknots < 0) {
+            nIknots <- 0
+            warning("'df' was too small; have used ", 1 + intercept)
+        }
+        knots <- if (nIknots > 0) {
+            knots <- if (!cure) 
+                seq.int(0, 1, length.out = nIknots + 2L)[-c(1L, 
+                  nIknots + 2L)]
+            else c(seq.int(0, 1, length.out = nIknots + 1L)[-c(1L, 
+                nIknots + 1L)], 0.95)
+            if (!stata.stpm2.compatible) 
+                stats::quantile(x[!outside], knots)
+            else stats::quantile(x[!outside], round(knots, 2), 
+                type = 2)
+        }
+    }
+    else nIknots <- length(knots)
+    Aknots <- sort(c(rep(Boundary.knots, 4L), knots))
+    if (any(outside)) {
+        basis <- array(0, c(length(x), nIknots + 4L))
+        if (any(ol)) {
+            basis[ol, ] <- 0
+        }
+        if (any(or)) {
+            basis[or, ] <- 0
+        }
+        if (any(inside <- !outside)) 
+            basis[inside, ] <- spline.des(Aknots, x[inside], 
+                4, 2)$design
+    }
+    else basis <- spline.des(Aknots, x, 4, 2)$design
+    const <- splineDesign(Aknots, rep(Boundary.knots, 3 - derivs), 
+        4, c(derivs[1]:2, derivs[2]:2))
+    if (!intercept) {
+        const <- const[, -1, drop = FALSE]
+        basis <- basis[, -1, drop = FALSE]
+    }
+    qr.const <- qr(t(const))
+    q.const <- qr.Q(qr.const, complete=TRUE)[, -(1L:2L), drop = FALSE] # NEW
+    basis <- as.matrix((t(qr.qty(qr.const, t(basis))))[, -(1L:nrow(const)), 
+        drop = FALSE])
+    n.col <- ncol(basis)
+    if (nas) {
+        nmat <- matrix(NA, length(nax), n.col)
+        nmat[!nax, ] <- basis
+        basis <- nmat
+    }
+    dimnames(basis) <- list(nx, 1L:n.col)
+    if (centre) {
+        centreBasis <- nsx(centre, knots = if (is.null(knots)) 
+            numeric(0)
+        else knots, Boundary.knots = Boundary.knots, intercept = intercept, 
+            derivs = derivs, centre = FALSE, log = log)
+        oldAttributes <- attributes(basis)
+        basis <- t(apply(basis, 1, function(x) x - centreBasis))
+        attributes(basis) <- oldAttributes
+    }
+    a <- list(degree = 3, knots = if (is.null(knots)) numeric(0) else knots, 
+        Boundary.knots = Boundary.knots, intercept = intercept, 
+        derivs = derivs, centre = centre, log = log, q.const = q.const)
+    attributes(basis) <- c(attributes(basis), a)
+    class(basis) <- c("nsxDD", "basis", "matrix")
+    basis
+}
+makepredictcall.nsxDD <- 
+function (var, call) 
+{
+    if (as.character(call)[1L] != "nsxDD") 
+        return(call)
+    at <- attributes(var)[c("knots", "Boundary.knots", "intercept",
+                            "derivs", "centre", "log")]
+    xxx <- call[1L:2]
+    xxx[names(at)] <- at
+    xxx
+}
+predict.nsxDD <- 
+function (object, newx, ...) 
+{
+    if (missing(newx)) 
+        return(object)
+    a <- c(list(x = newx), attributes(object)[c("knots", "Boundary.knots", 
+        "intercept", "derivs", "centre", "log")])
+    do.call("nsxDD", a)
+}
+
+## test nsxD and nsxDD
 if (FALSE) {
     zeros <- function(mat,rows=1:nrow(mat),cols=1:ncol(mat)) "[<-"(mat,rows,cols,0)
     tm <- as.numeric(3:5)
@@ -115,10 +219,14 @@ if (FALSE) {
     y <- rnorm(length(tm))
     lm1 <- lm(y~nsx(tm,df=4))
     lmD1 <- lm(y~nsxD(tm,df=4)-1)
+    lmDD1 <- lm(y~nsxDD(tm,df=4)-1)
     eps <- 1e-5
     (lpmatrix.lm(lm1,newdata=data.frame(tm=tm2+eps)) - 
      lpmatrix.lm(lm1,newdata=data.frame(tm=tm2-eps)))/(2*eps) -
-        cbind(0,lpmatrix.lm(lmD1,newdata=data.frame(tm=tm2)))
+        cbind(0,lpmatrix.lm(lmD1,newdata=data.frame(tm=tm2))) # ok
+    (lpmatrix.lm(lmD1,newdata=data.frame(tm=tm2+eps)) - 
+     lpmatrix.lm(lmD1,newdata=data.frame(tm=tm2-eps)))/(2*eps) -
+        lpmatrix.lm(lmDD1,newdata=data.frame(tm=tm2)) # ok
 }
 
 S0hat <- function(obj)
@@ -137,7 +245,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
                  weights = NULL, 
                  timeVar = "", time0Var = "", 
                  reltol=1.0e-8, trace = 0,
-                 contrasts = NULL, subset = NULL, ...) {
+                 contrasts = NULL, subset = NULL, use.gr = TRUE, ...) {
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
@@ -224,6 +332,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     ## design information for baseline survival
     design <- nsx(dataEvents$logtstar, df=df, intercept=TRUE)
     designD <- nsxD(dataEvents$logtstar, df=df, intercept=TRUE)
+    designDD <- nsxDD(dataEvents$logtstar, df=df, intercept=TRUE)
     ##
     ## set up mf and wt
     mt <- terms(lm.obj)
@@ -279,9 +388,10 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     args <- list(init=init,X=X,XD=XD,wt=wt,event=ifelse(event,1,0),time=time,y=y,
                  timeVar=timeVar,timeExpr=timeExpr,terms=mt,
                  delayed=delayed, X0=X0, wt0=wt0, parscale=parscale, reltol=reltol,
-                 trace = trace, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L,
+                 trace = as.integer(trace), map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L,
                  boundaryKnots=attr(design,"Boundary.knots"), q.const=t(attr(design,"q.const")),
                  interiorKnots=attr(design,"knots"), design=design, designD=designD,
+                 designDD=designDD,
                  data=data, lm.obj = lm.obj, return_type="optim")
     negll <- function(beta) {
         localargs <- args
@@ -289,13 +399,140 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         localargs$init <- beta
         return(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
     }
+    gradient <- function(beta) {
+        localargs <- args
+        localargs$return_type <- "gradient"
+        localargs$init <- beta
+        return(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
+    }
+    negll.slow <- function(betafull) {
+        beta <- betafull[1:ncol(args$X)]
+        betas <- betafull[-(1:ncol(args$X))]
+        time <- args$time
+        eta <- as.vector(args$X %*% beta)
+        etaD <- as.vector(args$XD %*% beta)
+        logtstar <- log(args$time) - eta
+        etas <- as.vector(predict(args$design,logtstar) %*% betas)
+        etaDs <- as.vector(predict(args$designD,logtstar) %*% betas)
+        ## fix bounds on etaDs
+        eps <- etaDs*0. + 1e-8;
+        pen <- sum(pmin(etaDs,eps)*pmin(etaDs,eps))
+        etaDs <- pmax(etaDs, eps)
+        ## fix bounds on etaD
+        pen = pen + sum(pmin(1/time-etaD,eps)*pmin(1/time-etaD,eps))
+        etaD <- 1/time - pmax(1/time-etaD, eps);
+        logh <- etas + log(etaDs) + log(1/time -etaD)
+        H <- exp(etas)
+        pen - (sum(logh*event) - sum(H))
+    }
+    neglli <- function(betafull) {
+        beta <- betafull[1:ncol(args$X)]
+        betas <- betafull[-(1:ncol(args$X))]
+        time <- args$time
+        eta <- as.vector(args$X %*% beta)
+        etaD <- as.vector(args$XD %*% beta)
+        logtstar <- log(args$time) - eta
+        etas <- as.vector(predict(args$design,logtstar) %*% betas)
+        etaDs <- as.vector(predict(args$designD,logtstar) %*% betas)
+        ## fix bounds on etaDs
+        eps <- etaDs*0. + 1e-8;
+        pen <- pmin(etaDs,eps)*pmin(etaDs,eps)
+        etaDs <- pmax(etaDs, eps)
+        ## fix bounds on etaD
+        pen <- pen + pmin(1/time-etaD,eps)*pmin(1/time-etaD,eps)
+        etaD <- 1/time - pmax(1/time-etaD, eps);
+        logh <- etas + log(etaDs) + log(1/time -etaD)
+        H <- exp(etas)
+        pen - (logh*event - H)
+    }
+    gradi <- function(betafull) {
+        beta <- betafull[1:ncol(args$X)]
+        betas <- betafull[-(1:ncol(args$X))]
+        time <- args$time
+        eta <- as.vector(args$X %*% beta)
+        etaD <- as.vector(args$XD %*% beta)
+        logtstar <- log(args$time) - eta
+        Xs <- predict(args$design,logtstar)
+        XDs <- predict(args$designD,logtstar)
+        XDDs <- predict(args$designDD,logtstar)
+        etas <- as.vector(Xs %*% betas)
+        etaDs <- as.vector(XDs %*% betas)
+        etaDDs <- as.vector(XDDs %*% betas)
+        ## H calculations
+        H <- exp(etas)
+        dHdbetas <- H*Xs
+        dHdbeta <- -H*etaDs*X
+        ## penalties
+        eps <- etaDs*0. + 1e-8;
+        pindexs <- etaDs < eps
+        pindex <- 1/time-etaD < eps
+        ## fix bounds on etaDs
+        pgrads <- cbind(-2*etaDs*etaDDs*X,2*etaDs*XDs)
+        etaDs <- pmax(etaDs, eps)
+        ## fix bounds on etaD
+        pgrad <- cbind(-2*(1/time-etaD)*XD,XDs*0)
+        etaD <- 1/time - pmax(1/time-etaD, eps)
+        ## 
+        logh <- etas + log(etaDs) + log(1/time -etaD)
+        h <- exp(logh)
+        dloghdbetas <- Xs+XDs/etaDs*(!pindexs)
+        dloghdbeta <- -etaDs*X*(!pindexs & !pindex) - etaDDs*X/etaDs*(!pindexs & !pindex) - XD/(1/time-etaD)*(!pindex & !pindexs)
+        dhdbetas <- h*dloghdbetas
+        dhdbeta <- h*dloghdbeta
+        cbind(-dloghdbeta*event+dHdbeta, -dloghdbetas*event+dHdbetas) + pindex*pgrad + pindexs*pgrads
+    }
+    gradient2 <- function(betafull)
+        colSums(gradi(betafull))
+    ##browser()
+    if (FALSE) {
+        
+        library(rstpm2)
+        system.time(aft0 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4))
+        system.time(aft1 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4,use.gr=FALSE))
+        ##
+        brcancer100 <- brcancer[rep(1:nrow(brcancer),each=100),]
+        system.time(aft0 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer100,df=4))
+        system.time(aft1 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer100,df=4,use.gr=FALSE))
+        ## in browser():
+        args2 <- args
+        args$return_type <- "nmmin"
+        args2$return_type <- "vmmin"
+        system.time(fit <- .Call("aft_model_output", args, PACKAGE = "rstpm2"))
+        system.time(fit2 <- .Call("aft_model_output", args2, PACKAGE = "rstpm2"))
+        ##
+        scale <- c(1,1,1,1,1)
+        as.vector(gradient(scale*init))
+        colSums(gradi(scale*init))
+        tmp <- sapply(1:length(init), function(i) {eps=1e-4; delta=rep(0,length(init)); delta[i]=eps; (neglli(scale*init+delta)-neglli(scale*init-delta))/(2*eps) })
+        apply(tmp - gradi(scale*init), 2, range)
+        ##
+        ## check designD and designDD
+        head(predict(design,logtstar+1e-5)-predict(design,logtstar-1e-5))/2e-5
+        head(predict(designD,logtstar))
+        head(predict(designD,logtstar+1e-5)-predict(designD,logtstar-1e-5))/2e-5
+        head(predict(designDD,logtstar))
+        ##        
+        aft1 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4,
+                    init=coef(aft0))
+        init <- coef(aft0)
+        scale <- -1
+        negll(scale*init)
+        negll.slow(scale*init)
+        tmp <- sapply(1:length(init), function(i) {eps=1e-5; delta=rep(0,length(init)); delta[i]=eps; (neglli(scale*init+delta)-neglli(scale*init-delta))/(2*eps) })
+        head(tmp[!event,])
+        head(gradi(scale*init)[!event,])
+        head(tmp[event,])
+        head(gradi(scale*init)[event,])
+        range(tmp - gradi(scale*init))
+    }
     parnames(negll) <- names(init)
     ## MLE
+    args$return_type <- if (use.gr) "vmmin" else "nmmin"
     fit <- .Call("aft_model_output", args, PACKAGE="rstpm2")
     args$init <- coef <- as.vector(fit$coef)
     hessian <- fit$hessian
     names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
-    mle2 <- mle2(negll, coef, vecpar=TRUE, control=control, ..., eval.only=TRUE)
+    mle2 <- mle2(negll, coef, gr=gradient, vecpar=TRUE, control=control, ..., eval.only=TRUE)
     mle2@vcov <- if (!inherits(vcov <- try(solve(hessian)), "try-error")) vcov else matrix(NA,length(coef), length(coef))
     mle2@details$convergence <- fit$fail # fit$itrmcd
     out <- as(mle2, "aft")
@@ -564,6 +801,10 @@ predictSurvival.aft <- function(obj, time=obj@args$time, X=obj@args$X) {
 ## simulate from Weibull with one binary covariate
 if (FALSE) {
 
+    require(rstpm2)
+    summary(aft0 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4))
+    aft1 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4,init=coef(aft1))
+    
     require(rstpm2)
     summary(aft0 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4))
     plot(survfit(Surv(rectime,censrec==1)~hormon,data=brcancer),col=1:2)

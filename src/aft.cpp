@@ -275,6 +275,16 @@ namespace rstpm2 {
       q_matrix = as<mat>(args["q.const"]);
       s = ns(boundaryKnots, interiorKnots, q_matrix, 1);
     }
+    mat rmult(mat m, vec v) {
+      mat out(m);
+      out.each_col() %= v;
+      return out;
+    }
+    mat rmult(mat m, uvec v) {
+      mat out(m);
+      out.each_col() %= conv_to<vec>::from(v);
+      return out;
+    }
     double objective(vec betafull)
     {
       vec beta = betafull.subvec(0,X.n_cols-1);
@@ -296,8 +306,47 @@ namespace rstpm2 {
       double f = pen - (dot(logh,event) - sum(H));
       return f;
     }
+    vec gradient(vec betafull)
+    {
+      vec beta = betafull.subvec(0,X.n_cols-1);
+      vec betas = betafull.subvec(X.n_cols,betafull.size()-1);
+      vec eta = X * beta;
+      vec etaD = XD * beta;
+      vec logtstar = log(time) - eta;
+      mat Xs = s.basis(logtstar);
+      mat XDs = s.basis(logtstar,1);
+      mat XDDs = s.basis(logtstar,2);
+      vec etas = Xs * betas;
+      vec etaDs = XDs * betas;
+      vec etaDDs = XDDs * betas;
+      // H calculations
+      vec H = exp(etas);
+      mat dHdbetas = rmult(Xs,H);
+      mat dHdbeta = -rmult(X,H % etaDs);
+      // penalties
+      vec eps = etaDs*0. + 1e-8;
+      uvec pindex = (etaDs < eps);
+      uvec pindexs = ((1.0/time - etaD) < eps);
+      // fix bounds on etaDs
+      mat pgrads = join_rows(-2*rmult(X,etaDs % etaDDs),2*rmult(XDs,etaDs));
+      etaDs = max(etaDs, eps);
+      // fix bounds on etaD
+      mat pgrad = join_rows(-2*rmult(XD,1/time-etaD),XDs*0.0);
+      etaD = 1/time - max(1/time-etaD, eps);
+      vec logh = etas + log(etaDs) + log(1/time -etaD);
+      vec h = exp(logh);
+      mat dloghdbetas = Xs+rmult(XDs,1/etaDs % (1-pindexs));
+      mat dloghdbeta = -rmult(X,etaDs % (1-pindexs) % (1-pindex)) - rmult(X,etaDDs/etaDs % (1-pindexs) % (1-pindex)) - rmult(XD, (1-pindexs) % (1-pindex)/(1/time-etaD));
+      mat gradi = join_rows(-rmult(dloghdbeta,event)+dHdbeta, -rmult(dloghdbetas,event)+dHdbetas) + rmult(pgrad,pindex) + rmult(pgrads,pindexs);
+      vec out = sum(gradi,0).t();
+      return out;
+    }
     double objective(NumericVector betafull) {
       return objective(as<vec>(wrap(betafull)));
+    }
+    NumericVector gradient(NumericVector betafull) {
+      vec value = gradient(as<vec>(wrap(betafull)));
+      return as<NumericVector>(wrap(value));
     }
     vec survival(vec time, mat X) {
       vec beta = init.subvec(0,X.n_cols-1);
@@ -314,9 +363,10 @@ namespace rstpm2 {
     aft model(args);
     List list = as<List>(args);
     std::string return_type = as<std::string>(list["return_type"]);
-    if (return_type == "optim") {
+    if (return_type == "nmmin") {
       // model.pre_process();
       NelderMead nm;
+      nm.trace = as<int>(list["trace"]);
       NumericVector betafull = as<NumericVector>(wrap(model.init));
       nm.optim<aft>(betafull,model);
       // model.post_process();
@@ -324,8 +374,21 @@ namespace rstpm2 {
 			  _("coef")=wrap(nm.coef),
 			  _("hessian")=wrap(nm.hessian));
     }
+    else if (return_type == "vmmin") {
+      // model.pre_process();
+      BFGS bfgs;
+      bfgs.trace = as<int>(list["trace"]);
+      NumericVector betafull = as<NumericVector>(wrap(model.init));
+      bfgs.optim<aft>(betafull,model);
+      // model.post_process();
+      return List::create(_("fail")=bfgs.fail, 
+			  _("coef")=wrap(bfgs.coef),
+			  _("hessian")=wrap(bfgs.hessian));
+    }
     else if (return_type == "objective")
       return wrap(model.objective(model.init));
+    else if (return_type == "gradient")
+      return wrap(model.gradient(model.init));
     else if (return_type == "survival")
       return wrap(model.survival(as<vec>(list["time"]),as<mat>(list["X"])));
     else {
