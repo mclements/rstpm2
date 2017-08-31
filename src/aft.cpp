@@ -256,14 +256,15 @@ namespace rstpm2 {
   public:
     List args;
     vec init;
-    mat X;
+    mat X, X0;
     mat XD;
     vec event;
-    vec time;
+    vec time, time0;
     vec boundaryKnots;
     vec interiorKnots;
     mat q_matrix;
     ns s;
+    bool delayed;
     aft(SEXP list) : args(as<List>(list)) {
       init = as<vec>(args["init"]);
       X = as<mat>(args["X"]);
@@ -274,6 +275,11 @@ namespace rstpm2 {
       interiorKnots = as<vec>(args["interiorKnots"]);
       q_matrix = as<mat>(args["q.const"]);
       s = ns(boundaryKnots, interiorKnots, q_matrix, 1);
+      delayed = as<bool>(args["delayed"]);
+      if (delayed) {
+	time0 = as<vec>(args["time0"]);
+	X0 = as<mat>(args["X0"]);
+      }
     }
     mat rmult(mat m, vec v) {
       mat out(m);
@@ -304,6 +310,16 @@ namespace rstpm2 {
       vec logh = etas + log(etaDs) + log(1/time -etaD);
       vec H = exp(etas);
       double f = pen - (dot(logh,event) - sum(H));
+      if (delayed) {
+	vec eta0 = X0 * beta;
+	vec logtstar0 = log(time0) - eta0;
+	vec etas0 = s.basis(logtstar0) * betas;
+	vec etaDs0 = s.basis(logtstar0,1) * betas;
+	vec H0 = exp(etas0);
+	vec eps0 = etaDs0*0. + 1e-8;
+	pen += dot(min(etaDs0,eps0), min(etaDs0,eps0));
+	f -= sum(H0);
+      }
       return f;
     }
     vec gradient(vec betafull)
@@ -325,8 +341,8 @@ namespace rstpm2 {
       mat dHdbeta = -rmult(X,H % etaDs);
       // penalties
       vec eps = etaDs*0. + 1e-8;
-      uvec pindex = (etaDs < eps);
-      uvec pindexs = ((1.0/time - etaD) < eps);
+      uvec pindexs = (etaDs < eps);
+      uvec pindex = ((1.0/time - etaD) < eps);
       // fix bounds on etaDs
       mat pgrads = join_rows(-2*rmult(X,etaDs % etaDDs),2*rmult(XDs,etaDs));
       etaDs = max(etaDs, eps);
@@ -339,6 +355,24 @@ namespace rstpm2 {
       mat dloghdbeta = -rmult(X,etaDs % (1-pindexs) % (1-pindex)) - rmult(X,etaDDs/etaDs % (1-pindexs) % (1-pindex)) - rmult(XD, (1-pindexs) % (1-pindex)/(1/time-etaD));
       mat gradi = join_rows(-rmult(dloghdbeta,event)+dHdbeta, -rmult(dloghdbetas,event)+dHdbetas) + rmult(pgrad,pindex) + rmult(pgrads,pindexs);
       vec out = sum(gradi,0).t();
+      if (delayed) {
+	vec eta0 = X0 * beta;
+	vec logtstar0 = log(time0) - eta0;
+	mat Xs0 = s.basis(logtstar0);
+	mat XDs0 = s.basis(logtstar0,1);
+	mat XDDs0 = s.basis(logtstar0,2);
+	vec etas0 = Xs0 * betas;
+	vec etaDs0 = XDs0 * betas;
+	vec etaDDs0 = XDDs0 * betas;
+	vec H0 = exp(etas0);
+	mat dHdbetas0 = rmult(Xs0,H0);
+	mat dHdbeta0 = -rmult(X0,H0 % etaDs0);
+	vec eps0 = etaDs0*0. + 1e-8;
+	uvec pindexs0 = (etaDs0 < eps0);
+	etaDs0 = max(etaDs0, eps0);
+	mat pgrads0 = join_rows(-2*rmult(X0,etaDs0 % etaDDs0),2*rmult(XDs0,etaDs0));
+	out += sum(join_rows(-dHdbeta0, -dHdbetas0) + rmult(pgrads0,pindexs0), 0).t();
+      }
       return out;
     }
     double objective(NumericVector betafull) {

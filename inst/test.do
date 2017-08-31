@@ -137,3 +137,12 @@ timer list 1
 
 
 stpm2 treat i.trial, df(3) scale(hazard)
+
+* delayed entry
+webuse brcancer, clear
+preserve
+  gen entry = 0
+  replace entry = rectime*0.5 if hormon==0
+  stset rectime, f(censrec==1) enter(entry)
+  staft hormon, df(3)
+restore

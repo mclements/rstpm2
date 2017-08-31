@@ -292,6 +292,8 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
       time0 <- eval(time0Expr, data, parent.frame())
       if (any(time0>0 & time0<1e-4))
           warning("Some entry times < 1e-4: consider transforming time to avoid problems with finite differences")
+    } else {
+        time0 <- NULL
     }
     event <- eval(eventExpr,data)
     ## if all the events are the same, we assume that they are all events, else events are those greater than min(event)
@@ -306,10 +308,17 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     data$logHhat <- pmax(-18,log(-log(S0hat(coxph.obj))))
     ##
     ## Weibull regression
-    survreg1 <- survreg(formula, data)
-    coef1 <- coef(survreg1)
-    coef1 <- coef1[-1] # assumes intercept included in the formula; ignores smooth.formula
-    pred1 <- predict(survreg1)
+    if (delayed) {
+        stopifnot(require(eha))
+        survreg1 <- eha::aftreg(formula, data)
+        coef1 <- coef(survreg1)
+        coef1 <- coef1[1:(length(coef1)-2)]
+    } else {
+        survreg1 <- survival::survreg(formula, data)
+        coef1 <- coef(survreg1)
+        coef1 <- coef1[-1] # assumes intercept included in the formula; ignores smooth.formula
+    }
+    ## pred1 <- predict(survreg1)
     data$logtstar <- log(time)    
     ## data$logtstar <- log(time/pred1)    
     ## initial values and object for lpmatrix predictions
@@ -368,7 +377,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         which0[!ind0] <- NaN
         data0 <- data[ind0,,drop=FALSE] # data for delayed entry times
         data0[[timeVar]] <- data0[[time0Var]]
-        X0 <- transX(lpmatrix.lm(lm.obj, data0), data0)
+        X0 <- lpmatrix.lm(lm.obj, data0)
         wt0 <- wt[ind0]
         rm(data0)
     }
@@ -388,6 +397,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     args <- list(init=init,X=X,XD=XD,wt=wt,event=ifelse(event,1,0),time=time,y=y,
                  timeVar=timeVar,timeExpr=timeExpr,terms=mt,
                  delayed=delayed, X0=X0, wt0=wt0, parscale=parscale, reltol=reltol,
+                 time0=if (delayed) time0[time0>0] else NULL,
                  trace = as.integer(trace), map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L,
                  boundaryKnots=attr(design,"Boundary.knots"), q.const=t(attr(design,"q.const")),
                  interiorKnots=attr(design,"knots"), design=design, designD=designD,
@@ -483,8 +493,14 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     }
     gradient2 <- function(betafull)
         colSums(gradi(betafull))
-    ##browser()
+    ## browser()
     if (FALSE) {
+
+        library(rstpm2)
+        ##debug(aft)
+        brcancer2 <- transform(brcancer, entry=ifelse(hormon==0, rectime/2, 0))
+        system.time(aft1 <- aft(Surv(entry,rectime,censrec==1)~hormon,data=brcancer2,df=4,use.gr=FALSE))
+        system.time(aft0 <- aft(Surv(entry,rectime,censrec==1)~hormon,data=brcancer2,df=4))
         
         library(rstpm2)
         system.time(aft0 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4))

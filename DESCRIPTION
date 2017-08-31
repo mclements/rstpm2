@@ -10,7 +10,7 @@ Version: 1.3.5
 Date: 2017-05-17
 Depends: R (>= 3.0.2), methods, survival, splines
 Imports: graphics, Rcpp (>= 0.10.2), numDeriv, stats, mgcv, bbmle (>= 1.0.3), fastGHQuad
-Suggests: RUnit
+Suggests: RUnit, eha
 LinkingTo: Rcpp,RcppArmadillo
 Author: Mark Clements [aut, cre], Xing-Rong Liu [aut], Paul Lambert [ctb]
 Maintainer: Mark Clements <mark.clements@ki.se>
