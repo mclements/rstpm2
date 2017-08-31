@@ -6,15 +6,15 @@ Authors@R: c(person("Mark", "Clements", role = c("aut", "cre"),
 	      person("Xing-Rong", "Liu", role = "aut",
 		     email = "xingrong.liu@ki.se"),
 	      person("Paul", "Lambert", role = "ctb", email="pl4@leicester.ac.uk"))
-Version: 1.3.5
-Date: 2017-05-17
+Version: 1.4.0
+Date: 2017-09-01
 Depends: R (>= 3.0.2), methods, survival, splines
 Imports: graphics, Rcpp (>= 0.10.2), numDeriv, stats, mgcv, bbmle (>= 1.0.3), fastGHQuad
 Suggests: RUnit, eha
 LinkingTo: Rcpp,RcppArmadillo
 Author: Mark Clements [aut, cre], Xing-Rong Liu [aut], Paul Lambert [ctb]
 Maintainer: Mark Clements <mark.clements@ki.se>
-Description: R implementation of generalized survival models, where g(S(t|x))=eta(t,x) for a link function g, survival S at time t with covariates x and a linear predictor eta(t,x). The main assumption is that the time effect(s) are smooth. For fully parametric models with natural splines, this re-implements Stata's 'stpm2' function, which are flexible parametric survival models developed by Royston and colleagues. We have extended the parametric models to include any smooth parametric smoothers for time. We have also extended the model to include any smooth penalized smoothers from the 'mgcv' package, using penalized likelihood. These models include left truncation, right censoring, interval censoring, gamma frailties and normal random effects. 
+Description: R implementation of generalized survival models, where g(S(t|x))=eta(t,x) for a link function g, survival S at time t with covariates x and a linear predictor eta(t,x). The main assumption is that the time effect(s) are smooth. For fully parametric models with natural splines, this re-implements Stata's 'stpm2' function, which are flexible parametric survival models developed by Royston and colleagues. We have extended the parametric models to include any smooth parametric smoothers for time. We have also extended the model to include any smooth penalized smoothers from the 'mgcv' package, using penalized likelihood. These models include left truncation, right censoring, interval censoring, gamma frailties and normal random effects. This also includes a smooth implementation of accelerated failure time models.
 URL: http://github.com/mclements/rstpm2
 BugReports: http://github.com/mclements/rstpm2/issues
 License: GPL-2 | GPL-3

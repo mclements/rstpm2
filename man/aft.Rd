@@ -11,7 +11,11 @@ modelled as exp(-exp(eta_0(log(t*)))), where eta_0(log(t*)) is a linear
 predictor using natural splines.
 }
 \usage{
-aft(formula, data, smooth.formula = NULL, df = 3, control = list(parscale = 1, maxit = 1000), init = NULL, weights = NULL, timeVar = "", time0Var = "", reltol = 1e-08, trace = 0, contrasts = NULL, subset = NULL, use.gr = TRUE, ...)
+aft(formula, data, smooth.formula = NULL, df = 3,
+    control = list(parscale = 1, maxit = 1000),
+    init = NULL, weights = NULL, timeVar = "", time0Var = "",
+    reltol = 1e-08, trace = 0, contrasts = NULL, subset = NULL,
+    use.gr = TRUE, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -92,9 +96,9 @@ An \code{stpm2-class} object that inherits from \code{mle2-class}.
 \author{
 Mark Clements.
 }
-\note{
-%%  ~~further notes~~
-}
+%% \note{
+%% %%  ~~further notes~~
+%% }
 
 %% ~Make other sections like Warning with \section{Warning }{....} ~
 

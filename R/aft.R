@@ -309,10 +309,11 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     ##
     ## Weibull regression
     if (delayed) {
-        stopifnot(require(eha))
-        survreg1 <- eha::aftreg(formula, data)
-        coef1 <- coef(survreg1)
-        coef1 <- coef1[1:(length(coef1)-2)]
+        if (requireNamespace("eha", quietly = TRUE)) {
+            survreg1 <- eha::aftreg(formula, data)
+            coef1 <- coef(survreg1)
+            coef1 <- coef1[1:(length(coef1)-2)]
+        } else coef1 <- rep(0,ncol(X))
     } else {
         survreg1 <- survival::survreg(formula, data)
         coef1 <- coef(survreg1)
