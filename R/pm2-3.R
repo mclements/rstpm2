@@ -555,6 +555,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
       rhs(logH.formula) <- rhs(tvc.formula)
     full.formula <- formula
     rhs(full.formula) <- rhs(formula) %call+% rhs(logH.formula)
+    Z.formula <- Z
     ##
     ## set up the data
     ## ensure that data is a data frame
@@ -721,7 +722,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
                  kappa=1, trace = trace, oldcluster=cluster, frailty=frailty, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
                  RandDist=RandDist, optimiser=optimiser,
-                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD, maxkappa=maxkappa, Z.formula = Z, thetaAO = theta.AO, excess=excess, data=data,
+                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD, maxkappa=maxkappa, Z=Z, Z.formula = Z.formula, thetaAO = theta.AO, excess=excess, data=data,
                  robust_initial = robust_initial)
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
