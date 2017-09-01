@@ -18,6 +18,16 @@
 ##   require(bbmle)
 ## }
 
+## Bug report from Alessandro for 1.4.0
+library(rstpm2)
+data(kidney)
+fitg = stpm2(Surv(time, status) ~ age + sex, cluster = kidney$id, data = kidney, 
+  RandDist = "Gamma")
+head(predict(fitg))
+fitln = stpm2(Surv(time, status) ~ age + sex, cluster = kidney$id, data = kidney, 
+  RandDist = "LogN")
+head(predict(fitln))
+
 ## 2017-06-21 
 ## Verify: the choice of basis dimension (default: k=10) for penalized regression splines is not sensitive to estimates
 ## Adjusted by a constant coefficient (e.g. alpha=2) to correct potential overfitting by GCV for lambda
