@@ -1548,7 +1548,20 @@ setMethod("plot", signature(x="stpm2", y="missing"),
                    add=FALSE,ci=!add,rug=!add,
                    var=NULL,exposed=incrVar(var),times=NULL,...)
               plot.stpm2.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
-                              ylab=ylab, line.col=line.col, lty=lty, add=add,
+                              ylab=ylab, line.col=line.col, ci.col=ci.col, lty=lty, add=add,
+                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
+          )
+if (!isGeneric("lines"))
+    setGeneric("lines", function(x,...) {
+        standardGeneric("lines")
+    })
+setMethod("lines", signature(x="stpm2"),
+          function(x,newdata=NULL,type="surv",
+                   col=1,ci.col="grey",lty=par("lty"),
+                   ci=FALSE,rug=FALSE,
+                   var=NULL,exposed=incrVar(var),times=NULL,...)
+              plot.stpm2.base(x=x, newdata=newdata, type=type, 
+                              line.col=col, ci.col=ci.col, lty=lty, add=TRUE,
                               ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
           )
 derivativeDesign <- 
@@ -2578,6 +2591,15 @@ setMethod("plot", signature(x="pstpm2", y="missing"),
                    var=NULL,exposed=incrVar(var),times=NULL,...)
               plot.stpm2.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
                               ylab=ylab, line.col=line.col, lty=lty, add=add,
+                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
+          )
+setMethod("lines", signature(x="pstpm2"),
+          function(x,newdata=NULL,type="surv",
+                   col=1,ci.col="grey",lty=par("lty"),
+                   ci=FALSE,rug=FALSE,
+                   var=NULL,exposed=incrVar(var),times=NULL,...)
+              plot.stpm2.base(x=x, newdata=newdata, type=type, 
+                              line.col=col, ci.col=ci.col, lty=lty, add=TRUE,
                               ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
           )
 

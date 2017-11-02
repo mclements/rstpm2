@@ -3,6 +3,7 @@
 \docType{class}
 \alias{pstpm2-class}
 \alias{plot,pstpm2,missing-method}
+\alias{lines,pstpm2-method}
 %\alias{predict,pstpm2-method}
 \alias{predictnl,pstpm2-method}
 \alias{AIC,pstpm2-method}
@@ -66,6 +67,7 @@ Class \code{"\linkS4class{mle2}"}, directly.
 \section{Methods}{
   \describe{
     \item{plot}{\code{signature(x = "pstpm2", y = "missing")}: ... }
+    \item{lines}{\code{signature(x = "pstpm2", ...)}: ... }
     %\item{predict}{\code{signature(object = "pstpm2")}: ... }
     \item{anova}{\code{signature(object = "pstpm2",...)}: ... }
     \item{AIC}{\code{signature(object = "pstpm2",...,k=2)}: ... }

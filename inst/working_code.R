@@ -27,6 +27,9 @@ head(predict(fitg))
 fitln = stpm2(Surv(time, status) ~ age + sex, cluster = kidney$id, data = kidney, 
   RandDist = "LogN")
 head(predict(fitln))
+fitln = stpm2(Surv(time, status) ~ age + sex, cluster = kidney$id, data = kidney, Z=~age-1,
+  RandDist = "LogN")
+head(predict(fitln))
 
 ## 2017-06-21 
 ## Verify: the choice of basis dimension (default: k=10) for penalized regression splines is not sensitive to estimates
@@ -478,6 +481,11 @@ stmixed <- read.dta("http://fmwww.bc.edu/repec/bocode/s/stmixed_example2.dta")
 stmixed2 <- transform(stmixed, start = ifelse(treat,stime/2,0))
 summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat-1,adaptive=TRUE,optimiser="NelderMead"))
 summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat-1,adaptive=TRUE))
+##
+library(foreign)
+library(rstpm2)
+stmixed <- read.dta("http://fmwww.bc.edu/repec/bocode/s/stmixed_example2.dta")
+summary(r <- stpm2(Surv(stime,event)~treat,data=stmixed,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat-1))
 
 ## non-adaptive
 system.time(print(summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat,adaptive=FALSE,nodes=20,optimiser="NelderMead")))) # slow and gradients not close to zero
@@ -490,6 +498,7 @@ summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed2,cluster=stmixed$trial,
 ## Simple examples with no random effects and with a random intercept (check: deviances)
 summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed,df=3))
 summary(r2 <- stpm2(Surv(stime,event)~treat,data=stmixed,cluster=stmixed$trial,RandDist="LogN",df=3,Z=~treat-1))
+
 
 ## check modes and sqrttau
 args <- r2@args
