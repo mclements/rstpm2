@@ -1499,7 +1499,7 @@ plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", 
 
 plot.stpm2.base <- 
           function(x,y,newdata=NULL,type="surv",
-                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
+                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),log="",
                    add=FALSE,ci=!add,rug=!add,
                    var=NULL,exposed=incrVar(var),times=NULL,...) {
               if (type %in% c("meansurv","meansurvdiff","af")) {
@@ -1528,7 +1528,7 @@ plot.stpm2.base <-
                                  uncured="Uncured distribution")
               xx <- attr(y,"newdata")
               xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
-              if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, ...)
+              if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, log=log, ...)
               if (ci) {
                   polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
                   lines(xx,y[,1],col=line.col,lty=lty,...)
