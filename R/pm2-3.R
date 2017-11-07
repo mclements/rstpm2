@@ -260,22 +260,22 @@ predictnl <- function (object, ...)
 }
 predictnl.default <- function(object,fun,newdata=NULL,gd=NULL,...)
   {
-    ## link=c(I,log,sqrt),invlink=NULL
-    ## link <- match.arg(link)
-    ## if (is.null(invlink))
-    ##       invlink <- switch(deparse(substitute(link)),I=I,log=exp,sqrt=function(x) x^2)
-    if (is.null(newdata) && !is.null(object$data))
-      newdata <- object$data
-    localf <- function(coef,...)
-      {
-        if ("coefficients" %in% names(object)) {
-            object$coefficients <- coef
-        } else if ("coef" %in% names(object)) {
-            object$coef <- coef
-        } else coef(object) <- coef
-        fun(object,...)
+      if (!is.null(newdata) || "newdata" %in% names(formals(fun))) {
+          local1 <- function(coef,newdata,...)
+              {
+                  coef(object) <- coef
+                  fun(object,newdata=newdata,...)
+              }
+          numDeltaMethod(object, local1, newdata=newdata, gd=gd, ...)
       }
-    numDeltaMethod(object,localf,newdata=newdata,gd=gd,...)
+      else {
+          local2 <- function(coef,...)
+              {
+                  coef(object) <- coef
+                  fun(object,...)
+              }
+          numDeltaMethod(object, local2, gd=gd, ...)
+      }
   }
 setMethod("predictnl", "mle2", function(object,fun,newdata=NULL,gd=NULL,...)
   {
@@ -288,6 +288,36 @@ setMethod("predictnl", "mle2", function(object,fun,newdata=NULL,gd=NULL,...)
       }
     numDeltaMethod(object,localf,newdata=newdata,gd=gd,...)
   })
+print.predictnl <- function(x, ...)
+    print(structure(x,class=NULL),...)
+confint.predictnl <- function(object,parm,level=0.95,...) {
+    cf <- object$fit
+    pnames <- names(cf)
+    if (is.null(pnames))
+        pnames <- 1:length(cf)
+    if (missing(parm)) 
+        parm <- pnames
+    else if (is.numeric(parm)) 
+        parm <- pnames[parm]
+    a <- (1 - level)/2
+    a <- c(a, 1 - a)
+    pct <- format.perc(a, 3)
+    fac <- qnorm(a)
+    ci <- array(NA, dim = c(length(parm), 2L), dimnames = list(parm, 
+        pct))
+    ses <- object$se.fit[parm]
+    ci[] <- as.vector(cf[parm]) + ses %o% fac
+    ci
+}
+predictnl.lm <- 
+function (object, fun, newdata = NULL, ...) 
+{
+    if (is.null(newdata) && "newdata" %in% names(formals(fun))) {
+        stopifnot(!is.null(object$data))
+        newdata <- object$data
+    }
+    predictnl.default(object, fun, newdata, ...)
+}
 ## setMethod("predictnl", "mle", function(object,fun,gd=NULL,...)
 ##   {
 ##     localf <- function(coef,...)
@@ -1558,11 +1588,7 @@ setMethod("plot", signature(x="stpm2", y="missing"),
                               ylab=ylab, line.col=line.col, ci.col=ci.col, lty=lty, add=add,
                               ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
           )
-if (!isGeneric("lines"))
-    setGeneric("lines", function(x,...) {
-        standardGeneric("lines")
-    })
-setMethod("lines", signature(x="stpm2"),
+lines.stpm2 <- 
           function(x,newdata=NULL,type="surv",
                    col=1,ci.col="grey",lty=par("lty"),
                    ci=FALSE,rug=FALSE,
@@ -1570,7 +1596,8 @@ setMethod("lines", signature(x="stpm2"),
               plot.stpm2.base(x=x, newdata=newdata, type=type, 
                               line.col=col, ci.col=ci.col, lty=lty, add=TRUE,
                               ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
-          )
+setMethod("lines", signature(x="stpm2"), lines.stpm2)
+
 derivativeDesign <- 
 function (functn, lower = -1, upper = 1, rule = NULL,
     ...) 
@@ -2600,15 +2627,14 @@ setMethod("plot", signature(x="pstpm2", y="missing"),
                               ylab=ylab, line.col=line.col, lty=lty, add=add,
                               ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
           )
-setMethod("lines", signature(x="pstpm2"),
-          function(x,newdata=NULL,type="surv",
+lines.pstpm2 <- function(x,newdata=NULL,type="surv",
                    col=1,ci.col="grey",lty=par("lty"),
                    ci=FALSE,rug=FALSE,
                    var=NULL,exposed=incrVar(var),times=NULL,...)
               plot.stpm2.base(x=x, newdata=newdata, type=type, 
                               line.col=col, ci.col=ci.col, lty=lty, add=TRUE,
                               ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
-          )
+setMethod("lines", signature(x="pstpm2"), lines.pstpm2)
 
 ## sandwich variance estimator (from the sandwich package)
 
