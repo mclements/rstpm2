@@ -1,3 +1,10 @@
+## Utilities
+## copied from stats:::format.perc
+format.perc <- 
+    function (probs, digits) 
+        paste(format(100 * probs, trim = TRUE, scientific = FALSE, digits = digits), 
+              "%")
+
 ## extension of ns() to include different boundary derivatives,
 ## centering and cure
 nsx <- 
