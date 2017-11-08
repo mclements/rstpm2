@@ -48,7 +48,22 @@
 \noindent where $\eta$ is a function of both time $t$ and covariates $x$. The linear predictor can be constructed in a flexible manner. Royston and Parmar (2003) focused on time being modelled using natural splines for log-time, including left truncation and relative survival. We have implemented the Royston-Parmar model class and extended it in several ways, allowing for: (i) general parametric models for $\eta(t,x)$, including B-splines and natural splines for different transformations of time; (ii) general semi-parametric models for $\eta(t,x)$ including penalised smoothers together with unpenalised parametric functions; (iii) interval censoring; and (iv) frailties using Gamma and log-Normal distributions. Fully parametric models are estimated using maximum likelihood, while the semi-parametric models are estimated using maximum penalised likelihood with smoothing parameters selected using 
 A more detailed theoretical development is available from the paper by Liu, Pawitan and Clements (available on request). 
 
-Why would you want to use these models? 
+
+<<echo=FALSE,results=hide>>=
+options(width=80,useFancyQuotes="UTF-8")
+library(rstpm2)
+@ 
+
+\section{Independent survival analysis}
+
+We begin with some simple proportional hazard models using the brcancer dataset.
+
+<<>>=
+fit <- stpm2(Surv(rectime,censrec==1)~hormon,
+             data=brcancer, df=4)
+summary(fit)
+@ 
+
 
 
 \section{Mean survival}
@@ -72,7 +87,7 @@ Initially, we merge the patient data with the all cause mortality rates.
 
 <<echo=FALSE,results=hide>>=
 options(width=80,useFancyQuotes="UTF-8")
-require(rstpm2)
+library(rstpm2)
 @ 
 <<>>=
 popmort2 <- transform(rstpm2::popmort,exitage=age,exityear=year,age=NULL,year=NULL)

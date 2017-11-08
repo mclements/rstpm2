@@ -61,6 +61,7 @@ Class \code{"\linkS4class{mle2}"}, directly.
     %\item{predict}{\code{signature(object = "stpm2")}: ... }
     \item{predictnl}{\code{signature(object = "stpm2", ...)}: ... }
     \item{summary}{\code{signature(object = "stpm2", ...)}: ... }
+    \item{eform}{\code{signature(object = "stpm2", ...)}: ... }
 	 }
 }
 %% \references{ ~put references to the literature/web site here ~ }

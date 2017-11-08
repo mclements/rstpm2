@@ -95,7 +95,10 @@ API defaults to the latter case (ii).  To support this approach, the
 although its use is not encouraged due to its clumsiness.
 }
 \value{ Returns an object of class
-\code{predictnl} with methods \code{print} and \code{confint}.
+an object with class \code{c("predictnl","data.frame")} elements
+\code{c("fit","se.fit","Estimate","SE")} and with methods \code{print}
+and \code{confint}. Note that the Estimate and SE fields are deprecated
+and their use is discouraged, as we would like to remove them from future releases.
 }
 %% \references{
 %% %% ~put references to the literature/web site here ~
