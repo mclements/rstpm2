@@ -20,7 +20,7 @@
 \Abstract{
   
   This vignette outlines the methods and provides some examples for
-  link-based survival models as implemented in the \proglang{R}
+  generalised survival models as implemented in the \proglang{R}
   \pkg{rstpm2} package.
 
 }
@@ -39,31 +39,111 @@
 
 \section{Background and theory}
 
-\emph{Link-based survival models} provide a flexible and general approach to modelling survival or time-to-event data. The survival function $S(t|x)$ to time $t$ for covariates $x$ is defined in terms of a link function $G$ and a linear prediction $\eta(t,x)$, such that
+\emph{Generalised survival models} provide a flexible and general approach to modelling survival or time-to-event data. The survival function $S(t|x)$ to time $t$ for covariates $x$ is defined in terms of a inverse link function $G$ and a linear prediction $\eta(t,x)$, such that
 
 \begin{align*}
   S(t|x) &= G(\eta(t,x))
 \end{align*}
 
-\noindent where $\eta$ is a function of both time $t$ and covariates $x$. The linear predictor can be constructed in a flexible manner. Royston and Parmar (2003) focused on time being modelled using natural splines for log-time, including left truncation and relative survival. We have implemented the Royston-Parmar model class and extended it in several ways, allowing for: (i) general parametric models for $\eta(t,x)$, including B-splines and natural splines for different transformations of time; (ii) general semi-parametric models for $\eta(t,x)$ including penalised smoothers together with unpenalised parametric functions; (iii) interval censoring; and (iv) frailties using Gamma and log-Normal distributions. Fully parametric models are estimated using maximum likelihood, while the semi-parametric models are estimated using maximum penalised likelihood with smoothing parameters selected using 
-A more detailed theoretical development is available from the paper by Liu, Pawitan and Clements (available on request). 
+\noindent where $\eta$ is a function of both time $t$ and covariates
+$x$. The linear predictor can be constructed in a flexible
+manner, with the main constraint that the time effects be smooth and twice differentiable. Royston and Parmar (2003) focused on time being modelled using
+natural splines for log-time, including left truncation and relative
+survival. We have implemented the Royston-Parmar model class and
+extended it in several ways, allowing for: (i) general parametric
+models for $\eta(t,x)$, including B-splines and natural splines for
+different transformations of time; (ii) general semi-parametric models
+for $\eta(t,x)$ including penalised smoothers together with
+unpenalised parametric functions; (iii) interval censoring; and (iv)
+frailties using Gamma and log-Normal distributions. Fully parametric
+models are estimated using maximum likelihood, while the
+semi-parametric models are estimated using maximum penalised
+likelihood with smoothing parameters selected using A more detailed
+theoretical development is available from the articles by Liu, Pawitan
+and Clements (available on request).
 
 
 <<echo=FALSE,results=hide>>=
+
 options(width=80,useFancyQuotes="UTF-8")
 library(rstpm2)
+
 @ 
 
 \section{Independent survival analysis}
 
-We begin with some simple proportional hazard models using the brcancer dataset.
+We begin with some simple proportional hazard models using the
+brcancer dataset. We can fit the models using very similar syntax to
+coxph, except that we need to specify the degrees of freedom for the
+baseline smoother. Typical values for df are 3-6. For this model the
+model parameters include an intercept term, time-invariant log-hazard
+ratios, and parameters for the baseline smoother. The default for the
+baseline smoother is to use the nsx function, which is a limited
+extension to the splines::ns function, with log of the time effect.
 
 <<>>=
+
 fit <- stpm2(Surv(rectime,censrec==1)~hormon,
              data=brcancer, df=4)
 summary(fit)
+
+## utility to exponentiate the ith components
+expi <- function(x,i=1:length(x)) { x[i] <- exp(x[i]); x }
+fit.cox <- coxph(Surv(rectime,censrec==1)~hormon, data=brcancer)
+rbind(coxph=coef(summary(fit.cox)),
+      stpm2=expi(coef(summary(fit))["hormon",c(1,1,2:4)],2))
+
 @ 
 
+We see that the hazard ratios are very similar to the coxph model. The
+model fit can also be used to estimate a variety of parameters. For
+example, we can easily estimate survival for a given parameter.
+
+<<fig=TRUE>>=
+
+# tms=seq(0,10,length=301)[-1]
+plot(fit,newdata=data.frame(hormon=1), 
+     xlab="Time since diagnosis (days)")
+lines(fit, newdata=data.frame(hormon=0), col=2, lty=2)
+legend("topright", c("hormon=1","hormon=0"),lty=1:2,col=1:2,bty="n")
+
+@ 
+
+We can also calculate the hazards.
+
+<<fig=TRUE>>=
+
+# tms=seq(0,10,length=301)[-1]
+plot(fit,newdata=data.frame(hormon=1), type="hazard",
+     xlab="Time since diagnosis (days)", ylim=c(0,8e-4))
+lines(fit, newdata=data.frame(hormon=0), col=2, lty=2, type="hazard")
+legend("topright", c("hormon=1","hormon=0"),lty=1:2,col=1:2,bty="n")
+
+@ 
+
+Usefully, we can also estimate survival differences and hazard
+differences. We define the survival differences using a reference
+covariate pattern using the newdata argument, and then define an
+exposed function which takes the newdata and transforms for the
+'exposed' covariate pattern. As an example
+
+<<fig=TRUE>>=
+
+plot(fit,newdata=data.frame(hormon=0), type="hdiff",
+     exposed=function(data) transform(data, hormon=1),
+     main="hormon=1 compared with hormon=0",
+     xlab="Time since diagnosis (days)")
+
+@ 
+
+<<fig=TRUE>>=
+
+plot(fit,newdata=data.frame(hormon=0), type="sdiff",
+     exposed=function(data) transform(data, hormon=1),
+     main="hormon=1 compared with hormon=0",
+     xlab="Time since diagnosis (days)")
+
+@ 
 
 
 \section{Mean survival}
@@ -86,10 +166,13 @@ for cure models with Stata's stpm2 (see
 Initially, we merge the patient data with the all cause mortality rates.
 
 <<echo=FALSE,results=hide>>=
+
 options(width=80,useFancyQuotes="UTF-8")
 library(rstpm2)
+
 @ 
 <<>>=
+
 popmort2 <- transform(rstpm2::popmort,exitage=age,exityear=year,age=NULL,year=NULL)
 colon2 <- within(rstpm2::colon, {
   status <- ifelse(surv_mm>120.5,1,status)
@@ -101,20 +184,25 @@ colon2 <- within(rstpm2::colon, {
   ##year8594 <- (year8594=="Diagnosed 85-94")
 })
 colon2 <- merge(colon2,popmort2)
+
 @ 
 For comparisons, we fit the relative survival model without and with cure. 
 %% <<results=hide>>=
 <<>>=
+
 fit0 <- stpm2(Surv(tm,status %in% 2:3)~I(year8594=="Diagnosed 85-94"),
               data=colon2,
               bhazard=colon2$rate, df=5)
+
 @ 
 <<>>=
+
 summary(fit <- stpm2(Surv(tm,status %in% 2:3)~I(year8594=="Diagnosed 85-94"),
                      data=colon2,
                      bhazard=colon2$rate,
                      df=5,cure=TRUE))
 predict(fit,head(colon2),se.fit=TRUE)
+
 @ 
 The estimate for the year parameter from the model without cure is within three significant
 figures with that in Stata. For the predictions, the Stata model gives:
@@ -133,15 +221,18 @@ figures with that in Stata. For the predictions, the Stata model gives:
 \end{verbatim}
 We can estimate the proportion of failures prior to the last event time:
 <<>>=
+
 newdata.eof <- data.frame(year8594 = unique(colon2$year8594),
                           tm=10)
 1-predict(fit0, newdata.eof, type="surv", se.fit=TRUE)
 1-predict(fit, newdata.eof, type="surv", se.fit=TRUE)
 predict(fit, newdata.eof, type="haz", se.fit=TRUE)
+
 @ 
 We can plot the predicted survival estimates:
 \begin{center}
 <<fig=TRUE>>=
+
 tms=seq(0,10,length=301)[-1]
 plot(fit0,newdata=data.frame(year8594 = "Diagnosed 85-94", tm=tms), ylim=0:1,
      xlab="Time since diagnosis (years)", ylab="Relative survival")
@@ -155,6 +246,7 @@ plot(fit,newdata=data.frame(year8594="Diagnosed 75-84",tm=tms),
 legend("topright",c("85-94 without cure","75-84 without cure",
                     "85-94 with cure","75-84 with cure"),
        col=c(1,2,1,2), lty=c(1,1,2,2), bty="n")
+
 @
 \end{center}
 
@@ -162,6 +254,7 @@ And the hazard curves:
 
 \begin{center}
 <<fig=TRUE>>=
+
 plot(fit0,newdata=data.frame(year8594 = "Diagnosed 85-94", tm=tms), 
      ylim=c(0,0.5), type="hazard",
      xlab="Time since diagnosis (years)",ylab="Excess hazard")
@@ -177,6 +270,7 @@ plot(fit,newdata=data.frame(year8594="Diagnosed 75-84", tm=tms),
 legend("topright",c("85-94 without cure","75-84 without cure",
                     "85-94 with cure","75-84 with cure"),
        col=c(1,2,1,2), lty=c(1,1,2,2), bty="n")
+
 @
 \end{center}
 
