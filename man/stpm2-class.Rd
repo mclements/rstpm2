@@ -7,6 +7,7 @@
 %\alias{predict,stpm2-method}
 \alias{predictnl,stpm2-method}
 \alias{summary,stpm2-method}
+\alias{eform,stpm2-method}
 
 \title{Class "stpm2" ~~~ }
 \description{Regression object for \code{stpm2}.}

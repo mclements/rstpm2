@@ -254,9 +254,10 @@ numDeltaMethod <- function(object, fun, gd=NULL, ...) {
             class=c("predictnl","data.frame"))
 }
 "coef<-" <- function (x, value) 
-  UseMethod("coef<-")
+    UseMethod("coef<-")
 predictnl <- function (object, ...) 
   UseMethod("predictnl")
+setGeneric("predictnl")
 "coef<-.default" <- function(x,value) {
     x$coefficients <- value
     x
@@ -330,7 +331,8 @@ function (object, fun, newdata = NULL, ...)
 ##       }
 ##     numDeltaMethod(object,localf,gd=gd,...)
 ##   })
-predict.formula <- function(formula,data,newdata,na.action,type="model.matrix") 
+predict.formula <- function(object,data,newdata,na.action,type="model.matrix",
+                            ...) 
 {
   mf <- match.call(expand.dots = FALSE)
   type <- match.arg(type)
@@ -1605,8 +1607,8 @@ lines.stpm2 <-
 setMethod("lines", signature(x="stpm2"), lines.stpm2)
 eform <- function (object, ...) 
   UseMethod("eform")
-setMethod("eform", signature(object="stpm2"), 
-          function (object, parm, level = 0.95, method = c("Profile"), 
+setGeneric("eform")
+eform.stpm2 <- function (object, parm, level = 0.95, method = c("Profile"), 
                     name = "exp(beta)") 
           {
               method <- match.arg(method)
@@ -1616,7 +1618,8 @@ setMethod("eform", signature(object="stpm2"),
               val <- exp(cbind(coef = coef(object), estfun(object, level = level)))
               colnames(val) <- c(name, colnames(val)[-1])
               val[parm, ]
-          })
+          }
+setMethod("eform", signature(object="stpm2"), eform.stpm2)
 
 derivativeDesign <- 
 function (functn, lower = -1, upper = 1, rule = NULL,

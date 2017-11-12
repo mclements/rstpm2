@@ -2,6 +2,7 @@
 \alias{predictnl}
 \alias{predictnl.default}
 \alias{predictnl.lm}
+\alias{predict.formula}
 \alias{print.predictnl}
 \alias{confint.predictnl}
 %- Also NEED an '\alias' for EACH other topic documented here.
@@ -21,6 +22,7 @@ predictions from GLMs).
 \method{predictnl}{default}(object, fun, newdata=NULL, gd=NULL, ...)
 \method{predictnl}{lm}(object, fun, newdata=NULL, ...)
 \method{print}{predictnl}(x, ...)
+\method{predict}{formula}(object,data,newdata,na.action,type="model.matrix",...)
 \method{confint}{predictnl}(object, parm, level=0.95, ...)
 }
 %- maybe also 'usage' for other objects documented here.
@@ -49,6 +51,15 @@ gradients are calculated using finite differences.
 }
   \item{x}{
     a \code{predictnl} object to be printed.
+}
+  \item{data}{
+    object used to define the model frame
+}
+  \item{na.action}{
+    passed to \code{model.frame}
+}
+  \item{type}{
+    currently restricted to \code{"model.matrix"}
 }
   \item{\dots}{
     Other arguments that are passed to \code{fun}.
