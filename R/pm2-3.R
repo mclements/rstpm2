@@ -550,7 +550,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH,AO=link.AO(theta.AO))
     RandDist <- match.arg(RandDist)
     optimiser <- match.arg(optimiser)
-    use.gr <- TRUE # old code
+    ## use.gr <- TRUE # old code
     ## logH.formula and logH.args are deprecated
     if (!is.null(smooth.formula) && is.null(logH.formula))
         logH.formula <- smooth.formula
