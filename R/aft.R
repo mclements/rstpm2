@@ -560,7 +560,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
 setMethod("predict", "aft",
           function(object,newdata=NULL,
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","meanhaz","af","fail","accfac"),
-                   grid=FALSE,seqLength=300,
+                   grid=FALSE,seqLength=300,level=0.95,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,...) {
               type <- match.arg(type)
               args <- object@args
@@ -683,7 +683,7 @@ setMethod("predict", "aft",
                       return(exp(accfac2-accfac))
                   }
               }
-              pred <- if (!se.fit) {
+              out <- if (!se.fit) {
                           local(object,newdata,type=type,exposed=exposed,
                                 ...)
                       }
@@ -691,12 +691,20 @@ setMethod("predict", "aft",
                           if (is.null(link))
                               link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
                                              hdiff="I",loghazard="I",link="I",odds="log",or="log",meansurv="I",meanhaz="I",af="I",accfac="log")
-                          predictnl(object,local,link=link,newdata=newdata,type=type,gd=NULL,
-                                    exposed=exposed,...) 
+                          invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
+                          pred <- predictnl(object,local,link=link,newdata=newdata,type=type,gd=NULL,
+                                            exposed=exposed,...)
+                          ci <- confint.predictnl(pred, level = level)
+                          out <- data.frame(Estimate=pred$fit,
+                                            lower=ci[,1],
+                                            upper=ci[,2])
+                          if (link=="cloglog") 
+                              out <- data.frame(Estimate=out$Estimate,lower=out$upper,upper=out$lower)
+                          invlinkf(out)
                       }
               if (keep.attributes)
-                  attr(pred,"newdata") <- newdata
-              return(pred)
+                  attr(out,"newdata") <- newdata
+              return(out)
           })
 plot.aft.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", exposed=NULL, add=FALSE, ci=!add, rug=!add, recent=FALSE,
                           xlab=NULL, ylab=NULL, lty=1, line.col=1, ci.col="grey", seqLength=301, ...) {
