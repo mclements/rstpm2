@@ -858,7 +858,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     return(out)
   }
 ## summary.mle is not exported from bbmle
-.__C__summary.mle2 <- bbmle:::.__C__summary.mle2 # hack suggested from http://stackoverflow.com/questions/28871632/how-to-resolve-warning-messages-metadata-object-not-found-spatiallinesnull-cla
+## .__C__summary.mle2 <- bbmle::.__C__summary.mle2 # hack suggested from http://stackoverflow.com/questions/28871632/how-to-resolve-warning-messages-metadata-object-not-found-spatiallinesnull-cla
 setClass("summary.stpm2", representation(frailty="logical",theta="list",wald="matrix",args="list"), contains="summary.mle2")
 ## setAs("summary.stpm2", "summary.mle2",
 ##       function(from,to) new("summary.mle2", call=from@call, coef=from@call, m2logL=from@m2logL))
