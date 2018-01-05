@@ -146,3 +146,20 @@ preserve
   stset rectime, f(censrec==1) enter(entry)
   staft hormon, df(3)
 restore
+
+
+use "http://www.pauldickman.com/survival/ew_breast.dta", clear
+codebook agegroup
+keep if agegroup==1
+stset survtime, failure(dead==1) exit(time 5)
+tab dep, gen(dep)
+staft dep2 dep3 dep4 dep5, df(5)
+
+staft dep2 dep3 dep4 dep5, df(5) tvc(dep2 dep3 dep4 dep5) dftvc(2)
+
+preserve
+replace survtime=5
+cap drop af1
+predict af1, af at(dep2 0 dep3 0 dep4 0 dep5 1)
+list in 1/1
+restore
