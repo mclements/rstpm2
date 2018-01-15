@@ -975,12 +975,14 @@ setMethod("residuals", "stpm2",
 
 predict.stpm2.base <- 
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured"),
                    grid=FALSE,seqLength=300,
-                   se.fit=FALSE,link=c("I","log","cloglog","logit"),exposed=NULL,var=NULL,keep.attributes=TRUE,use.gr=TRUE,level=0.95,...)
+                   se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=TRUE,use.gr=TRUE,level=0.95,...)
 {
     type <- match.arg(type)
-    link <- match.arg(link)
+    if (is.null(link))
+        link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
+                       hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meansurv="I",meanhr="log",meanhaz="log",af="I",uncured="cloglog")
     invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
     linkf <- eval(parse(text=link))
     args <- object@args
@@ -989,14 +991,14 @@ predict.stpm2.base <-
         if (se.fit) {temp <- out$lower; out$lower <- out$upper; out$upper <- temp}
         return(out)
     }
-      if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af","uncured"))
-          stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","or","marghr","af","uncured")')
+      if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured"))
+          stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured")')
       if (type %in% c('margsurv','marghaz','marghr','margfail','meanmargsurv') && !object@args$frailty)
           stop("Marginal prediction only for frailty models")
     ## exposed is a function that takes newdata and returns the revised newdata
     ## var is a string for a variable that defines a unit change in exposure
-    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","uncured"))
-        stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','marghr','uncured') requires newdata to be specified.")
+    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","uncured"))
+        stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','meanhr','or','marghr','uncured') requires newdata to be specified.")
     calcX <- !is.null(newdata)
     time <- NULL
     if (is.null(newdata)) {
@@ -1060,7 +1062,7 @@ predict.stpm2.base <-
     ##   ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
     ##   ## XD0 <- matrix(XD0,nrow=nrow(X0))
     ## }
-    if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","marghr","af","uncured")) {
+    if (type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured")) {
         newdata2 <- exposed(newdata)
       if (inherits(object, "stpm2")) {
           X2 <- object@args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
@@ -1289,6 +1291,14 @@ predict.stpm2.base <-
         if (type=="meanhaz") {
             return(tapply(S*h,newdata[[object@timeVar]],sum)/tapply(S,newdata[[object@timeVar]],sum))
         }
+        if (type=="meanhr") {
+            eta2 <- as.vector(X2 %*% beta)
+            etaD2 <- as.vector(XD2 %*% beta)
+            h2 <- link$h(eta2,etaD2)
+            S2 <- link$ilink(eta2)
+            return(tapply(S*h,newdata[[object@timeVar]],sum)/tapply(S,newdata[[object@timeVar]],sum) /
+                   (tapply(S2*h2,newdata[[object@timeVar]],sum)/tapply(S2,newdata[[object@timeVar]],sum)))
+        }
         if (type=="meansurvdiff") {
             eta2 <- as.vector(X2 %*% beta)
             S2 <- link$ilink(eta2)
@@ -1381,9 +1391,6 @@ predict.stpm2.base <-
     } else {
       gd <- NULL
       beta <- coef(object)
-      if (is.null(link))
-        link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                       hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meansurv="I",meanhaz="I",af="I",uncured="cloglog")
       ## calculate gradients for some of the estimators
       if (use.gr) {
           colMeans <- function(x) apply(x,2,mean)
@@ -1407,7 +1414,28 @@ predict.stpm2.base <-
                            log=t(object@link$gradh(X %*% betastar, XD %*% betastar, list(X=X, XD=XD))/
                                object@link$h(X %*% betastar, XD %*% betastar)))
           }
-          if (type=="meansurv" && !object@frailty) {
+          if (type=="meanhaz" && !object@frailty && link %in% c("I","log")) {
+              betastar <- if(args$frailty) beta[-length(beta)] else beta
+              h <- as.vector(object@link$h(X %*% betastar, XD %*% betastar))
+              S <- as.vector(object@link$ilink(X %*% betastar))
+              gradS <- object@link$gradS(X%*% betastar,X)
+              gradh <- object@link$gradh(X %*% betastar,XD %*% betastar,list(X=X,XD=XD))
+              gd <- if(link=="I") collapse(gradh*S + gradS*h) else
+                                                                  collapse(gradh*S + h*gradS)/collapse1(h*S)-collapse(gradS)/collapse1(S)
+          }
+          if (type=="meanhr" && !object@frailty && link == "log") {
+              betastar <- if(args$frailty) beta[-length(beta)] else beta
+              h <- as.vector(object@link$h(X %*% betastar, XD %*% betastar))
+              S <- as.vector(object@link$ilink(X %*% betastar))
+              gradS <- object@link$gradS(X%*% betastar,X)
+              gradh <- object@link$gradh(X %*% betastar,XD %*% betastar,list(X=X,XD=XD))
+              h2 <- as.vector(object@link$h(X2 %*% betastar, XD2 %*% betastar))
+              S2 <- as.vector(object@link$ilink(X2 %*% betastar))
+              gradS2 <- object@link$gradS(X2%*% betastar,X2)
+              gradh2 <- object@link$gradh(X2 %*% betastar,XD2 %*% betastar,list(X=X2,XD=XD2))
+              gd <- collapse(gradh*S + h*gradS)/collapse1(h*S) - collapse(gradS)/collapse1(S) - collapse(gradh2*S2 + h2*gradS2)/collapse1(h2*S2) + collapse(gradS2)/collapse1(S2)
+          }
+          if (type=="meansurv" && !object@frailty && link=="I") {
               gd <- collapse(object@link$gradS(X%*% beta,X))
           }
           if (type=="meansurvdiff" && !object@frailty) {
@@ -1475,17 +1503,16 @@ predict.stpm2.base <-
     return(out)
   }
 
-
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,use.gr=TRUE,level=0.95,...)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
                                  link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr,level=level, ...))
 
 ##`%c%` <- function(f,g) function(...) g(f(...)) # function composition
-plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", exposed=NULL, add=FALSE, ci=!add, rug=!add, recent=FALSE,
+plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", exposed=NULL, var=NULL, add=FALSE, ci=!add, rug=!add, recent=FALSE,
                           xlab=NULL, ylab=NULL, lty=1, line.col=1, ci.col="grey", seqLength=301, ...) {
     ## if (is.null(times)) stop("plot.meansurv: times argument should be specified")
     if (is.null(newdata)) newdata <- as.data.frame(x@data)
@@ -1508,14 +1535,14 @@ plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", 
                                       newd[[x@timeVar]] <- newdata[[x@timeVar]]*0+time
                                       newd
                                   }))
-        pred <- predict(x, newdata=newdata, type=type, se.fit=ci, exposed=exposed) # requires recent version
+        pred <- predict(x, newdata=newdata, type=type, se.fit=ci, exposed=exposed, var=var) # requires recent version
         if (type=="meansurv")
             pred <- if (ci) rbind(c(Estimate=1,lower=1,upper=1),pred) else c(1,pred)
     } else {
         pred <- lapply(times, 
                        function(time) {
                            newdata[[x@timeVar]] <- newdata[[x@timeVar]]*0+time
-                           predict(x, newdata=newdata, type=type, se.fit=ci, grid=FALSE, exposed=exposed)
+                           predict(x, newdata=newdata, type=type, se.fit=ci, grid=FALSE, exposed=exposed, var=var)
                        })
         pred <- do.call("rbind", pred)
         if (type=="meansurv")  {
@@ -1528,7 +1555,9 @@ plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", 
         ylab <- switch(type,
                        meansurv="Mean survival",
                        af="Attributable fraction",
-                       meansurvdiff="Difference in mean survival")
+                       meansurvdiff="Difference in mean survival",
+                       meanhaz="Mean hazard",
+                       meanhr="Mean hazard ratio")
     if (!add) matplot(times, pred, type="n", xlab=xlab, ylab=ylab, ...)
     if (ci) {
         polygon(c(times,rev(times)),c(pred$lower,rev(pred$upper)),col=ci.col,border=ci.col)
@@ -1549,7 +1578,7 @@ plot.stpm2.base <-
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),log="",
                    add=FALSE,ci=!add,rug=!add,
                    var=NULL,exposed=incrVar(var),times=NULL,...) {
-              if (type %in% c("meansurv","meansurvdiff","af")) {
+              if (type %in% c("meansurv","meansurvdiff","af","meanhaz","meanhr")) {
                   return(plot.meansurv(x,times=times,newdata=newdata,type=type,xlab=xlab,ylab=ylab,line.col=line.col,ci.col=ci.col,
                                        lty=lty,add=add,ci=ci,rug=rug, exposed=exposed, ...))
               }
@@ -1569,7 +1598,8 @@ plot.stpm2.base <-
                   ylab <- switch(type,hr="Hazard ratio",hazard="Hazard",surv="Survival",density="Density",
                                  sdiff="Survival difference",hdiff="Hazard difference",cumhaz="Cumulative hazard",
                                  loghazard="log(hazard)",link="Linear predictor",meansurv="Mean survival",
-                                 meansurvdiff="Difference in mean survival",odds="Odds",or="Odds ratio",
+                                 meansurvdiff="Difference in mean survival",meanhr="Mean hazard ratio",
+                                 odds="Odds",or="Odds ratio",
                                  margsurv="Marginal survival",marghaz="Marginal hazard",marghr="Marginal hazard ratio", haz="Hazard",fail="Failure",
                                  meanhaz="Mean hazard",margfail="Marginal failure",af="Attributable fraction",meanmargsurv="Mean marginal survival",
                                  uncured="Uncured distribution")
@@ -2423,7 +2453,7 @@ setMethod("predictnl", "pstpm2",
 ##
 setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,use.gr=TRUE,level=0.95, ...)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
