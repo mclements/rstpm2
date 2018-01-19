@@ -6,8 +6,9 @@
 
 \documentclass[nojss]{jss}
 
-\usepackage{amsmath,amsfonts,enumitem}
+\usepackage{amsmath,amsfonts,enumitem,fancyvrb,hyperref}
 \usepackage[utf8]{inputenc}
+\VerbatimFootnotes
 
 \title{Introduction to the \pkg{rstpm2} package}
 
@@ -42,25 +43,40 @@
 \emph{Generalised survival models} provide a flexible and general approach to modelling survival or time-to-event data. The survival function $S(t|x)$ to time $t$ for covariates $x$ is defined in terms of a inverse link function $G$ and a linear prediction $\eta(t,x)$, such that
 
 \begin{align*}
-  S(t|x) &= G(\eta(t,x))
+  S(t|x;\,\theta) &= G(\eta(t,x;\,\theta))
 \end{align*}
 
-\noindent where $\eta$ is a function of both time $t$ and covariates
-$x$. The linear predictor can be constructed in a flexible
-manner, with the main constraint that the time effects be smooth and twice differentiable. Royston and Parmar (2003) focused on time being modelled using
-natural splines for log-time, including left truncation and relative
-survival. We have implemented the Royston-Parmar model class and
-extended it in several ways, allowing for: (i) general parametric
-models for $\eta(t,x)$, including B-splines and natural splines for
-different transformations of time; (ii) general semi-parametric models
-for $\eta(t,x)$ including penalised smoothers together with
-unpenalised parametric functions; (iii) interval censoring; and (iv)
-frailties using Gamma and log-Normal distributions. Fully parametric
-models are estimated using maximum likelihood, while the
-semi-parametric models are estimated using maximum penalised
-likelihood with smoothing parameters selected using A more detailed
-theoretical development is available from the articles by Liu, Pawitan
-and Clements (available on request).
+\noindent where $\eta$ is a function of both time $t$ and covariates $x$, with regression parameters $\theta$.  We can calculate the hazard from this function, where
+
+\begin{align*}
+  h(t|x;\,\theta) &= \frac{d}{dt} \left(-\log(S(t|x;\,\theta))\right) \\
+         &= \frac{-G'(\eta(t,x;\,\theta))}{G(\eta(t,x;\,\theta))}\frac{\partial \eta(t,x;\,\theta)}{\partial t}
+\end{align*}
+
+We model using a linear predictor $\eta(t,x;\,\theta)=X(t,x)\theta$ for a design matrix $X(t,x)$. The linear predictor can be constructed in a flexible
+manner, with the main constraint being that the time effects be smooth and twice differentiable. We calculate the derivative for the linear predictor using finite differences, such that
+\begin{align*}
+ \frac{\partial \eta(t,x;\,\theta)}{\partial t} &= \frac{\partial X(t,x)\theta}{\partial t} = \frac{X(t+\epsilon,x)-X(t-\epsilon,x)}{2\epsilon}\theta = X_D(t,x)\theta
+\end{align*}
+for a derivative design matrix $X_D(t,x)$. This formulation allows for considerable flexibility in the construction of the linear predictor, with possible interactions between time and covariates.
+
+The default smoother for time using natural splines for log(time), which is the flexible parametric survival model developed by Royston and Parmar (2003) and implemented by the Stata command \verb+stpm2+~\footnote{As a technical aside, the Stata implementation uses natural splines using a truncated power basis with orthogonalisation, while the \verb+ns()+ function in \verb+R+ uses a matrix projection of B-splines. Note that we have implemented an extended \verb+nsx()+ function for natural splines that includes cure splines, centering, and a compatibility argument to use Stata \verb+stpm2+'s unusual specification of quantiles.}
+
+\begin{table}[!ht]
+  \centering
+  \begin{tabular}[!ht]{llll}
+    Link description & Inverse link function $G(\eta(t,x;\,\theta))$ & Interpretation & \verb+link.type+ \\ \hline
+    log$-$log & $\exp(-\exp(\eta(t,x;\,\theta)))$ & Proportional hazards & \verb+"PH"+\\
+    logit & $\text{expit}(-\eta(t,x;\,\theta))$ & Proportional odds & \verb+"PO"+ \\
+    probit & $\Phi(-\eta(t,x;\,\theta))$ & Probit & \verb+"probit"+ \\
+    log & $\exp(-\eta(t,x;\,\theta))$ & Additive hazards & \verb+"AH"+ \\
+    Aranda-Ordaz & $\exp(-\log(\psi*\exp(\eta(t,x;\,\theta))+1)/\psi)$ & Aranda-Ordaz & \verb+"AO"+
+  \end{tabular}
+  \caption{Implemented link functions}
+  \label{tab:links}
+\end{table}
+
+The models are estimated using maximum likelihood estimation (MLE) for fully parametric models, penalised MLE for penalised smoothers, maximum marginal likelihood estimation (MMLE) for parametric models with clustered data, or penalised MMLE for penalised models with clustered data. The likelihoods include left truncation, right censoring and interval censoring. For clustered data, we include Gamma frailties and normal random effects. Details on these models are available from \url{https://doi.org/10.1177/0962280216664760} and \url{https://doi.org/10.1002/sim.7451}.
 
 
 <<echo=FALSE,results=hide>>=
@@ -70,7 +86,99 @@ library(rstpm2)
 
 @ 
 
-\section{Independent survival analysis}
+
+\section{Syntax}
+
+The main functions for fitting the models are \verb+stpm2+ for parametric models, possibly with clustered data, and \verb+pstpm2+ for penalised models, possibly with clustered data. A subset of the syntax for \verb+stpm2+ is:
+
+\begin{Verbatim}
+stpm2(formula, data, smooth.formula = NULL, 
+      df = 3, tvc = NULL, 
+      link.type=c("PH","PO","probit","AH","AO"), theta.AO=0,
+      bhazard = NULL, 
+      robust = FALSE, cluster = NULL, frailty = !is.null(cluster) & !robust,
+      RandDist=c("Gamma","LogN"), 
+      ...)
+\end{Verbatim}
+
+The \verb+formula+ has a \verb+Surv+ object on the left-hand-side and a linear predictor on the right-hand-side that does \emph{not} include time (for \verb+pstpm2+, it also does not include penalised functions). The time effects can be specified in several ways: the most general is using \verb+smooth.formula+, where the right-hand-side of the formula specifies functions for time that are smooth with respect to time. This specification can include interactions between time and covariates. As an example, \verb!smooth.formula=~nsx(log(time),df=3)+x:nsx(log(time),df=2)! specifies a baseline natural spline smoother of the log of the variable \verb+time+ used in the \verb+Surv+ object with three degrees of freedom, with an interaction between a covariate \verb+x+ and a natural spline smoother of log(time) with two degrees of freedom. Other specifications of time effects have equivalent formulations: for example, $df=3$ is equivalent to \verb!smooth.formula=~nsx(log(time),df=3)! for the variable \verb+time+. Similarly, \verb+tvc=list(x=2)+ is equivalent to \verb!smooth.formula=~x:nsx(log(time),df=2)!.
+
+A current limitation of the implementation is that the dataset \verb+data+ needs to be specified.
+
+Type of link is specified with the \verb+link.type+ argument; this defaults to a log$-$log link for proportional hazards (see Table~\ref{tab:links}). For the Aranda-Ordaz link, the fixed value of the scale term $\psi$ is specified using the \verb+theta.AO+ argument.  For relative survival, a vector for the baseline hazard can be specified using the \verb+bhazard+ argument. A vector for the clusters can be specified with the \verb+cluster+ argument. The calculation of robust standard errors can be specified with the \verb+robust=TRUE+ argument; if \verb+robust+ is false, then the model assumes a frailty or random effects model, with either a default Gamma frailty (\verb+RandDist="Gamma"+) or a normal random effect (\verb+RandDist="LogN"+, using notation from the \verb+frailtypack+ package).
+
+The syntax for the fitting the penalised models with \verb+pstpm2+ is very similar. A subset of the arguments are:
+\begin{Verbatim}
+pstpm2(formula, data, smooth.formula = NULL, 
+       tvc = NULL, 
+       bhazard = NULL, 
+       sp=NULL, 
+       criterion=c("GCV","BIC"), 
+       link.type=c("PH","PO","probit","AH","AO"), theta.AO=0,
+       robust=FALSE,
+       frailty=!is.null(cluster) & !robust, cluster = NULL, RandDist=c("Gamma","LogN"),
+       ...)
+\end{Verbatim}
+
+The penalised smoothers are specified using the \verb+s()+ function from the \verb+mgcv+ package within the \verb+smooth.formula+ argument; by default, not specifying \verb+smooth.formula+ will lead to \verb!smooth.formula=~s(log(time))!. Interactions with time (both penalised and unpenalised) and penalised covariate effects should be specified using \verb+smooth.formula+. 
+
+Note that the \verb+df+ argument is not included. By default, the smoothing parameter(s) are using the \verb+criterion+ argument; the smoothing parameters can also be fixed using the \verb+sp+ argument. 
+
+The specifications for relative survival, link type, and clustered data follow that for the \verb+stpm2+ function.
+
+\subsection{Post-estimation}
+
+One of the strengths of these models is varied post-estimation. Most of the estimators are described in Tables~\ref{tab:condpostest} and \ref{tab:margpostest}.
+
+\begin{table}[!ht]
+  \centering
+\begin{minipage}{\linewidth}
+  \begin{tabular}[!ht]{lll}
+    Description & Formulation\footnote{Notation: $x^*$ is a covariate pattern for the ``exposed'' group; $X^*$ is a set of possibly counterfactual covariates; $E_X(g(X))$ is the expectation or average of $g(X)$ across the set $X$; $X_0^*$ and $X_1^*$ are sets of possibly counterfactual covariates for the ``unexposed'' and ``exposed'' sets, respectively.} & \verb+type+ \\ \hline
+    Conditional link & $\eta(t,x;\hat\theta)$ & \verb+"link"+ \\
+    Conditional survival & $S(t|x;\hat\theta) = G(\eta(t,x;\hat\theta))$ & \verb+"surv"+ \\
+    Conditional odds & $\text{Odds}(t|x;\hat\theta)=S(t|x;\hat\theta)/(1-S(t|x;\hat\theta))$ & \verb+"odds"+ \\
+    Conditional failure & $1-S(t|x;\hat\theta)$ & \verb+"fail"+ \\
+    Conditional cumulative hazard & $H(t|x;\hat\theta) = -\log G(\eta(t,x;\hat\theta))$ & \verb+"cumhaz"+ \\
+    Conditional density & $f(t|x;\hat\theta) = G'(\eta(t,x;\hat\theta))\frac{\partial \eta(t,x;\hat\theta)}{\partial t}$ & \verb+"density"+ \\
+    Conditional hazard & $h(t|x;\hat\theta) = \frac{G'(\eta(t,x;\hat\theta))}{G(\eta(t,x;\hat\theta))}\frac{\partial \eta(t,x;\hat\theta)}{\partial t}$ & \verb+"hazard"+ \\
+    Conditional log hazard & $\log h(t|x;\hat\theta)$ & \verb+"loghazard"+ \\
+    Conditional survival differences & $S(t|x^*;\hat\theta)-S(t|x;\hat\theta)$ & \verb+"survdiff"+ \\
+    Conditional hazard differences & $h(t|x^*;\hat\theta)-h(t|x;\hat\theta)$ & \verb+"hazdiff"+ \\
+    Conditional hazard ratios & $h(t|x^*;\hat\theta)/h(t|x;\hat\theta)$ & \verb+"hr"+ \\
+    Conditional odds ratios & $\text{Odds}(t|x^*;\hat\theta)/\text{Odds}(t|x;\hat\theta)$ & \verb+"or"+ \\
+    Standardised survival & $E_{X^*}S(t|X^*;\hat\theta)$ & \verb+"meansurv"+ \\
+    Standardised survival differences & $E_{X_1^*}S(t|X_1^*;\hat\theta)-E_{X_0^*}S(t|X_0^*;\hat\theta)$ & \verb+"meansurvdiff"+ \\
+    Standardised hazard & $h_{X^*}(t|X^*;\hat\theta) = \frac{E_{X^*}(S(t|X^*;\hat\theta)h(t|X^*;\hat\theta))}{E_{X^*}(S(t|X^*;\hat\theta))}$ & \verb+"meanhaz"+ \\
+    Standardised hazard ratio & $h_{X_1^*}(t|X_1^*;\hat\theta)/h_{X_0^*}(t|X_0^*\hat\theta)$ & \verb+"meanhazdiff"+ \\
+    Attributable fraction & $\frac{E_{X^*}S(t|X^*;\hat\theta)--E_{X}S(t|X;\hat\theta)}{1-E_{X}S(t|X;\hat\theta)}$ & \verb+"af"+ \\
+  \end{tabular}
+\end{minipage}
+\caption{Types of conditional post-estimators}
+  \label{tab:condpostest}
+\end{table}
+
+
+\begin{table}[!ht]
+  \centering
+\begin{minipage}{\linewidth}
+  \begin{tabular}[!ht]{lll}
+    Description & Formulation\footnote{Notation: $Z$ is a random effect or frailty; $x^*$ is a covariate pattern for the ``exposed'' group; $X^*$ is a set of possibly counterfactual covariates; $E_X(g(X))$ is the expectation or average of $g(X)$ across the set $X$; $X_0^*$ and $X_1^*$ are sets of possibly counterfactual covariates for the ``unexposed'' and ``exposed'' sets, respectively.} & \verb+type+ \\ \hline
+    Marginal survival & $S_M(t|x;\hat\theta) = E_ZG(\eta(t,x,Z;\hat\theta))$ & \verb+"margsurv"+ \\
+    Marginal hazard & $h_M(t|x;\hat\theta) = E_Z(h(t,x,Z;\hat\theta))$ & \verb+"marghaz"+ \\
+    Marginal survival differences & $S_M(t|x^*;\hat\theta)-S_M(t|x;\hat\theta)$ & \verb+"margsurvdiff"+ \\
+    Marginal hazard ratios & $h_M(t|x^*;\hat\theta)/h_M(t|x;\hat\theta)$ & \verb+"marghr"+ \\
+    Standardised marginal survival & $E_ZE_{X^*}S(t|X^*,Z;\hat\theta)$ & \verb+"meanmargsurv"+ \\
+    Standardised marginal survival differences & $E_ZE_{X^*}S(t|X^*,Z;\hat\theta)-E_ZE_{X}S(t|X,Z;\hat\theta)$ & \verb+"meansurvdiff"+ \\
+    Attributable fraction & $\frac{E_ZE_{X^*}S(t|X^*,Z;\hat\theta)-E_ZE_{X}S(t|X,Z;\hat\theta)}{1-E_ZE_{X}S(t|X,Z;\hat\theta)}$ & \verb+"af"+ \\
+  \end{tabular}
+\end{minipage}
+\caption{Types of post-estimators for clustered data}
+  \label{tab:margpostest}
+\end{table}
+
+
+\section{Examples: Independent survival analysis}
 
 We begin with some simple proportional hazard models using the
 brcancer dataset. We can fit the models using very similar syntax to
