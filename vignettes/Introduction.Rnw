@@ -9,6 +9,9 @@
 \usepackage{amsmath,amsfonts,enumitem,fancyvrb,hyperref}
 \usepackage[utf8]{inputenc}
 \VerbatimFootnotes
+\usepackage[margin=2.6cm]{geometry} % wide margins
+\usepackage{wasysym}
+\usepackage{tablefootnote}
 
 \title{Introduction to the \pkg{rstpm2} package}
 
@@ -128,7 +131,9 @@ The specifications for relative survival, link type, and clustered data follow t
 
 \subsection{Post-estimation}
 
-One of the strengths of these models is varied post-estimation. Most of the estimators are described in Tables~\ref{tab:condpostest} and \ref{tab:margpostest}.
+One of the strengths of these models is varied post-estimation. Most of the estimators are described in Tables~\ref{tab:condpostest} and \ref{tab:margpostest}. These estimators are typically calculated from the \verb+predict+ function or from \verb+plot+ function calls. All of these calls require that the \verb+newdata+ argument is specified (in contrast to prediction in the \verb+survival+ package, which defaults to the average of each covariate). 
+
+For contrasts (e.g. survival differences, hazard ratios), the \verb+newdata+ argument is the ``unexposed'' group, while the exposed group is defined by either: (i) a unit change in a variable in \verb+newdata+ as defined by the \verb+var+ argument (e.g. \verb+var="x"+ for variable \verb+x+); or (ii) an \verb+exposed+ function that takes a data-frame and returns the ``exposed'' group (e.g. \verb+exposed=function(data) transform(data, x=1)+). The latter mechanism is quite general and allows for standardised survival, standardised hazards, and attributable fractions under possibly counterfactual exposures.
 
 \begin{table}[!ht]
   \centering
@@ -176,6 +181,32 @@ One of the strengths of these models is varied post-estimation. Most of the esti
 \end{minipage}
 \caption{Types of post-estimators for clustered data}
   \label{tab:margpostest}
+\end{table}
+
+Standard errors for the post-estimators are calculated on a possibly transformed scale using the delta method. For the delta method, the partial derivatives of the post-estimators are calculated either directly or using finite differences.
+
+\begin{table}
+  \centering
+  \begin{minipage}{\textwidth}
+    \begin{tabular}{lp{1.5cm}p{1.5cm}p{1.5cm}p{1.5cm}p{1.5cm}p{1.5cm}}
+  Functionality & Uncorre-lated param. & Uncorre-lated penal. & Param. gamma frailty & Penal. gamma frailty & Param. normal random effects & Penal. normal random effects  \\ \hline
+  Multiple links & \XBox& \XBox& \XBox& \XBox& \XBox& \XBox \\
+  Right censoring & \XBox& \XBox& \XBox& \XBox& \XBox& \XBox \\
+  Left truncation & \XBox& \XBox& \XBox\footnote{Gradients not currently implemented.}& \XBox$^a$& \XBox$^a$& \XBox$^a$ \\
+  Interval censoring & \XBox& \XBox& \Square& \Square& \XBox& \XBox \\
+  Time-varying effects & \XBox& \XBox& \XBox& \XBox& \XBox& \XBox \\
+  Excess hazards & \XBox& \XBox& \XBox& \XBox& \XBox& \XBox \\
+  Conditional estimators\footnote{Estimators including survival, survival differences, hazards, hazard ratios, hazard differences, density, odds and odds ratios.} &\XBox &\XBox & \XBox& \XBox& \XBox& \XBox \\
+  Conditional standardisation\footnote{Standardised estimators include mean survival, mean survival differences, mean hazards and attributable fractions.} &\XBox &\XBox & \XBox& \XBox& \XBox& \XBox \\
+  Frailty/random effects variance & & & \XBox& \XBox& \XBox& \XBox \\
+  Marginal estimators\footnote{Marginal estimators include survival, survival differences, hazards, hazard ratios and hazard differences.} & & & \XBox& \XBox& \XBox& \XBox \\
+  Marginal standardisation\footnote{Marginal standardised estimators include mean survival, mean survival differences and attributable fractions.} & & & \XBox& \XBox& \Square& \Square \\
+  Random intercept & & &\XBox &\XBox & \XBox& \XBox \\
+  Random slope & & & & & \XBox& \XBox \\
+  Multiple random effects & & & & & \Square& \Square \\
+    \end{tabular}
+  \end{minipage}
+  \caption{Functionality for the different generalised survival models}
 \end{table}
 
 
@@ -382,6 +413,16 @@ legend("topright",c("85-94 without cure","75-84 without cure",
 
 @
 \end{center}
+
+
+\section{Potential limitations and next steps}
+
+\begin{itemize}
+\item The calculation of the matrix $X_D(t,x)$ using finite differences can be inaccurate for small event times. The functions \verb+stpm2+ and \verb+pstpm2+ raise errors when the event times are less than 1e-4. One working solution is to scale the event times (e.g. multiply by 1000) for analysis. TODO: investigate whether we can calculate $X_D(t,x)$ more accurately using the \verb+numDeriv+ package.
+  \item TODO: Extend the generalised survival models to use multiple random effects.
+  \item TODO: Extend the generalised survival models to use automatic differentiation.
+\end{itemize}
+
 
 \end{document}
 
