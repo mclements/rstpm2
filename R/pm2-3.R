@@ -1296,8 +1296,7 @@ predict.stpm2.base <-
             etaD2 <- as.vector(XD2 %*% beta)
             h2 <- link$h(eta2,etaD2)
             S2 <- link$ilink(eta2)
-            return(tapply(S*h,newdata[[object@timeVar]],sum)/tapply(S,newdata[[object@timeVar]],sum) /
-                   (tapply(S2*h2,newdata[[object@timeVar]],sum)/tapply(S2,newdata[[object@timeVar]],sum)))
+            return(tapply(S2*h2,newdata[[object@timeVar]],sum)/tapply(S2,newdata[[object@timeVar]],sum) / (tapply(S*h,newdata[[object@timeVar]],sum)/tapply(S,newdata[[object@timeVar]],sum)))
         }
         if (type=="meansurvdiff") {
             eta2 <- as.vector(X2 %*% beta)
