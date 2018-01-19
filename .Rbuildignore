@@ -2,3 +2,4 @@
 ^\.Rproj\.user$
 ^rstpm2.*\.tar\.gz$
 Makefile
+NEWS.html

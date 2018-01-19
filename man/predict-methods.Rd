@@ -21,7 +21,7 @@
                "fail","margfail","meanmargsurv","uncured","rmst"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,
-               keep.attributes=TRUE, use.gr=TRUE,level=0.95,...)
+               keep.attributes=FALSE, use.gr=TRUE,level=0.95,...)
     \S4method{predict}{pstpm2}(object, newdata=NULL,
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
                "hdiff","loghazard","link","meansurv","meansurvdiff","meanhr",
@@ -29,7 +29,7 @@
                "fail","margfail","meanmargsurv","rmst"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,
-               keep.attributes=TRUE, use.gr=TRUE,level=0.95,...)
+               keep.attributes=FALSE, use.gr=TRUE,level=0.95,...)
 }
 \arguments{
   \item{object}{an \code{stpm2} or \code{pstpm2} object}
