@@ -16,17 +16,17 @@
 
     \S4method{predict}{stpm2}(object, newdata=NULL,
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
-               "hdiff","loghazard","link","meansurv","meansurvdiff",
+               "hdiff","loghazard","link","meansurv","meansurvdiff","meanhr",
                "odds","or","margsurv","marghaz","marghr","meanhaz","af",
-               "fail","margfail","meanmargsurv","uncured"),
+               "fail","margfail","meanmargsurv","uncured","rmst"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,
                keep.attributes=TRUE, use.gr=TRUE,level=0.95,...)
     \S4method{predict}{pstpm2}(object, newdata=NULL,
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
-               "hdiff","loghazard","link","meansurv","meansurvdiff",
+               "hdiff","loghazard","link","meansurv","meansurvdiff","meanhr",
                "odds","or","margsurv","marghaz","marghr","meanhaz","af",
-               "fail","margfail","meanmargsurv"),
+               "fail","margfail","meanmargsurv","rmst"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,
                keep.attributes=TRUE, use.gr=TRUE,level=0.95,...)
@@ -57,12 +57,14 @@
       \item{"marghaz"}{marginal (population) hazard}
       \item{"marghr"}{marginal (population) hazard ratio}
       \item{"meanhaz"}{mean hazard}
+      \item{"meanhr"}{mean hazard ratio
       \item{"af"}{attributable fraction}
       \item{"fail"}{failure (=1-survival)}
       \item{"margfail"}{marginal failure (=1-marginal survival)}
       \item{"meanmargsurv"}{mean marginal survival, averaged over the
                frailty distribution}
       \item{"uncured"}{distribution for the uncured}
+      \item{"rmst"}{restricted mean survival time}
     }
   }
   \item{grid}{whether to merge newdata with a regular sequence of event

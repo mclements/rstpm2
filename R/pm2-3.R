@@ -975,14 +975,14 @@ setMethod("residuals", "stpm2",
 
 predict.stpm2.base <- 
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst"),
                    grid=FALSE,seqLength=300,
-                   se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=TRUE,use.gr=TRUE,level=0.95,...)
+                   se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,...)
 {
     type <- match.arg(type)
     if (is.null(link))
         link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                       hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meansurv="I",meanhr="log",meanhaz="log",af="I",uncured="cloglog")
+                       hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meansurv="I",meanhr="log",meanhaz="log",af="I",uncured="cloglog",rmst="I")
     invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
     linkf <- eval(parse(text=link))
     args <- object@args
@@ -1032,6 +1032,14 @@ predict.stpm2.base <-
       newdata[[object@timeVar]] <- NULL
       newdata <- merge(newdata,data.x)
       calcX <- TRUE
+    }
+    if (type=="rmst") {
+        if (nrow(newdata)>1) stop("rmst currently only for single value")
+        stopifnot(object@timeVar %in% names(newdata))
+        time <- seq(0,newdata[[object@timeVar]],length.out=1001)[-1]
+        newdata <- newdata[rep(1,1000),]
+        newdata[[object@timeVar]] <- time
+        calcX <- TRUE
     }
     if (calcX)  {
       if (inherits(object, "stpm2")) {
@@ -1384,6 +1392,9 @@ predict.stpm2.base <-
             }
             return(marghaz2/marghaz)
         }
+        if (type=="rmst") {
+            return(sum(S)*(newdata[[object@timeVar]][2]-newdata[[object@timeVar]][1]))
+        }
     }
     if (!se.fit) {
       out <- local(object,newdata,type=type,exposed=exposed,  ...)
@@ -1504,9 +1515,9 @@ predict.stpm2.base <-
 
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst"),
                    grid=FALSE,seqLength=300,
-                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,use.gr=TRUE,level=0.95,...)
+                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,...)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
                                  link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr,level=level, ...))
 
@@ -1534,14 +1545,14 @@ plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", 
                                       newd[[x@timeVar]] <- newdata[[x@timeVar]]*0+time
                                       newd
                                   }))
-        pred <- predict(x, newdata=newdata, type=type, se.fit=ci, exposed=exposed, var=var) # requires recent version
+        pred <- predict(x, newdata=newdata, type=type, keep.attributes=TRUE, se.fit=ci, exposed=exposed, var=var) # requires recent version
         if (type=="meansurv")
             pred <- if (ci) rbind(c(Estimate=1,lower=1,upper=1),pred) else c(1,pred)
     } else {
         pred <- lapply(times, 
                        function(time) {
                            newdata[[x@timeVar]] <- newdata[[x@timeVar]]*0+time
-                           predict(x, newdata=newdata, type=type, se.fit=ci, grid=FALSE, exposed=exposed, var=var)
+                           predict(x, newdata=newdata, type=type, se.fit=ci, grid=FALSE, exposed=exposed, var=var, keep.attributes=TRUE)
                        })
         pred <- do.call("rbind", pred)
         if (type=="meansurv")  {
@@ -1583,7 +1594,7 @@ plot.stpm2.base <-
               }
               if (is.null(newdata)) stop("newdata argument needs to be specified")
               y <- predict(x,newdata,type=switch(type,fail="surv",margfail="margsurv",type),var=var,exposed=exposed,
-                           grid=!(x@timeVar %in% names(newdata)), se.fit=ci)
+                           grid=!(x@timeVar %in% names(newdata)), se.fit=ci, keep.attributes=TRUE)
               if (type %in% c("fail","margfail")) {
                   if (ci) {
                       y$Estimate <- 1-y$Estimate
@@ -2433,7 +2444,6 @@ setMethod("anova", signature(object="pstpm2"),
         ltab
     })
 
-
 setMethod("predictnl", "pstpm2",
           function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
   {
@@ -2452,9 +2462,9 @@ setMethod("predictnl", "pstpm2",
 ##
 setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst"),
                    grid=FALSE,seqLength=300,
-                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,use.gr=TRUE,level=0.95, ...)
+                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95, ...)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
                                  link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr, level=level, ...))
 

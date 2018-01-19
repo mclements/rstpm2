@@ -40,6 +40,13 @@ plot(fit, newdata=data.frame(hormon=0,x4=0,x5=0))
 plot(fit, newdata=transform(brcancer,x4=1), type="meanhr", exposed=function(data) transform(data, x4=2),ylim=0:1)
 plot(fit, newdata=transform(brcancer,x4=1), type="meanhaz")
 
+## test rmst
+library(rstpm2)
+fit <- stpm2(Surv(rectime, censrec==1) ~ hormon, data = brcancer, df=3)
+plot(fit, newdata=data.frame(hormon=1))
+predict(fit, newdata=data.frame(hormon=1,rectime=1000), type="rmst", se.fit=TRUE)
+predict(fit, newdata=data.frame(hormon=0,rectime=1000), type="rmst", se.fit=TRUE)
+
 ## 2017-06-21 
 ## Verify: the choice of basis dimension (default: k=10) for penalized regression splines is not sensitive to estimates
 ## Adjusted by a constant coefficient (e.g. alpha=2) to correct potential overfitting by GCV for lambda
