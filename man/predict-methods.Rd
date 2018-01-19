@@ -57,7 +57,7 @@
       \item{"marghaz"}{marginal (population) hazard}
       \item{"marghr"}{marginal (population) hazard ratio}
       \item{"meanhaz"}{mean hazard}
-      \item{"meanhr"}{mean hazard ratio
+      \item{"meanhr"}{mean hazard ratio}
       \item{"af"}{attributable fraction}
       \item{"fail"}{failure (=1-survival)}
       \item{"margfail"}{marginal failure (=1-marginal survival)}
