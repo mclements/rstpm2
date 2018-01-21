@@ -22,7 +22,7 @@ stpm2(formula, data,
       init = NULL, coxph.strata = NULL, weights = NULL,
       robust = FALSE, baseoff = FALSE, bhazard = NULL,
       timeVar = "", time0Var = "", use.gr = TRUE,
-      optimiser=c("BFGS","NelderMead"),
+      optimiser=c("BFGS","NelderMead"), log.time.transform=TRUE,
       reltol=1.0e-8, trace = 0,
       link.type=c("PH","PO","probit","AH","AO"), theta.AO=0, 
       frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=-6, nodes=9,
@@ -106,6 +106,8 @@ two variables define the time}
   for when more than one data variable is used in the entry time.}
 \item{use.gr}{logical indicating whether to use gradients in the calculation}
 \item{optimiser}{select which optimiser is used}
+\item{log.time.transform}{should a log-transformation be used for
+  calculating the derivative of the design matrix with respect to time? (default=TRUE)}
 \item{link.type}{type of link function. For "PH" (generalised
   proportional hazards), g(S)=log(-log(S)); for
 "PO" (generalised proportional odds), g(S)=-logit(S); for "probit"

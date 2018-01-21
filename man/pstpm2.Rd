@@ -30,7 +30,7 @@ pstpm2(formula, data, smooth.formula = NULL, smooth.args = NULL,
        alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1,
        sp.init=1, trace = 0,
        link.type=c("PH","PO","probit","AH","AO"), theta.AO=0,
-       optimiser = c("BFGS", "NelderMead", "Nlm"),
+       optimiser = c("BFGS", "NelderMead", "Nlm"), log.time.transform=TRUE,
        recurrent = FALSE, frailty=!is.null(cluster) & !robust,cluster = NULL,
        logtheta=-6, nodes=9,
        RandDist=c("Gamma","LogN"), adaptive = TRUE, maxkappa=1000, Z = ~1, 
@@ -106,6 +106,8 @@ two variables define the time}
 hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta.AO)-1)/theta.AO).}
 \item{theta.AO}{theta parameter for the Aranda-Ordaz link type.}
 \item{optimiser}{select which optimiser is used}
+\item{log.time.transform}{should a log-transformation be used for
+  calculating the derivative of the design matrix with respect to time? (default=TRUE)}
 \item{recurrent}{logical for whether clustered, left truncated data are
   recurrent or for first event (where the latter requires an adjustment
   for the frailties or random effects)}

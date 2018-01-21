@@ -2,6 +2,7 @@
     - Belatedly started the NEWS.md file
     - Update to bbmle (>= 1.0.20) required due to new export from that package
     - Possible breaking change: for the `predict()` functions for `stpm2` and `pstpm2`, the `keep.attributes` default has changed from `TRUE` to `FALSE`. Any code that used `predict()` and needs the `newdata` attributes should now add the `keep.attributes=TRUE` argument. The previous default was noisy.
+	- Possible breaking change: the derivative of the design matrix with respect to time now defaults to being calculated using log(time); the old calculation can be found using `log.time.transform=TRUE`. This is expected to provide more accurate gradients, particularly for very small times. 
     - To this point, the following models are available: 
       + `stpm2`: parametric generalised survival models, possibly with clustered data (Gamma frailties and normal random effects), relative survival, robust standard errors, rich post-estimation and plots.
       + `pstpm2`: penalised generalised survival models, possibly with clustered data (Gamma frailties and normal random effects), relative survival, robust standard errors, rich post-estimation and plots.

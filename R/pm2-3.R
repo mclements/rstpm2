@@ -207,18 +207,19 @@ grad <- function(func,x,...) # would shadow numDeriv::grad()
   }
 ## numerically calculate the gradient \partial func_i \over \partial x_i
 ## length(grad(func,x)) == length(func(x)) == length(x)
-grad1 <- function(func,x,...)
-  {
-    h <- .Machine$double.eps^(1/3)*ifelse(abs(x)>1,abs(x),1)
-    temp <- x+h
-    h.hi <- temp-x
-    temp <- x-h
-    h.lo <- x-temp
-    twoeps <- h.hi+h.lo
+grad1 <- function(func,x,...,log.transform=FALSE)
+{
     ny <- length(func(x,...))
     if (ny==0L) stop("Length of function equals 0")
-    (func(x+h, ...) - func(x-h, ...))/twoeps
-  }
+    if (log.transform) {
+        h <- .Machine$double.eps^(1/3)
+        value <- (func(x*exp(h), ...) - func(x*exp(-h), ...))/2/h/x
+    } else {
+        h <- .Machine$double.eps^(1/3)*ifelse(abs(x)>1,abs(x),1)
+        value <- (func(x+h, ...) - func(x-h, ...))/2/h
+    }
+    return(value)
+}
 ## predict lpmatrix for an lm object
 lpmatrix.lm <- 
   function (object, newdata, na.action = na.pass) {
@@ -540,7 +541,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                      control = list(parscale = 1, maxit = 300), init = NULL,
                      coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE, 
                   bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE,
-                  optimiser=c("BFGS","NelderMead"),
+                  optimiser=c("BFGS","NelderMead"), log.time.transform=TRUE,
                      reltol=1.0e-8, trace = 0,
                      link.type=c("PH","PO","probit","AH","AO"), theta.AO=0, 
                   frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"), recurrent = FALSE,
@@ -683,9 +684,13 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     wt <- if (is.null(substitute(weights))) rep(1,nrow(data)) else eval(substitute(weights),data,parent.frame())
     ##
     ## XD matrix
-    lpfunc <- function(delta,fit,dataset,var) {
-      dataset[[var]] <- dataset[[var]]+delta
-      lpmatrix.lm(fit,dataset)
+    ## lpfunc <- function(delta,fit,dataset,var) {
+    ##   dataset[[var]] <- dataset[[var]]+delta
+    ##   lpmatrix.lm(fit,dataset)
+    ## }
+    lpfunc <- function(x,fit,data,var) {
+      data[[var]] <- x
+      lpmatrix.lm(fit,data)
     }
     ##
     bhazard <- substitute(bhazard)
@@ -715,8 +720,9 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             init <- init[index0]
         }
         X <- transX(X,data)
-        XD <- grad(lpfunc,0,lm.obj,data,timeVar)
-        XD <- transXD(matrix(XD,nrow=nrow(X)))
+        XD <- grad1(lpfunc,data[[timeVar]],lm.obj,data,timeVar,log.transform=log.time.transform)
+        ## XD <- grad(lpfunc,0,lm.obj,data,timeVar)
+        ## XD <- transXD(matrix(XD,nrow=nrow(X)))
         X1 <- matrix(0,nrow(X),ncol(X))
         X0 <- matrix(0,1,ncol(X))
         if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
@@ -742,8 +748,9 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         data0 <- data
         data0[[timeVar]] <- data0[[time0Var]]
         X <- transX(lpmatrix.lm(lm.obj, data0), data0)
-        XD <- grad(lpfunc,0,lm.obj,data0,timeVar)
-        XD <- transXD(matrix(XD,nrow=nrow(X)))
+        XD <- grad1(lpfunc,data0[[timeVar]],lm.obj,data0,timeVar,log.transform=log.time.transform)
+        ## XD <- grad(lpfunc,0,lm.obj,data0,timeVar)
+        ## XD <- transXD(matrix(XD,nrow=nrow(X)))
         X0 <- matrix(0,nrow(X),ncol(X))
         rm(data0)
     } 
@@ -765,7 +772,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
                  kappa=1, trace = trace, oldcluster=cluster, frailty=frailty, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
-                 RandDist=RandDist, optimiser=optimiser,
+                 RandDist=RandDist, optimiser=optimiser, log.time.transform=log.time.transform,
                  type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD, maxkappa=maxkappa, Z=Z, Z.formula = Z.formula, thetaAO = theta.AO, excess=excess, data=data,
                  robust_initial = robust_initial)
     if (frailty) {
@@ -1015,10 +1022,16 @@ predict.stpm2.base <-
             newdata2 <- newdata
             newdata2[[object@timeVar]] <- x
             predict(object@gam,newdata2,type="lpmatrix")
-        } else  function(delta,fit,data,var) {
-            data[[var]] <- data[[var]]+delta
-            lpmatrix.lm(fit,data)
-        }
+        } else
+            function(x,...) {
+                newdata2 <- newdata
+                newdata2[[object@timeVar]] <- x
+                lpmatrix.lm(object@lm,newdata2)
+            }
+        ##     function(delta,fit,data,var) {
+        ##     data[[var]] <- data[[var]]+delta
+        ##     lpmatrix.lm(fit,data)
+        ## }
     ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
     ## similarly for the derivatives
     if (grid) {
@@ -1044,12 +1057,14 @@ predict.stpm2.base <-
     if (calcX)  {
       if (inherits(object, "stpm2")) {
           X <- object@args$transX(lpmatrix.lm(object@lm, newdata), newdata)
-          XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
-          XD <- object@args$transXD(matrix(XD,nrow=nrow(X)))
+          XD <- grad1(lpfunc,newdata[[object@timeVar]],
+                      log.transform=object@args$log.time.transform)
+          XD <- object@args$transXD(XD)
       }
       if (inherits(object, "pstpm2")) {
            X <- object@args$transX(predict(object@gam, newdata, type="lpmatrix"), newdata)      
-           XD <- object@args$transXD(grad1(lpfunc,newdata[[object@timeVar]]))
+           XD <- object@args$transXD(grad1(lpfunc,newdata[[object@timeVar]]),
+                                     log.transform=object@args$log.time.transform)
       }
         ## X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
         ## XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
@@ -1074,12 +1089,14 @@ predict.stpm2.base <-
         newdata2 <- exposed(newdata)
       if (inherits(object, "stpm2")) {
           X2 <- object@args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
-          XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
-          XD2 <- object@args$transXD(matrix(XD2,nrow=nrow(X)))
+          XD2 <- grad1(lpfunc,newdata2[[object@timeVar]],
+                       log.transform=object@args$log.time.transform)
+          XD2 <- object@args$transXD(XD)
       }
       if (inherits(object, "pstpm2")) {
            X2 <- object@args$transX(predict(object@gam, newdata2, type="lpmatrix"), newdata2)      
-           XD2 <- object@args$transXD(grad1(lpfunc,newdata2[[object@timeVar]]))
+           XD2 <- object@args$transXD(grad1(lpfunc,newdata2[[object@timeVar]],
+                                            log.transform=object@args$log.time.transform))
       }
         ## X2 <- args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
         ## XD2 <- grad(lpfunc,0,object@lm,newdata2,object@timeVar)
@@ -1768,7 +1785,9 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=1, trace = 0,
                    link.type=c("PH","PO","probit","AH","AO"), theta.AO=0,
-                  optimiser=c("BFGS","NelderMead","Nlm"), recurrent = FALSE,
+                   optimiser=c("BFGS","NelderMead","Nlm"),
+                   log.time.transform=TRUE,
+                   recurrent = FALSE,
                   frailty=!is.null(cluster) & !robust, cluster = NULL, logtheta=-6, nodes=9,RandDist=c("Gamma","LogN"),
                   adaptive=TRUE, maxkappa = 1e3, Z = ~1,
                    reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-5),outer_optim=1,
@@ -1959,8 +1978,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             ## init <- init[index0]
         }
         X <- transX(X,data)
-        XD <- grad1(lpfunc,data[[timeVar]])    
-        XD <- transXD(matrix(XD,nrow=nrow(X)))
+        XD <- grad1(lpfunc,data[[timeVar]], log.transform=object@args$log.time.transform)    
+        XD <- transXD(XD)
         X1 <- matrix(0,nrow(X),ncol(X))
         X0 <- matrix(0,1,ncol(X))
         if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
@@ -1991,7 +2010,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             predict(gam.obj,newdata,type="lpmatrix")
         }
         X <- transX(predict(gam.obj,data0,type="lpmatrix"), data0)
-        XD <- grad1(lpfunc,data0[[timeVar]])    
+        XD <- grad1(lpfunc,data0[[timeVar]], log.transform=log.time.transform)
         XD <- transXD(matrix(XD,nrow=nrow(X)))
         X0 <- matrix(0,nrow(X),ncol(X))
         rm(data0)
@@ -2035,6 +2054,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  oldcluster=cluster, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL, frailty=frailty,
                  map0 = map0 - 1L, ind0 = ind0, which0=which0 - 1L, link = link.type,
                  penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser=optimiser,
+                 log.time.transform=log.time.transform,
                  type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2", recurrent = recurrent, maxkappa=maxkappa,
                  transX=transX, transXD=transXD, Z.formula = Z, thetaAO = theta.AO, excess=excess,
                  return_type="optim", data=data, robust_initial=robust_initial)
