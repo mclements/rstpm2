@@ -560,14 +560,16 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
-    eventExpr <- lhs(formula)[[length(lhs(formula))]]
     delayed <- length(lhs(formula))>=4 # indicator for multiple times (cf. strictly delayed)
     surv.type <- attr(eventInstance,"type")
     if (surv.type %in% c("interval2","left","mstate"))
         stop("stpm2 not implemented for Surv type ",surv.type,".")
     counting <- attr(eventInstance,"type") == "counting"
     interval <- attr(eventInstance,"type") == "interval"
-    timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
+    timeExpr <- lhs(formula)[[if (delayed && !interval) 3 else 2]] # expression
+    eventExpr <- if (interval) lhs(formula)[[4]] else lhs(formula)[[length(lhs(formula))]]
+    if (interval)
+        time2Expr <- lhs(formula)[[3]]
     if (timeVar == "")
         timeVar <- all.vars(timeExpr)
     ## set up the formulae
@@ -632,7 +634,8 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     }
     event <- eval(eventExpr,data)
     ## if all the events are the same, we assume that they are all events, else events are those greater than min(event)
-    event <- if (length(unique(event))==1) rep(TRUE, length(event)) else event <- event > min(event)
+    if (!interval)
+        event <- if (length(unique(event))==1) rep(TRUE, length(event)) else event <- event > min(event)
     ## setup for initial values
     if (!interval) {
         ## Cox regression
@@ -669,8 +672,9 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     lhs(lm.formula) <- quote(logHhat) # new response
     lm.call$formula <- lm.formula
     dataEvents <- data[event,]
-    if (interval)
-        dataEvents <- data
+    if (interval) {
+        dataEvents <- data[event>0, , drop=FALSE]
+    }
     lm.call$data <- quote(dataEvents) # events only
     lm.obj <- eval(lm.call)
     if (is.null(init)) {
@@ -744,11 +748,12 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         ## ttime <- eventInstance[,1]
         ## ttime2 <- eventInstance[,2]
         ttype <- eventInstance[,3]
-        X1 <- transX(lpmatrix.lm(lm.obj,data),data)
+        X <- transX(lpmatrix.lm(lm.obj,data),data)
+        XD <- grad1(lpfunc,data[[timeVar]],lm.obj,data,timeVar,log.transform=log.time.transform)
         data0 <- data
-        data0[[timeVar]] <- data0[[time0Var]]
-        X <- transX(lpmatrix.lm(lm.obj, data0), data0)
-        XD <- grad1(lpfunc,data0[[timeVar]],lm.obj,data0,timeVar,log.transform=log.time.transform)
+        data0[[timeVar]] <- data0[[as.character(time2Expr)]]
+        data0[[timeVar]] <- ifelse(data0[[timeVar]]<=0,NA,data0[[timeVar]])
+        X1 <- transX(lpmatrix.lm(lm.obj, data0), data0)
         ## XD <- grad(lpfunc,0,lm.obj,data0,timeVar)
         ## XD <- transXD(matrix(XD,nrow=nrow(X)))
         X0 <- matrix(0,nrow(X),ncol(X))

@@ -642,9 +642,7 @@ namespace rstpm2 {
       vec H = link->H(eta);
       vec H1 = link->H(eta1);
       vec h = link->h(eta, etaD) + bhazard;
-      double constraint = kappa/2.0 * (sum(H % H % (H<0))+
-				       sum(h % h % (h<0))+
-				       sum(H1 % H1 % (H1<0)));
+      double constraint = 0.0;
       vec eps = H*0.0 + 1e-16;
       H = max(H,eps);
       H1 = max(H1,eps);
@@ -652,13 +650,27 @@ namespace rstpm2 {
       vec li(N,fill::zeros);
       uvec index;
       index = find(ttype == 0); // right censored
-      if (any(index)) li(index) -= wt(index) % H(index);
+      if (any(index)) {
+	li(index) -= wt(index) % H(index);
+	constraint += kappa/2.0 * sum(H(index) % H(index) % (H(index)<0));
+      }
       index = find(ttype == 1); // exact
-      if (any(index)) li(index) += wt(index) % (log(h(index)) - H(index));
+      if (any(index)) {
+	li(index) += wt(index) % (log(h(index)) - H(index));
+	constraint += kappa/2.0 * (sum(H(index) % H(index) % (H(index)<0))+
+				   sum(h(index) % h(index) % (h(index)<0)));
+      }
       index = find(ttype == 2); // left censored
-      if (any(index)) li(index) += wt(index) % log(1-exp(-H(index)));
+      if (any(index)) {
+	li(index) += wt(index) % log(1-exp(-H(index)));
+	constraint += kappa/2.0 * sum(H(index) % H(index) % (H(index)<0));
+      }
       index = find(ttype == 3); // interval censored
-      if (any(index)) li(index) += wt(index) % log(exp(-H(index)) - exp(-H1(index)));
+      if (any(index)) {
+	li(index) += wt(index) % log(exp(-H(index)) - exp(-H1(index)));
+	constraint += kappa/2.0 * (sum(H(index) % H(index) % (H(index)<0))+
+				   sum(H1(index) % H1(index) % (H1(index)<0)));
+      }
       li_constraint out = {li, constraint};
       return out;
     }
@@ -781,25 +793,38 @@ namespace rstpm2 {
       mat gradH1 = link->gradH(eta1,X1);
       mat gradh = link->gradh(eta, etaD, X, XD);
       vec eps = H*0.0 + 1e-16;
-      mat Xconstraint = kappa * (rmult(gradH, H % (H<eps))+
-				 rmult(gradh, h % (h<eps))+
-				 rmult(gradH1, H1 % (H1<eps)));
+      // mat Xconstraint = kappa * (rmult(gradH, H % (H<eps))+
+      // 				 rmult(gradh, h % (h<eps))+
+      // 				 rmult(gradH1, H1 % (H1<eps)));
+      mat Xconstraint = X * 0.0;
       H = max(H,eps);
       H1 = max(H1,eps);
       h = max(h,eps);
       mat li(N,n,fill::zeros);
       uvec index;
       index = find(ttype == 0); // right censored
-      if (any(index)) li.rows(index) -= rmult(gradH.rows(index),wt(index));
+      if (any(index)) {
+	li.rows(index) -= rmult(gradH.rows(index),wt(index));
+	Xconstraint.rows(index) += kappa*(rmult(gradH.rows(index), H(index) % (H(index)<eps(index))));
+      }
       index = find(ttype == 1); // exact
-      if (any(index)) li.rows(index) += rmult(gradh.rows(index),wt(index) / h(index)) - rmult(gradH.rows(index),wt(index));
+      if (any(index)) {
+	li.rows(index) += rmult(gradh.rows(index),wt(index) / h(index)) - rmult(gradH.rows(index),wt(index));
+	Xconstraint.rows(index) += kappa*(rmult(gradH.rows(index), H(index) % (H(index)<eps(index))) +
+					  rmult(gradh.rows(index), h(index) % (h(index)<eps(index))));
+      }
       index = find(ttype == 2); // left censored
-      if (any(index)) li.rows(index) += rmult(-gradH.rows(index),-exp(-H(index)) / (1-exp(-H(index))) % wt(index));
+      if (any(index)) {
+	li.rows(index) += rmult(-gradH.rows(index),-exp(-H(index)) / (1-exp(-H(index))) % wt(index));
+	Xconstraint.rows(index) += kappa*(rmult(gradH.rows(index), H(index) % (H(index)<eps(index))));
+      }
       index = find(ttype == 3); // interval censored
       if (any(index)) {
 	vec V = wt(index) / (exp(-H(index)) - exp(-H1(index)));
 	li.rows(index) += rmult(gradH1.rows(index),V % exp(-H1(index))) - 
 	  rmult(gradH.rows(index),V % exp(-H(index)));
+	Xconstraint.rows(index) += kappa*(rmult(gradH.rows(index), H(index) % (H(index)<eps(index))) +
+					  rmult(gradH1.rows(index), H1(index) % (H1(index)<eps(index))));
       }
       gradli_constraint out = {li, Xconstraint};
       return out;
