@@ -610,7 +610,8 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     if(class(subset.expr)=="NULL") subset.expr <- TRUE
     .include <- apply(model.matrix(formula, data, na.action = na.pass), 1, function(row) !any(is.na(row))) &
         !is.na(eval(eventExpr,data)) & !is.na(eval(timeExpr,data)) & eval(subset.expr,data)
-    data <- data[.include, , drop=FALSE]
+    if (!interval)
+        data <- data[.include, , drop=FALSE]
     ##
     ## parse the function call
     Call <- match.call()
@@ -1821,7 +1822,6 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     mf <- mf[c(1L, m)]
     ##
     ## parse the event expression
-    eventExpr <- lhs(formula)[[length(lhs(formula))]]
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
     delayed <- length(lhs(formula))>=4
@@ -1829,13 +1829,17 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     if (surv.type %in% c("interval2","left","mstate"))
         stop("stpm2 not implemented for Surv type ",surv.type,".")
     interval <- attr(eventInstance,"type") == "interval"
-    timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
+    timeExpr <- lhs(formula)[[if (delayed && !interval) 3 else 2]] # expression
+    eventExpr <- if (interval) lhs(formula)[[4]] else lhs(formula)[[length(lhs(formula))]]
+    if (interval)
+        time2Expr <- lhs(formula)[[3]]
     if (timeVar == "")
       timeVar <- all.vars(timeExpr)
     ## restrict to non-missing data (assumes na.action=na.omit)
     .include <- apply(model.matrix(formula, data, na.action = na.pass), 1, function(row) !any(is.na(row))) &
         !is.na(eval(eventExpr,data)) & !is.na(eval(timeExpr,data))
-    data <- data[.include, , drop=FALSE] ### REPLACEMENT ###
+    if (!interval)
+        data <- data[.include, , drop=FALSE] ### REPLACEMENT ###
     ## we can now evaluate over data
     time <- eval(timeExpr, data, parent.frame())
     time0Expr <- NULL # initialise
@@ -1846,7 +1850,8 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
       time0 <- eval(time0Expr, data, parent.frame())
     }
     event <- eval(eventExpr,data,parent.frame())
-    event <- event > min(event)
+    if (!interval)
+        event <- if (length(unique(event))==1) rep(TRUE, length(event)) else event <- event > min(event)
     nevent <- sum(event)
     ##
     ## set up the formulae
@@ -1926,8 +1931,9 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     if (is.null(sp) && !is.null(sp.init) && (length(sp.init)>1 || sp.init!=1))
         gam.call$sp <- sp.init
     dataEvents <- data[event,]
-    if (interval)
-        dataEvents <- data
+    if (interval) {
+        dataEvents <- data[event>0, , drop=FALSE]
+    }
     gam.call$data <- quote(dataEvents) # events only
     gam.obj <- eval(gam.call)
     ## re-run gam if sp.init==1 (default)
@@ -2006,17 +2012,18 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         ## ttime <- eventInstance[,1]
         ## ttime2 <- eventInstance[,2]
         ttype <- eventInstance[,3]
-        X1 <- transX(predict(gam.obj,data,type="lpmatrix"), data)
-        data0 <- data
-        data0[[timeVar]] <- data0[[time0Var]]
-        lpfunc <- function(x,...) {
-            newdata <- data0
-            newdata[[timeVar]] <- x
-            predict(gam.obj,newdata,type="lpmatrix")
-        }
-        X <- transX(predict(gam.obj,data0,type="lpmatrix"), data0)
-        XD <- grad1(lpfunc,data0[[timeVar]], log.transform=log.time.transform)
+        X <- transX(predict(gam.obj,data,type="lpmatrix"), data)
+        XD <- grad1(lpfunc,data[[timeVar]], log.transform=log.time.transform)
         XD <- transXD(matrix(XD,nrow=nrow(X)))
+        data0 <- data
+        data0[[timeVar]] <- data0[[as.character(time2Expr)]]
+        data0[[timeVar]] <- ifelse(data0[[timeVar]]<=0,NA,data0[[timeVar]])
+        ## lpfunc <- function(x,...) {
+        ##     newdata <- data0
+        ##     newdata[[timeVar]] <- x
+        ##     predict(gam.obj,newdata,type="lpmatrix")
+        ## }
+        X1 <- transX(predict(gam.obj,data0,type="lpmatrix"), data0)
         X0 <- matrix(0,nrow(X),ncol(X))
         rm(data0)
     }
