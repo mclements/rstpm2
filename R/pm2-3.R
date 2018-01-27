@@ -1068,8 +1068,8 @@ predict.stpm2.base <-
       }
       if (inherits(object, "pstpm2")) {
            X <- object@args$transX(predict(object@gam, newdata, type="lpmatrix"), newdata)      
-           XD <- object@args$transXD(grad1(lpfunc,newdata[[object@timeVar]]),
-                                     log.transform=object@args$log.time.transform)
+           XD <- object@args$transXD(grad1(lpfunc,newdata[[object@timeVar]],
+                                           log.transform=object@args$log.time.transform))
       }
         ## X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
         ## XD <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
@@ -1528,8 +1528,8 @@ predict.stpm2.base <-
                         upper=ci[,2])
       if (link=="cloglog") 
           out <- data.frame(Estimate=out$Estimate,lower=out$upper,upper=out$lower)
+      out <- invlinkf(out)
     }
-    out <- invlinkf(out)
     if (keep.attributes)
         attr(out,"newdata") <- newdata
     return(out)
