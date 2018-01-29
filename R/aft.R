@@ -243,7 +243,7 @@ setClass("aft", representation(args="list"), contains="mle2")
 aft <- function(formula, data, smooth.formula = NULL, df = 3,
                  control = list(parscale = 1, maxit = 1000), init = NULL,
                  weights = NULL, 
-                 timeVar = "", time0Var = "", 
+                 timeVar = "", time0Var = "", log.time.transform=TRUE,
                  reltol=1.0e-8, trace = 0,
                  contrasts = NULL, subset = NULL, use.gr = TRUE, ...) {
     ## parse the event expression
@@ -351,9 +351,9 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     wt <- if (is.null(substitute(weights))) rep(1,nrow(data)) else eval(substitute(weights),data,parent.frame())
     ##
     ## XD matrix
-    lpfunc <- function(delta,fit,dataset,var) {
-      dataset[[var]] <- dataset[[var]]+delta
-      lpmatrix.lm(fit,dataset)
+    lpfunc <- function(x,fit,data,var) {
+      data[[var]] <- x
+      lpmatrix.lm(fit,data)
     }
     ##
     ## initialise values
@@ -364,7 +364,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     ## ttype <- 0
     ## surv.type %in% c("right","counting")
     X <- lpmatrix.lm(lm.obj,data)
-    XD <- grad(lpfunc,0,lm.obj,data,timeVar)
+    XD <- grad1(lpfunc,data[[timeVar]],lm.obj,data,timeVar,log.transform=log.time.transform)
     XD <- matrix(XD,nrow=nrow(X))
     X0 <- matrix(0,1,ncol(X))
     if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
@@ -398,7 +398,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     args <- list(init=init,X=X,XD=XD,wt=wt,event=ifelse(event,1,0),time=time,y=y,
                  timeVar=timeVar,timeExpr=timeExpr,terms=mt,
                  delayed=delayed, X0=X0, wt0=wt0, parscale=parscale, reltol=reltol,
-                 time0=if (delayed) time0[time0>0] else NULL,
+                 time0=if (delayed) time0[time0>0] else NULL, log.time.transform=log.time.transform,
                  trace = as.integer(trace), map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L,
                  boundaryKnots=attr(design,"Boundary.knots"), q.const=t(attr(design,"q.const")),
                  interiorKnots=attr(design,"knots"), design=design, designD=designD,
@@ -586,9 +586,10 @@ setMethod("predict", "aft",
                   time <- as.vector(y[,ncol(y)-1])
                   newdata <- as.data.frame(args$data)
               }
-              lpfunc <- function(delta,fit,data,var) {
-                  data[[var]] <- data[[var]]+delta
-                  lpmatrix.lm(fit,data)
+              lpfunc <- function(x,...) {
+                  newdata2 <- newdata
+                  newdata2[[object@args$timeVar]] <- x
+                  lpmatrix.lm(object@args$lm.obj,newdata2)
               }
               ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
               ## similarly for the derivatives
@@ -606,14 +607,16 @@ setMethod("predict", "aft",
               }
               if (calcX)  {
                   X <- lpmatrix.lm(args$lm.obj, newdata)
-                  XD <- grad(lpfunc,0,args$lm.obj,newdata,args$timeVar)
+                  XD <- grad1(lpfunc,newdata[[object@args$timeVar]],
+                              log.transform=object@args$log.time.transform)
                   XD <- matrix(XD,nrow=nrow(X))
                   time <- eval(args$timeExpr,newdata)
               }
               if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","af","accfac")) {
                   newdata2 <- exposed(newdata)
                   X2 <- lpmatrix.lm(args$lm.obj, newdata2)
-                  XD2 <- grad(lpfunc,0,args$lm.obj,newdata2,args$timeVar)
+                  XD2 <- grad1(lpfunc,newdata2[[object@args$timeVar]],
+                              log.transform=object@args$log.time.transform)
                   XD2 <- matrix(XD2,nrow=nrow(X))
                   time2 <- eval(args$timeExpr,newdata2) # is this always equal to time?
               }
@@ -639,7 +642,7 @@ setMethod("predict", "aft",
                   if (type=="odds") 
                       return((1-S)/S)
                   if (type=="meansurv") 
-                      return(tapply(S,newdata[[object@timeVar]],mean))
+                      return(tapply(S,newdata[[object@args$timeVar]],mean))
                   etaDs <- as.vector(predict(args$designD, logtstar) %*% betas)
                   etaD <- as.vector(XD %*% beta)
                   h <- H*etaDs*(1/time-etaD)
@@ -653,7 +656,7 @@ setMethod("predict", "aft",
                   if (type=="loghazard") 
                       return(log(h))
                   if (type=="meanhaz") 
-                      return(tapply(S*h,newdata[[object@timeVar]],sum)/tapply(S,newdata[[object@timeVar]],sum))
+                      return(tapply(S*h,newdata[[object@args$timeVar]],sum)/tapply(S,newdata[[object@args$timeVar]],sum))
                   eta2 <- as.vector(X2 %*% beta)
                   logtstar2 <- log(time2) - eta2
                   etas2 <- as.vector(predict(args$design, logtstar2) %*% betas)
@@ -664,7 +667,7 @@ setMethod("predict", "aft",
                   if (type=="or") 
                       return((1-S2)/S2/((1-S)/S))
                   if (type=="meansurvdiff")
-                      return(tapply(S2,newdata[[object@timeVar]],mean) - tapply(S,newdata[[object@timeVar]],mean))
+                      return(tapply(S2,newdata[[object@args$timeVar]],mean) - tapply(S,newdata[[object@args$timeVar]],mean))
                   etaDs2 <- as.vector(predict(args$designD, logtstar2) %*% betas)
                   etaD2 <- as.vector(XD2 %*% beta)
                   h2 <- H2*etaDs2*(1/time2-etaD2)
@@ -673,8 +676,8 @@ setMethod("predict", "aft",
                   if (type=="hr") 
                       return(h2/h)
                   if (type=="af") {
-                      meanS <- tapply(S,newdata[[object@timeVar]],mean)
-                      meanS2 <- tapply(S2,newdata[[object@timeVar]],mean)
+                      meanS <- tapply(S,newdata[[object@args$timeVar]],mean)
+                      meanS2 <- tapply(S2,newdata[[object@args$timeVar]],mean)
                       return((meanS2 - meanS)/(1-meanS))
                   }
                   if (type=="accfac") {
