@@ -21,6 +21,7 @@ stpm2(formula, data,
       NULL, control = list(parscale = 1, maxit = 300),
       init = NULL, coxph.strata = NULL, weights = NULL,
       robust = FALSE, baseoff = FALSE, bhazard = NULL,
+      bhazinit = 0.1,
       timeVar = "", time0Var = "", use.gr = TRUE,
       optimiser=c("BFGS","NelderMead"), log.time.transform=TRUE,
       reltol=1.0e-8, trace = 0,
@@ -80,6 +81,10 @@ time-varying coefficient is being model, then only one of
 a vector for the background hazard for relative survival estimation. At
 present, this does not use \code{data} and it is required for
 all individuals - although it is only used at the event times.
+}
+  \item{bhazinit}{
+scalar used to adjust the background cumulative hazards for calculating
+initial values. Default=0.1.
 }
 \item{control}{\code{control} argument passed to \code{optim}.}
 \item{init}{\code{init} should either be \code{FALSE}, such that initial

@@ -540,7 +540,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                      tvc = NULL, tvc.formula = NULL,
                      control = list(parscale = 1, maxit = 300), init = NULL,
                      coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE, 
-                  bhazard = NULL, timeVar = "", time0Var = "", use.gr = TRUE,
+                  bhazard = NULL, bhazinit=0.1, timeVar = "", time0Var = "", use.gr = TRUE,
                   optimiser=c("BFGS","NelderMead"), log.time.transform=TRUE,
                      reltol=1.0e-8, trace = 0,
                      link.type=c("PH","PO","probit","AH","AO"), theta.AO=0, 
@@ -653,7 +653,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         y <- model.extract(model.frame(coxph.obj),"response")
         data$logHhat <- if (is.null(bhazard)) {
                             pmax(-18,link$link(Shat(coxph.obj)))
-                        } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-bhazard*time)))
+                        } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-bhazinit*bhazard*time)))
     }
     if (interval) {
         ## survref regression
@@ -1786,7 +1786,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                    control = list(parscale = 1, maxit = 300), init = NULL,
                    coxph.strata = NULL, coxph.formula = NULL,
                    weights = NULL, robust = FALSE, 
-                   bhazard = NULL, timeVar = "", time0Var = "",
+                   bhazard = NULL, bhazinit=0.1, timeVar = "", time0Var = "",
                    sp=NULL, use.gr = TRUE, 
                    criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
                    alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=1, trace = 0,
@@ -1908,7 +1908,9 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         ## coxph.obj <- eval(coxph.call, envir=parent.frame())
         coxph.obj <- eval(coxph.call, coxph.data)
         y <- model.extract(model.frame(coxph.obj),"response")
-        data$logHhat <- pmax(-18,link$link(Shat(coxph.obj)))
+        data$logHhat <- if (is.null(bhazard)) {
+                            pmax(-18,link$link(Shat(coxph.obj)))
+                        } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-bhazinit*bhazard*time)))
     }
     if (interval) {
         ## survref regression
@@ -1989,7 +1991,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             ## init <- init[index0]
         }
         X <- transX(X,data)
-        XD <- grad1(lpfunc,data[[timeVar]], log.transform=object@args$log.time.transform)    
+        XD <- grad1(lpfunc,data[[timeVar]], log.transform=log.time.transform)    
         XD <- transXD(XD)
         X1 <- matrix(0,nrow(X),ncol(X))
         X0 <- matrix(0,1,ncol(X))

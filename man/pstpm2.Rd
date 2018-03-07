@@ -23,7 +23,7 @@ pstpm2(formula, data, smooth.formula = NULL, smooth.args = NULL,
        control = list(parscale = 1, maxit = 300), init = NULL,
        coxph.strata = NULL, coxph.formula = NULL,
        weights = NULL, robust = FALSE, 
-       bhazard = NULL, timeVar = "", time0Var = "",
+       bhazard = NULL, bhazinit = 0.1, timeVar = "", time0Var = "",
        sp=NULL, use.gr = TRUE, 
        criterion=c("GCV","BIC"), penalty = c("logH","h"),
        smoother.parameters = NULL,
@@ -77,6 +77,10 @@ a list with the names of the time-varying coefficients
 \item{robust}{Boolean used to determine whether to use a robust variance
   estimator.}
 \item{bhazard}{variable for the baseline hazard for relative survival}
+  \item{bhazinit}{
+scalar used to adjust the background cumulative hazards for calculating
+initial values. Default=0.1.
+}
 \item{timeVar}{variable defining the time variable. By default, this is
 determined from the survival object, however this may be ambiguous if
 two variables define the time}
