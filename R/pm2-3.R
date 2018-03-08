@@ -993,6 +993,23 @@ predict.stpm2.base <-
                    se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,...)
 {
     type <- match.arg(type)
+    if (is.null(link)) {
+        if(object@args$excess){
+            link <- switch(type, surv = "log", cumhaz = "I",
+                           hazard = "I", hr = "I", sdiff = "I", hdiff = "I",
+                           loghazard = "I", link = "I", odds = "log", or = "log",
+                           margsurv = "log", marghaz = "I", marghr = "I",
+                           meansurv = "I", meanhr = "I", meanhaz = "I", af = "I", uncured = "log",
+                           rmst = "I")
+        } else {
+            link <- switch(type, surv = "cloglog", cumhaz = "log",
+                           hazard = "log", hr = "log", sdiff = "I", hdiff = "I",
+                           loghazard = "I", link = "I", odds = "log", or = "log",
+                           margsurv = "cloglog", marghaz = "log", marghr = "log",
+                           meansurv = "I", meanhr="log", meanhaz = "I", af = "I", uncured = "cloglog",
+                           rmst = "I")
+        }
+    }
     if (is.null(link))
         link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
                        hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meansurv="I",meanhr="log",meanhaz="log",af="I",uncured="cloglog",rmst="I")
