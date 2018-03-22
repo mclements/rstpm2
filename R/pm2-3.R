@@ -988,47 +988,48 @@ setMethod("residuals", "stpm2",
 
 predict.stpm2.base <- 
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure"),
                    grid=FALSE,seqLength=300,
+                   type.relsurv=c("excess","total","other"), ratetable = survexp.us, rmap=list(), scale=365.24,
                    se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,...)
 {
     type <- match.arg(type)
+    type.relsurv <- match.arg(type.relsurv)
+    args <- object@args
     if (is.null(link)) {
-        if(object@args$excess){
+        if(args$excess){
             link <- switch(type, surv = "log", cumhaz = "I",
                            hazard = "I", hr = "I", sdiff = "I", hdiff = "I",
                            loghazard = "I", link = "I", odds = "log", or = "log",
                            margsurv = "log", marghaz = "I", marghr = "I",
                            meansurv = "I", meanhr = "I", meanhaz = "I", af = "I", uncured = "log",
-                           rmst = "I")
+                           rmst = "I", probcure = "cloglog")
         } else {
             link <- switch(type, surv = "cloglog", cumhaz = "log",
                            hazard = "log", hr = "log", sdiff = "I", hdiff = "I",
                            loghazard = "I", link = "I", odds = "log", or = "log",
                            margsurv = "cloglog", marghaz = "log", marghr = "log",
                            meansurv = "I", meanhr="log", meanhaz = "I", af = "I", uncured = "cloglog",
-                           rmst = "I")
+                           rmst = "I", probcure = "cloglog")
         }
     }
-    if (is.null(link))
-        link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                       hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",marghaz="log",marghr="log",meansurv="I",meanhr="log",meanhaz="log",af="I",uncured="cloglog",rmst="I")
     invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
     linkf <- eval(parse(text=link))
-    args <- object@args
+    if (type %in% c("uncured","probcure") && is.null(exposed))
+        exposed <- function(data) data[[object@timeVar]] <- max(args$time[args$event])
     if (type %in% c("fail","margfail")) {
         out <- 1-predict.stpm2.base(object,newdata=newdata,type=switch(type, fail="surv", margfail="margsurv"),grid,seqLength,se.fit,link,exposed,var,keep.attributes,use.gr,...)
         if (se.fit) {temp <- out$lower; out$lower <- out$upper; out$upper <- temp}
         return(out)
     }
-      if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured"))
-          stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured")')
+      if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure"))
+          stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure")')
       if (type %in% c('margsurv','marghaz','marghr','margfail','meanmargsurv') && !object@args$frailty)
           stop("Marginal prediction only for frailty models")
     ## exposed is a function that takes newdata and returns the revised newdata
     ## var is a string for a variable that defines a unit change in exposure
     if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","uncured"))
-        stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','meanhr','or','marghr','uncured') requires newdata to be specified.")
+        stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','meanhr','or','marghr','uncured','probcure') requires newdata to be specified.")
     calcX <- !is.null(newdata)
     time <- NULL
     if (is.null(newdata)) {
@@ -1040,6 +1041,7 @@ predict.stpm2.base <-
         time <- as.vector(y[,ncol(y)-1])
         newdata <- as.data.frame(object@data)
     }
+    newdata2 <- NULL
     lpfunc <- if (inherits(object,"pstpm2")) 
         function(x,...) {
             newdata2 <- newdata
@@ -1072,10 +1074,30 @@ predict.stpm2.base <-
     if (type=="rmst") {
         if (nrow(newdata)>1) stop("rmst currently only for single value")
         stopifnot(object@timeVar %in% names(newdata))
-        time <- seq(0,newdata[[object@timeVar]],length.out=1001)[-1]
-        newdata <- newdata[rep(1,1000),]
+        quad <- gauss.quad(n.gauss.quad)
+        a <- 0
+        b <- newdata[[object@timeVar]]
+        time <- (b-a)/2*quad$nodes + (a+b)/2
+        weights <- quad$weights*(b-a)/2
+        newdata <- newdata[rep(1,length(time)),]
         newdata[[object@timeVar]] <- time
         calcX <- TRUE
+    }
+    if (args$excess) {
+        ## rmap <- substitute(rmap)
+        Sstar <- do.call(survexp, list(substitute(I(timeVar*scale)~1,list(timeVar=as.name(object@timeVar))),
+                                       ratetable=ratetable,
+                                       scale=scale,
+                                       rmap=rmap,
+                                       cohort=FALSE,
+                                       data=newdata))
+        if (!is.null(newdata2))
+            Sstar2 <- do.call(survexp, list(substitute(I(timeVar*scale)~1,list(timeVar=as.name(object@timeVar))),
+                                            ratetable=ratetable,
+                                            scale=scale,
+                                            rmap=rmap,
+                                            cohort=FALSE,
+                                            data=newdata2))
     }
     if (calcX)  {
       if (inherits(object, "stpm2")) {
@@ -1108,7 +1130,7 @@ predict.stpm2.base <-
     ##   ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
     ##   ## XD0 <- matrix(XD0,nrow=nrow(X0))
     ## }
-    if (type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured")) {
+    if (type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure")) {
         newdata2 <- exposed(newdata)
       if (inherits(object, "stpm2")) {
           X2 <- object@args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
@@ -1281,6 +1303,7 @@ predict.stpm2.base <-
         if (!object@args$excess && any(h<0)) warning(sprintf("Predicted hazards less than zero (n=%i).",sum(h<0)))
         H = link$H(eta)
         Sigma = vcov(object)
+        if (!args$excess) type.relsurv <- "excess" ## ugly hack
         if (type=="link") {
           return(eta)
         }
@@ -1297,7 +1320,7 @@ predict.stpm2.base <-
         if (type=="density")
             return (S*h)
         if (type=="surv") {
-          return(S)
+          return(switch(type.relsurv,excess=S,total=S*Sstar,other=Sstar))
         }
         if (type=="fail") {
           return(1-S)
@@ -1322,6 +1345,10 @@ predict.stpm2.base <-
         if (type=="uncured") {
             S2 <- link$ilink(as.vector(X2 %*% beta))
             return((S-S2)/(1-S2))
+        }
+        if (type=="probcure") {
+            S2 <- link$ilink(as.vector(X2 %*% beta))
+            S2/S
         }
         if (type=="hr") {
             eta2 <- as.vector(X2 %*% beta)
@@ -1433,7 +1460,7 @@ predict.stpm2.base <-
             return(marghaz2/marghaz)
         }
         if (type=="rmst") {
-            return(sum(S)*(newdata[[object@timeVar]][2]-newdata[[object@timeVar]][1]))
+            return(sum(S*weights))
         }
     }
     if (!se.fit) {
@@ -1555,11 +1582,13 @@ predict.stpm2.base <-
 
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure"),
                    grid=FALSE,seqLength=300,
+                   type.relsurv=c("excess","total","other"), scale=365.24, rmap=list(), ratetable=survexp.us,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,...)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
-                                 link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr,level=level, ...))
+                                 link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr,level=level,
+                                 type.relsurv=type.relsurv, scale=scale, rmap=substitute(rmap), ratetable=ratetable, ...))
 
 ##`%c%` <- function(f,g) function(...) g(f(...)) # function composition
 plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", exposed=NULL, var=NULL, add=FALSE, ci=!add, rug=!add, recent=FALSE,

@@ -18,6 +18,32 @@
 ##   require(bbmle)
 ## }
 
+## testing of relative survival
+library(rstpm2)
+ayear <- 365.24
+brcancer2 <- transform(brcancer, age=80*ayear, sex="male", year=as.Date("1980-01-01"), time=1, recyear=rectime/ayear)
+rate0 <- survexp(time~1,data=brcancer2,method="individual.h",scale=ayear)
+(fit1 <- stpm2(Surv(recyear,censrec==1)~hormon,data=brcancer2,df=2,cure=T,bhazard=rate0))
+head(predict(fit1,type.relsurv="excess"))
+head(predict(fit1,type.relsurv="total"))
+head(brcancer2)
+
+ayear <- 365.24
+timeVar <- substitute(times)
+scale <- ayear
+rmap <- substitute(list())
+newdata <- data.frame(sex=c("male",rep("male",5)),age=ayear*60,year=2002,times=c(1,1:5))
+survexp1 <- do.call(survexp, list(substitute(I(timeVar*scale)~1,list(timeVar=timeVar)),
+                                  ratetable=survexp.us,
+                                  scale=scale,
+                                  rmap=rmap,
+                                  cohort=FALSE,
+                                  data=newdata))
+
+
+plot(fit1, newdata=data.frame(hormon=1,age=80,sex="male",year=1980))
+## lines(fit1, newdata=data.frame(hormon=1,age=80,sex="male",year=1980))
+
 ## Bug report from Alessandro for 1.4.0
 library(rstpm2)
 data(kidney)
