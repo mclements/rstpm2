@@ -990,7 +990,7 @@ predict.stpm2.base <-
           function(object,newdata=NULL,
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure"),
                    grid=FALSE,seqLength=300,
-                   type.relsurv=c("excess","total","other"), ratetable = survexp.us, rmap=list(), scale=365.24,
+                   type.relsurv=c("excess","total","other"), ratetable = survexp.us, rmap, scale=365.24,
                    se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,...)
 {
     type <- match.arg(type)
@@ -1085,19 +1085,23 @@ predict.stpm2.base <-
     }
     if (args$excess) {
         ## rmap <- substitute(rmap)
+      if(type.relsurv != "excess"){
         Sstar <- do.call(survexp, list(substitute(I(timeVar*scale)~1,list(timeVar=as.name(object@timeVar))),
                                        ratetable=ratetable,
                                        scale=scale,
-                                       rmap=rmap,
+                                       rmap=substitute(rmap),
                                        cohort=FALSE,
                                        data=newdata))
+        Hstar <- -log(Sstar)
         if (!is.null(newdata2))
-            Sstar2 <- do.call(survexp, list(substitute(I(timeVar*scale)~1,list(timeVar=as.name(object@timeVar))),
-                                            ratetable=ratetable,
-                                            scale=scale,
-                                            rmap=rmap,
-                                            cohort=FALSE,
-                                            data=newdata2))
+          Sstar2 <- do.call(survexp, list(substitute(I(timeVar*scale)~1,list(timeVar=as.name(object@timeVar))),
+                                          ratetable=ratetable,
+                                          scale=scale,
+                                          rmap=rmap,
+                                          cohort=FALSE,
+                                          data=newdata2))
+        Hstar <- -log(Sstar)
+      } 
     }
     if (calcX)  {
       if (inherits(object, "stpm2")) {
@@ -1315,7 +1319,7 @@ predict.stpm2.base <-
             ##     return(H - H0)
             ## }
             ## else 
-                return(H)
+            return(switch(type.relsurv,excess=H,total=H+Hstar,other=Hstar))
         }
         if (type=="density")
             return (S*h)
@@ -1323,7 +1327,7 @@ predict.stpm2.base <-
           return(switch(type.relsurv,excess=S,total=S*Sstar,other=Sstar))
         }
         if (type=="fail") {
-          return(1-S)
+          return(switch(type.relsurv, excess=1-S,total=1-S*Star, other=1-Sstar))
         }
         if (type=="odds") { # delayed entry?
           return((1-S)/S)
@@ -1584,11 +1588,11 @@ setMethod("predict", "stpm2",
           function(object,newdata=NULL,
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure"),
                    grid=FALSE,seqLength=300,
-                   type.relsurv=c("excess","total","other"), scale=365.24, rmap=list(), ratetable=survexp.us,
+                   type.relsurv=c("excess","total","other"), scale=365.24, rmap, ratetable=survexp.us,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,...)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
                                  link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr,level=level,
-                                 type.relsurv=type.relsurv, scale=scale, rmap=substitute(rmap), ratetable=ratetable, ...))
+                                 type.relsurv=type.relsurv, scale=scale, rmap=rmap, ratetable=ratetable, ...))
 
 ##`%c%` <- function(f,g) function(...) g(f(...)) # function composition
 plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", exposed=NULL, var=NULL, add=FALSE, ci=!add, rug=!add, recent=FALSE,
@@ -1656,14 +1660,16 @@ plot.stpm2.base <-
           function(x,y,newdata=NULL,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),log="",
                    add=FALSE,ci=!add,rug=!add,
-                   var=NULL,exposed=incrVar(var),times=NULL,...) {
+                   var=NULL,exposed=incrVar(var),times=NULL,
+                   type.relsurv=c("excess","total","other"), ratetable = survexp.us, rmap, scale=365.24, ...) {
               if (type %in% c("meansurv","meansurvdiff","af","meanhaz","meanhr")) {
                   return(plot.meansurv(x,times=times,newdata=newdata,type=type,xlab=xlab,ylab=ylab,line.col=line.col,ci.col=ci.col,
                                        lty=lty,add=add,ci=ci,rug=rug, exposed=exposed, ...))
               }
               if (is.null(newdata)) stop("newdata argument needs to be specified")
               y <- predict(x,newdata,type=switch(type,fail="surv",margfail="margsurv",type),var=var,exposed=exposed,
-                           grid=!(x@timeVar %in% names(newdata)), se.fit=ci, keep.attributes=TRUE)
+                           grid=!(x@timeVar %in% names(newdata)), se.fit=ci, keep.attributes=TRUE, 
+                           type.relsurv=type.relsurv, ratetable=ratetable, rmap=rmap, scale=scale)
               if (type %in% c("fail","margfail")) {
                   if (ci) {
                       y$Estimate <- 1-y$Estimate
@@ -1700,19 +1706,25 @@ setMethod("plot", signature(x="stpm2", y="missing"),
           function(x,y,newdata=NULL,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
                    add=FALSE,ci=!add,rug=!add,
-                   var=NULL,exposed=incrVar(var),times=NULL,...)
+                   var=NULL,exposed=incrVar(var),times=NULL,
+                   type.relsurv=c("excess","total","other"), ratetable = survexp.us, 
+                   rmap, scale=365.24,...)
               plot.stpm2.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
                               ylab=ylab, line.col=line.col, ci.col=ci.col, lty=lty, add=add,
-                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
+                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, 
+                              type.relsurv=type.relsurv, ratetable=ratetable, rmap=rmap, scale=scale,...)
           )
 lines.stpm2 <- 
           function(x,newdata=NULL,type="surv",
                    col=1,ci.col="grey",lty=par("lty"),
                    ci=FALSE,rug=FALSE,
-                   var=NULL,exposed=incrVar(var),times=NULL,...)
+                   var=NULL,exposed=incrVar(var),times=NULL,
+                   type.relsurv=c("excess","total","other"), ratetable = survexp.us, 
+                   rmap, scale=365.24, ...)
               plot.stpm2.base(x=x, newdata=newdata, type=type, 
                               line.col=col, ci.col=ci.col, lty=lty, add=TRUE,
-                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
+                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, 
+                              type.relsurv=type.relsurv, ratetable=ratetable, rmap=rmap, scale=scale,...)
 setMethod("lines", signature(x="stpm2"), lines.stpm2)
 eform <- function (object, ...) 
   UseMethod("eform")
