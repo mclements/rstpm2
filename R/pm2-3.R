@@ -1083,7 +1083,7 @@ predict.stpm2.base <-
         newdata[[object@timeVar]] <- time
         calcX <- TRUE
     }
-    if (args$excess) {
+    if (args$excess && type.relsurv != "excess") {
         ## rmap <- substitute(rmap)
         Sstar <- do.call(survexp, list(substitute(I(timeVar*scale)~1,list(timeVar=as.name(object@timeVar))),
                                        ratetable=ratetable,
