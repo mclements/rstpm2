@@ -1,0 +1,145 @@
+%\VignetteIndexEntry{Introduction to the predictnl function}
+%\VignetteDepends{rstpm2}
+%\VignetteKeyword{variance estimation, delta method}
+%\VignettePackage{rstpm2}
+%!\SweaveUTF8
+
+\documentclass[article,nojss,12pt]{jss}
+
+\usepackage{Sweave,graphicx,amsmath,amsfonts,amssymb,url}
+
+\title{Introduction to the predictnl function}
+
+\author{Mark~Clements\\Karolinska Institutet}
+
+\Abstract{
+  The \code{predictnl} generic function supports variance estimation
+  for non-linear estimators using the delta method with finite
+  differences for the partial derivatives. The function loosely
+  extends the \code{predict} generic function.
+}
+
+\Keywords{delta method,variance estimation}
+
+\Address{Mark~Clements\\
+  Department of Medical Epidemiology and Biostatistics\\
+  Karolinska Institutet\\
+  Email: \email{mark.clements@ki.se}
+  }
+
+\begin{document}
+
+\section{Introduction}
+
+The delta method provides a general approach to calculate the variance (or standard errors) for a number of likelihood-based estimators. If we have an estimated vector of parameters $\hat\theta$ with covariance matrix $\boldsymbol{\hat\Sigma}$ and a vector prediction function $g(\theta)$, then the variance can be calculated using the delta method:
+\begin{align*}
+  \text{var}(g(\hat\theta)) &= \left(\left.\frac{\partial g(\theta)}{\partial \theta}\right|_{\theta=\hat\theta}\right)^T \boldsymbol{\hat\Sigma} \left(\left.\frac{\partial g(\theta)}{\partial \theta}\right|_{\theta=\hat\theta}\right)
+\end{align*}
+Classical statistics tends to focus on analytical calculations for the partial derivatives. As an example, let $g(\theta_i)=\exp(\theta_i)$ for the $i$th parameter; then $\partial g(\theta_i)/\partial(\theta_i)=\exp(\theta_i)$ and $\partial g(\theta_i)/\partial(\theta_j)=0$ for $i\neq j$. We then have that $\text{var}(g(\hat\theta_i))=\text{diag}\left(\exp(\hat\theta_i)\right)^T \boldsymbol{\hat\Sigma}\ \text{diag}\left(\exp(\hat\theta)\right)$.
+
+The partials can be calculated symbolically:
+<<>>=
+thetahat <- c(0.1,0.2)
+Sigma <- matrix(c(1,0.3,0.3,1),2,2)
+print(partial <- D(expression(exp(theta)),"theta"))
+partial <- diag(eval(partial,list(theta=thetahat)))
+var <- t(partial) %*% Sigma %*% partial
+data.frame(fit=exp(thetahat), se.fit=sqrt(diag(var)))
+@ 
+Note that we have calculated the standard errors by taking the square root of the diagonal of the matrix. We can also calculate the partials using finite differences, such that for a continuous function $f$
+\begin{align*}
+f'(x) &=\lim_{\epsilon \rightarrow 0}\frac{f(x+\epsilon)-f(x-\epsilon)}{2\epsilon}  
+\end{align*}
+In R:
+<<>>=
+myD <- function(f,x,eps=1e-5) (f(x+eps)-f(x-eps))/(2*eps)
+partial <- diag(myD(exp,thetahat))
+var <- t(partial) %*% Sigma %*% partial
+data.frame(fit=exp(thetahat),se.fit=sqrt(diag(var)))
+@ 
+This gives the same estimates to six decimal places. We could also calculate these values using the \code{predictnl} command, which we now introduce.
+
+The \code{predictnl} generic function provides a generalisation of the \code{predict} generic function to calculate standard errors. \code{predictnl} uses finite differences (or a user-supplied matrix) to calculate the partial derivatives. The basic call is \code{predictnl(object, fun, newdata=NULL, ...)} where \code{fun} takes the \code{object} as the first argument; \code{newdata} is an optional argument to \code{fun}, and other arguments \code{...} are passed to \code{fun}. The \code{object} is required to have three methods: (i) \code{vcov.class} to extract the variance-covariance matrix of the estimated parameters; (ii) \code{coef.class} to extract the coefficients; and (iii) \code{coef<-.class} to set the coefficients. For the example above, we use a \code{test} class and define the three methods; note that the \code{coef} and \code{coef<-} methods are as per the default. We then define an object (named \code{fit}) of that class, define a prediction function \code{expcoef} which exponentiates the coefficients, and then call \code{predictnl}:
+<<>>=
+library(rstpm2)
+vcov.test <- function(object) object$vcov
+coef.test <- function(object) object$coefficients # default
+"coef<-.test" <- function(object,value) 
+  { object$coefficients <- value; object} # default
+fit <- structure(list(vcov=Sigma,coefficients=thetahat),class="test")
+expcoef <- function(object) exp(coef(object))
+predictnl(fit,expcoef)
+@ 
+This gives the same output as before. Generic methods for \code{vcov} and \code{coef} are available for most regression models; a default implementations for \code{coef<-} is provided in the \code{rstpm2} package.
+
+<<>>=
+rstpm2:::"coef<-.default"
+@ 
+
+For another simple example, consider a linear regression with a single covariate, such that $E(y)=\beta_0+\beta_1 x_1$ for standard normal distributed $x_1$ with homoscedastic standard normal errors. For a given outcome $y$, we want to find the value of $x$ that solves $y=\hat\beta_0+\hat\beta_1 x$.
+<<>>=
+set.seed(123456)
+x1 <- rnorm(1000)
+y <- rnorm(1000,x1)
+fit <- lm(y~x1)
+invert <- function(object,newdata) {
+    thetahat <- coef(object)
+    (newdata$y-thetahat[1])/thetahat[2]
+}
+predictnl(fit, invert, newdata=data.frame(y=seq(0,2,by=0.5)))
+@ 
+
+We can also calculate average values across the sample under counterfactual exposures. We extend the previous example to include a second Bernoulli-distributed covariate $x_2$ with $p=0.5$, where $E(y)=\beta_0+\beta_1 x_1+\beta_2 x_2$. We may be interested in calculating the marginal estimators $E(y|x_2=0)$, $E(y|x_2=1)$ and $E(y|x_2=1)-E(y|x_2=0)$, where the expectations are across the full dataset\footnote{Under suitable causal assumptions, we could re-write the three estimators as $E(y|\text{do}(x_2)=0)$, $E(y|\text{do}(x_2)=1)$ and $E(y|\text{do}(x_2)=1)-E(y|\text{do}(x_2)=0)$.}. Then:
+<<>>=
+set.seed(123456)
+x1 <- rnorm(1000)
+x2 <- rbinom(1000,1,0.5)
+y <- rnorm(1000,x1+x2)
+fit <- lm(y~x1+x2)
+standardise <- function(object,newdata) mean(predict(object,newdata))
+predictnl(fit, standardise, newdata=data.frame(x1,x2=0))
+predictnl(fit, standardise, newdata=data.frame(x1,x2=1))
+standdiff <- function(object,newdata) 
+    standardise(object,transform(newdata,x2=1))-
+        standardise(object,transform(newdata,x2=0))
+predictnl(fit, standdiff, newdata=data.frame(x1))
+@ 
+
+As a final example, we consider modelling for additive interaction contrasts using \code{rstpm2}. Consider a time-to-event variable $T$ with two binary exposures $x_1$ and $x_2$. Adapting the formulations from Rothman et al (Modern Epidemiology, third edition, 2008) to time-dependent outcomes, the interaction contrast $\text{IC}(t)$ and relative excess risk for interaction $\text{RERI}(t)$ can be calculated by 
+\begin{footnotesize}
+\begin{align*}
+  \text{IC}(t) &= \text{Pr}(T\leq t|x_1=1, x_2=1)-\text{Pr}(T\leq t|x_1=1, x_2=0)-\text{Pr}(T\leq t|x_1=0, x_2=1)+\text{Pr}(T\leq t|x_1=0, x_2=0) \\
+               &= -(S(t|x_1=1, x_2=1)-S(t|x_1=1, x_2=0)-S(t|x_1=0, x_2=1)+S(t|x_1=0, x_2=0)) \\
+  \text{RERI}(t) &= \frac{\text{Pr}(T\leq t|x_1=1, x_2=1)-\text{Pr}(T\leq t|x_1=1, x_2=0)-\text{Pr}(T\leq t|x_1=0, x_2=1)+\text{Pr}(T\leq t|x_1=0, x_2=0)}{\text{Pr}(T\leq t|x_1=0, x_2=0)}\\
+  &= -\frac{S(t|x_1=1, x_2=1)-S(t|x_1=1, x_2=0)-S(t|x_1=0, x_2=1)+S(t|x_1=0, x_2=0)}{1-S(t|x_1=0, x_2=0)}
+\end{align*}
+\end{footnotesize}
+where $S(t|x_1,x_2)$ is the survival function.
+
+As an empirical example, we can use the \code{brcancer} dataset with the randomised hormonal therapy (variable \code{hormon}, encoded 0 and 1) and stage (1 vs 2--3; variable \code{x4.23} encoded \code{TRUE} and \code{FALSE}). The research question is whether there is a more than additive interaction between therapy and stage.
+<<fig=TRUE>>=
+brcancer2 <- transform(brcancer, x4.23=x4 %in% 2:3)
+fit1 <- stpm2(Surv(rectime,censrec==1)~hormon*x4.23,data=brcancer2,df=3)
+newd <- data.frame(hormon=0,x4.23=FALSE)
+RERI <- function(object, newdata,
+                 var1, val1=1, 
+                 var2, val2=1) {
+    exp1 <- function(data) {data[[var1]] <- val1; data}
+    exp2 <- function(data) {data[[var2]] <- val2; data}
+    s11 <- predict(object, newdata=exp1(exp2(newdata)), type="surv")
+    s10 <- predict(object, newdata=exp1(newdata), type="surv")
+    s01 <- predict(object, newdata=exp2(newdata), type="surv")
+    s00 <- predict(object, newdata, type="surv")
+    -(s11-s10-s01+s00)/(1-s00)
+}
+times <- seq(0,2500,length=301)[-1]
+reri <- predictnl(fit1,fun=RERI,newdata=transform(newd,rectime=times),
+                  var1="hormon",var2="x4.23",val2=TRUE)
+with(reri, matplot(times,fit+cbind(0,-1.96*se.fit,+1.96*se.fit),
+                   type="l",lty=c(1,2,2),col=1,
+                    xlab="Time since diagnosis", ylab="RERI"))
+abline(h=0,lty=3)
+
+@ 
+\end{document}
+
