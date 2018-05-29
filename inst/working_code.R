@@ -18,6 +18,48 @@
 ##   require(bbmle)
 ## }
 
+## Examples using predictnl for Alessandro
+library(rstpm2)
+brcancer2 <- transform(brcancer, x4.23=x4 %in% 2:3)
+fit1 <- stpm2(Surv(rectime,censrec==1)~hormon*x4.23,data=brcancer2,df=3)
+summary(fit1)
+newd <- data.frame(hormon=0,x4.23=FALSE)
+plot(fit1, newdata=newd)
+RERI <- function(object, newdata,
+                 var1, val1=1, 
+                 var2, val2=1) {
+    exp1 <- function(data) {data[[var1]] <- val1; data}
+    exp2 <- function(data) {data[[var2]] <- val2; data}
+    s00 <- predict(object, newdata, type="surv")
+    s10 <- predict(object, newdata=exp1(newdata), type="surv")
+    s01 <- predict(object, newdata=exp2(newdata), type="surv")
+    s11 <- predict(object, newdata=exp1(exp2(newdata)), type="surv")
+    -(s11-s10-s01+s00)/(1-s00)
+}
+times <- seq(0,2500,length=301)[-1]
+reri <- RERI(fit1,newdata=transform(newd,rectime=times),var1="hormon",var2="x4.23",val2=TRUE)
+plot(times,reri,type="l")
+reri2 <- predictnl(fit1,fun=RERI,newdata=transform(newd,rectime=times),var1="hormon",var2="x4.23",val2=TRUE)
+with(reri2, matplot(times,fit+cbind(0,-1.96*se.fit,+1.96*se.fit),type="l",lty=c(1,2,2),col=1,
+                    xlab="Time since diagnosis", ylab="RERI"))
+abline(h=0,lty=3)
+
+RERI.hr <- function(object, newdata,
+                 var1, val1=1, 
+                 var2, val2=1) {
+    exp1 <- function(data) {data[[var1]] <- data[[var1]]+val1; data}
+    exp2 <- function(data) {data[[var2]] <- data[[var2]]+val2; data}
+    h00 <- predict(object, newdata, type="haz")
+    h10 <- predict(object, newdata=exp1(newdata), type="haz")
+    h01 <- predict(object, newdata=exp2(newdata), type="haz")
+    h11 <- predict(object, newdata=exp1(exp2(newdata)), type="haz")
+    (h11-h10-h01+h00)/h00
+}
+RERI.hr(fit1,newdata=transform(newd,rectime=1000),var1="hormon",var2="x4.23",val2=TRUE)
+predictnl(fit1,fun=RERI.hr,newdata=transform(newd,rectime=1000),var1="hormon",var2="x4.23",val2=TRUE)
+
+
+
 ## testing of relative survival
 library(rstpm2)
 ayear <- 365.24
