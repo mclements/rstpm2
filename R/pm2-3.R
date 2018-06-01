@@ -725,7 +725,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             init <- init[index0]
         }
         X <- transX(X,data)
-        XD <- grad1(lpfunc,data[[timeVar]],lm.obj,data,timeVar,log.transform=log.time.transform)
+        XD <- transXD(grad1(lpfunc,data[[timeVar]],lm.obj,data,timeVar,log.transform=log.time.transform))
         ## XD <- grad(lpfunc,0,lm.obj,data,timeVar)
         ## XD <- transXD(matrix(XD,nrow=nrow(X)))
         X1 <- matrix(0,nrow(X),ncol(X))
