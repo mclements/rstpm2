@@ -990,8 +990,8 @@ predict.stpm2.base <-
           function(object,newdata=NULL,
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure"),
                    grid=FALSE,seqLength=300,
-                   type.relsurv=c("excess","total","other"), ratetable = survexp.us, rmap=list(), scale=365.24,
-                   se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,...)
+                   type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us, rmap=list(), scale=365.24,
+                   se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,n.gauss.quad=100,...)
 {
     type <- match.arg(type)
     type.relsurv <- match.arg(type.relsurv)

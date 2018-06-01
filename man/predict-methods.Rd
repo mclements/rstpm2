@@ -18,8 +18,10 @@
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
                "hdiff","loghazard","link","meansurv","meansurvdiff","meanhr",
                "odds","or","margsurv","marghaz","marghr","meanhaz","af",
-               "fail","margfail","meanmargsurv","uncured","rmst"),
+               "fail","margfail","meanmargsurv","uncured","rmst","probcure"),
                grid=FALSE,seqLength=300,
+               type.relsurv=c("excess","total","other"), scale=365.24,
+               rmap=list(), ratetable=survival::survexp.us,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,
                keep.attributes=FALSE, use.gr=TRUE,level=0.95,...)
     \S4method{predict}{pstpm2}(object, newdata=NULL,
@@ -65,11 +67,20 @@
                frailty distribution}
       \item{"uncured"}{distribution for the uncured}
       \item{"rmst"}{restricted mean survival time}
+      \item{"probcure"}{probability of cure}
     }
   }
   \item{grid}{whether to merge newdata with a regular sequence of event
     times (default=FALSE)}
   \item{seqLength}{length of the sequence used when \code{grid=TRUE}}
+  \item{type.relsurv}{type of predictions for relative survival models:
+               either "excess", "total" or "other"}
+  \item{scale}{scale to go from the days in the \code{ratetable} object
+    to the analysis time used in the analysis}
+  \item{rmap}{an optional list that maps data set names to the ratetable
+          names. See \code{survexp}}
+  \item{ratetable}{a table of event rates used in relative survival when
+               \code{type.relsurv} is "total" or "other"}
   \item{se.fit}{whether to calculate confidence intervals (default=FALSE)}
   \item{link}{allows a different link for the confidence interval
     calculation (default=NULL, such that

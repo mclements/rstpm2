@@ -14,6 +14,7 @@ predictor using natural splines.
 aft(formula, data, smooth.formula = NULL, df = 3,
     control = list(parscale = 1, maxit = 1000),
     init = NULL, weights = NULL, timeVar = "", time0Var = "",
+    log.time.transform = TRUE,
     reltol = 1e-08, trace = 0, contrasts = NULL, subset = NULL,
     use.gr = TRUE, ...)
 }
@@ -60,6 +61,10 @@ two variables define the time.
 \item{time0Var}{
   string variable to determine the entry variable; useful
   for when more than one data variable is used in the entry time.
+}
+\item{log.time.transform}{
+  logical for whether to log-transform time when calculating the
+  design matrix for the derivative of S_0 with respect to time. 
 }
   \item{reltol}{
 relative tolerance for the model convergence
