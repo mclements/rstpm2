@@ -11,7 +11,9 @@ S3 methods for lines
 \usage{
 \method{lines}{stpm2}(x, newdata = NULL, type = "surv", col = 1, ci.col= "grey",
 lty = par("lty"), ci = FALSE, rug = FALSE, var = NULL,
-exposed = incrVar(var), times = NULL, ...)
+exposed = incrVar(var), times = NULL,
+type.relsurv = c("excess", "total", "other"),
+ratetable = survival::survexp.us, rmap, scale = 365.24, ...)
 \method{lines}{pstpm2}(x, newdata = NULL, type = "surv", col = 1,
 ci.col= "grey",
 lty = par("lty"), ci = FALSE, rug = FALSE, var = NULL,

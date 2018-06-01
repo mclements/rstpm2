@@ -21,7 +21,7 @@
                "fail","margfail","meanmargsurv","uncured","rmst","probcure"),
                grid=FALSE,seqLength=300,
                type.relsurv=c("excess","total","other"), scale=365.24,
-               rmap=list(), ratetable=survival::survexp.us,
+               rmap, ratetable=survival::survexp.us,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,
                keep.attributes=FALSE, use.gr=TRUE,level=0.95,...)
     \S4method{predict}{pstpm2}(object, newdata=NULL,

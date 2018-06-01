@@ -1327,7 +1327,7 @@ predict.stpm2.base <-
           return(switch(type.relsurv,excess=S,total=S*Sstar,other=Sstar))
         }
         if (type=="fail") {
-          return(switch(type.relsurv, excess=1-S,total=1-S*Star, other=1-Sstar))
+          return(switch(type.relsurv, excess=1-S,total=1-S*Sstar, other=1-Sstar))
         }
         if (type=="odds") { # delayed entry?
           return((1-S)/S)
