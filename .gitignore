@@ -12,4 +12,8 @@ rstpm2.Rcheck
 _region_.tex
 Introduction-*.pdf
 Introduction.tex
+vignettes/predictnl*.pdf
+vignettes/predictnl.tex
 NEWS.html
+rstpm2*.tar.gz
+..Rcheck
