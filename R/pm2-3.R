@@ -990,7 +990,7 @@ predict.stpm2.base <-
           function(object,newdata=NULL,
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure"),
                    grid=FALSE,seqLength=300,
-                   type.relsurv=c("excess","total","other"), ratetable = survexp.us, rmap, scale=365.24,
+                   type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us, rmap, scale=365.24,
                    se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,...)
 {
     type <- match.arg(type)
@@ -1588,7 +1588,7 @@ setMethod("predict", "stpm2",
           function(object,newdata=NULL,
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure"),
                    grid=FALSE,seqLength=300,
-                   type.relsurv=c("excess","total","other"), scale=365.24, rmap, ratetable=survexp.us,
+                   type.relsurv=c("excess","total","other"), scale=365.24, rmap, ratetable=survival::survexp.us,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,...)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
                                  link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr,level=level,
@@ -1661,7 +1661,7 @@ plot.stpm2.base <-
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),log="",
                    add=FALSE,ci=!add,rug=!add,
                    var=NULL,exposed=incrVar(var),times=NULL,
-                   type.relsurv=c("excess","total","other"), ratetable = survexp.us, rmap, scale=365.24, ...) {
+                   type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us, rmap, scale=365.24, ...) {
               if (type %in% c("meansurv","meansurvdiff","af","meanhaz","meanhr")) {
                   return(plot.meansurv(x,times=times,newdata=newdata,type=type,xlab=xlab,ylab=ylab,line.col=line.col,ci.col=ci.col,
                                        lty=lty,add=add,ci=ci,rug=rug, exposed=exposed, ...))
@@ -1707,7 +1707,7 @@ setMethod("plot", signature(x="stpm2", y="missing"),
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
                    add=FALSE,ci=!add,rug=!add,
                    var=NULL,exposed=incrVar(var),times=NULL,
-                   type.relsurv=c("excess","total","other"), ratetable = survexp.us, 
+                   type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us, 
                    rmap, scale=365.24,...)
               plot.stpm2.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
                               ylab=ylab, line.col=line.col, ci.col=ci.col, lty=lty, add=add,
@@ -1719,7 +1719,7 @@ lines.stpm2 <-
                    col=1,ci.col="grey",lty=par("lty"),
                    ci=FALSE,rug=FALSE,
                    var=NULL,exposed=incrVar(var),times=NULL,
-                   type.relsurv=c("excess","total","other"), ratetable = survexp.us, 
+                   type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us, 
                    rmap, scale=365.24, ...)
               plot.stpm2.base(x=x, newdata=newdata, type=type, 
                               line.col=col, ci.col=ci.col, lty=lty, add=TRUE,
