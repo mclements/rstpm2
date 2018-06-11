@@ -1932,9 +1932,14 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     if (is.null(smooth.formula) && is.null(logH.args)) {
       logH.args$k <- -1
     }
-    if (is.null(smooth.formula))
+    if (is.null(smooth.formula)) {
       smooth.formula <- as.formula(call("~",as.call(c(quote(s),call("log",timeExpr),
-                                                    vector2call(logH.args)))))
+                                                      vector2call(logH.args)))))
+        if (link.type=="AH")
+            logH.formula <- as.formula(call("~",as.call(c(quote(nsx),timeExpr,
+                                                          vector2call(logH.args))) %call+%
+                                                as.call(c(as.name(":"),rhs(formula),timeExpr))))
+    }      
     if (!is.null(tvc)) {
       tvc.formulas <-
         lapply(names(tvc), function(name)
