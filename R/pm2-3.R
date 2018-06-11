@@ -983,13 +983,16 @@ residuals.stpm2.base <- function(object, type=c("li","gradli")) {
     if (type=="li") {
         localargs <- args
         localargs$return_type <- "li"
-        return(as.vector(.Call("model_output", localargs, PACKAGE="rstpm2")))
+        out <- as.vector(.Call("model_output", localargs, PACKAGE="rstpm2"))
+        names(out) <- rownames(args$X)
     }
     if (type=="gradli") {
         localargs <- args
         localargs$return_type <- "gradli"
-        return(.Call("model_output", localargs, PACKAGE="rstpm2"))
+        out <- .Call("model_output", localargs, PACKAGE="rstpm2")
+        dimnames(out) <- dimnames(args$X)
     }
+    return(out)
 }    
 setMethod("residuals", "stpm2",
           function(object, type=c("li","gradli"))
