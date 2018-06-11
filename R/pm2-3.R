@@ -1906,8 +1906,12 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     if (timeVar == "")
       timeVar <- all.vars(timeExpr)
     ## restrict to non-missing data (assumes na.action=na.omit)
-    .include <- apply(model.matrix(formula, data, na.action = na.pass), 1, function(row) !any(is.na(row))) &
+    na.action.old <- options()[["na.action"]]
+    options(na.action = "na.pass")
+    on.exit(options(na.action = na.action.old))
+    .include <- apply(model.matrix(formula, data), 1, function(row) !any(is.na(row))) &
         !is.na(eval(eventExpr,data)) & !is.na(eval(timeExpr,data))
+    options(na.action = na.action.old)
     if (!interval)
         data <- data[.include, , drop=FALSE] ### REPLACEMENT ###
     ## we can now evaluate over data
