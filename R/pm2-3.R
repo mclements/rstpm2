@@ -1364,7 +1364,7 @@ predict.stpm2.base <-
         }
         if (type=="probcure") {
             S2 <- link$ilink(as.vector(X2 %*% beta))
-            S2/S
+            return(S2/S)
         }
         if (type=="hr") {
             eta2 <- as.vector(X2 %*% beta)
