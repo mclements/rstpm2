@@ -577,9 +577,14 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         logH.args$df <- df
         if (cure) logH.args$cure <- cure
     }
-    if (is.null(logH.formula))
-      logH.formula <- as.formula(call("~",as.call(c(quote(nsx),call("log",timeExpr),
-                                                    vector2call(logH.args)))))
+    if (is.null(logH.formula)) {
+        logH.formula <- as.formula(call("~",as.call(c(quote(nsx),call("log",timeExpr),
+                                                      vector2call(logH.args)))))
+        if (link.type=="AH")
+            logH.formula <- as.formula(call("~",as.call(c(quote(nsx),timeExpr,
+                                                          vector2call(logH.args))) %call+%
+                                                as.call(c(as.name(":"),rhs(formula),timeExpr))))
+          }
     if (is.null(tvc.formula) && !is.null(tvc)) {
       tvc.formulas <-
         lapply(names(tvc), function(name)
