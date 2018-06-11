@@ -1935,11 +1935,16 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     if (is.null(smooth.formula)) {
       smooth.formula <- as.formula(call("~",as.call(c(quote(s),call("log",timeExpr),
                                                       vector2call(logH.args)))))
-        if (link.type=="AH")
-            logH.formula <- as.formula(call("~",as.call(c(quote(nsx),timeExpr,
-                                                          vector2call(logH.args))) %call+%
-                                                as.call(c(as.name(":"),rhs(formula),timeExpr))))
-    }      
+      if (link.type=="AH") {
+          interaction <- function(expr) {
+              if (is.name(expr)) call(":",expr,timeExpr) else if(is.name(expr[[1]]) && as.character(expr[[1]])=="+") interaction(expr[[2]]) %call+% interaction(expr[[3]]) else call(":",expr,timeExpr)
+          }
+          ## interaction(rstpm2:::rhs(~a+I(b)+c-1)) # error
+          smooth.formula <-  as.formula(call("~",
+                                             interaction(rhs(formula)) %call+%
+                                             as.call(c(quote(s),timeExpr, vector2call(logH.args)))))
+      }
+    }
     if (!is.null(tvc)) {
       tvc.formulas <-
         lapply(names(tvc), function(name)
@@ -1956,8 +1961,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     full.formula <- formula
     if(link.type=="AH"){
       rhs(full.formula) <- rhs(smooth.formula)
-    }
-    else{
+    } else{
       rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
     }
       ## 
