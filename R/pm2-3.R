@@ -606,10 +606,14 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ## ensure that data is a data frame
     ## data <- get_all_vars(full.formula, data) # but this loses the other design information
     ## restrict to non-missing data (assumes na.action=na.omit)
+    na.action.old <- options()[["na.action"]]
+    options(na.action = "na.pass")
+    on.exit(options(na.action = na.action.old))
     subset.expr <- substitute(subset)
     if(class(subset.expr)=="NULL") subset.expr <- TRUE
-    .include <- apply(model.matrix(formula, data, na.action = na.pass), 1, function(row) !any(is.na(row))) &
+    .include <- apply(model.matrix(formula, data), 1, function(row) !any(is.na(row))) &
         !is.na(eval(eventExpr,data)) & !is.na(eval(timeExpr,data)) & eval(subset.expr,data)
+    options(na.action = na.action.old)
     if (!interval)
         data <- data[.include, , drop=FALSE]
     ##
