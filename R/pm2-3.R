@@ -879,18 +879,21 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
       out@vcov <- sandwich.stpm2(out, cluster=cluster)
     return(out)
   }
-## summary.mle is not exported from bbmle
-## .__C__summary.mle2 <- bbmle::.__C__summary.mle2 # hack suggested from http://stackoverflow.com/questions/28871632/how-to-resolve-warning-messages-metadata-object-not-found-spatiallinesnull-cla
-setClass("summary.stpm2", representation(frailty="logical",theta="list",wald="matrix",args="list"), contains="summary.mle2")
-## setAs("summary.stpm2", "summary.mle2",
-##       function(from,to) new("summary.mle2", call=from@call, coef=from@call, m2logL=from@m2logL))
-## setMethod("show", "stpm2", function(object) show(as(object,"mle2")))
+setMethod("show", "stpm2",
+          function(object) {
+              object@call.orig <- object@Call
+              show(as(object,"mle2"))
+              })
+setClass("summary.stpm2",
+         representation(frailty="logical",theta="list",wald="matrix",args="list"),
+         contains="summary.mle2")
 corrtrans <- function(x) (1-exp(-x)) / (1+exp(-x))
 setMethod("summary", "stpm2",
           function(object) {
               newobj <- as(summary(as(object,"mle2")),"summary.stpm2")
               newobj@args <- object@args
               newobj@frailty <- object@frailty
+              newobj@call <- object@Call
               if (object@frailty && !is.matrix(object@args$Z)) {
                   coef <- coef(newobj)
                   theta <- exp(coef[nrow(coef),1])
