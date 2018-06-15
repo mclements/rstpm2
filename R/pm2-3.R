@@ -1922,16 +1922,25 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     na.action.old <- options()[["na.action"]]
     options(na.action = "na.pass")
     on.exit(options(na.action = na.action.old))
-    .include <- apply(model.matrix(formula, data), 1, function(row) !any(is.na(row))) &
-        !is.na(eval(eventExpr,data)) & !is.na(eval(timeExpr,data))
+    subset.expr <- substitute(subset)
+    if(class(subset.expr)=="NULL") subset.expr <- TRUE
+    .include <- complete.cases(model.matrix(formula, data)) &
+        !is.na(eval(eventExpr,data,parent.frame())) &
+        eval(subset.expr,data,parent.frame())
     options(na.action = na.action.old)
     if (!interval)
-        data <- data[.include, , drop=FALSE] ### REPLACEMENT ###
-    ## we can now evaluate over data
-    time <- eval(timeExpr, data, parent.frame())
+        .include <- .include & !is.na(eval(timeExpr,data,parent.frame())) 
     time0Expr <- NULL # initialise
     if (delayed) {
-      time0Expr <- lhs(formula)[[2]]
+        time0Expr <- lhs(formula)[[2]]
+        .include <- .include & !is.na(eval(time0Expr,data,parent.frame()))
+    }
+    if (!is.null(substitute(weights)))
+        .include <- .include & !is.na(eval(substitute(weights),data,parent.frame()))
+    data <- data[.include, , drop=FALSE]
+    ## we can now evaluate over data
+    time <- eval(timeExpr, data, parent.frame())
+    if (delayed) {
       if (time0Var == "")
         time0Var <- all.vars(time0Expr)
       time0 <- eval(time0Expr, data, parent.frame())
