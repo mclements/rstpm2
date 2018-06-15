@@ -1483,7 +1483,8 @@ predict.stpm2.base <-
         }
     }
     if (!se.fit) {
-      out <- local(object,newdata,type=type,exposed=exposed,  ...)
+        out <- local(object,newdata,type=type,exposed=exposed,  ...)
+        names(out) <- object@args$X
     } else {
       gd <- NULL
       beta <- coef(object)
@@ -1593,6 +1594,7 @@ predict.stpm2.base <-
       if (link=="cloglog") 
           out <- data.frame(Estimate=out$Estimate,lower=out$upper,upper=out$lower)
       out <- invlinkf(out)
+      rownames(out) <- object@args$X
     }
     if (keep.attributes)
         attr(out,"newdata") <- newdata
