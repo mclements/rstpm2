@@ -616,11 +616,20 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     on.exit(options(na.action = na.action.old))
     subset.expr <- substitute(subset)
     if(class(subset.expr)=="NULL") subset.expr <- TRUE
-    .include <- apply(model.matrix(formula, data), 1, function(row) !any(is.na(row))) &
-        !is.na(eval(eventExpr,data)) & !is.na(eval(timeExpr,data)) & eval(subset.expr,data)
+    .include <- complete.cases(model.matrix(formula, data)) &
+        !is.na(eval(eventExpr,data,parent.frame())) &
+        eval(subset.expr,data,parent.frame())
     options(na.action = na.action.old)
     if (!interval)
-        data <- data[.include, , drop=FALSE]
+        .include <- .include & !is.na(eval(timeExpr,data,parent.frame())) 
+    time0Expr <- NULL # initialise
+    if (delayed) {
+        time0Expr <- lhs(formula)[[2]]
+        .include <- .include & !is.na(eval(time0Expr,data,parent.frame()))
+    }
+    if (!is.null(substitute(weights)))
+        .include <- .include & !is.na(eval(substitute(weights),data,parent.frame()))
+    data <- data[.include, , drop=FALSE]
     ##
     ## parse the function call
     Call <- match.call()
@@ -630,18 +639,16 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     mf <- mf[c(1L, m)]
     ##
     ## get variables
-    time <- eval(timeExpr, data, parent.frame())
-    if (any(time>0 & time<1e-4))
-        warning("Some event times < 1e-4: consider transforming time to avoid problems with finite differences")
-    time0Expr <- NULL # initialise
     if (delayed) {
-      time0Expr <- lhs(formula)[[2]]
       if (time0Var == "")
         time0Var <- all.vars(time0Expr)
       time0 <- eval(time0Expr, data, parent.frame())
       if (any(time0>0 & time0<1e-4))
           warning("Some entry times < 1e-4: consider transforming time to avoid problems with finite differences")
     }
+    time <- eval(timeExpr, data, parent.frame())
+    if (any(time>0 & time<1e-4))
+        warning("Some event times < 1e-4: consider transforming time to avoid problems with finite differences")
     event <- eval(eventExpr,data)
     ## if all the events are the same, we assume that they are all events, else events are those greater than min(event)
     if (!interval)
@@ -1319,7 +1326,7 @@ predict.stpm2.base <-
         etaD <- as.vector(XD %*% beta)
         S <- link$ilink(eta)
         h <- link$h(eta,etaD)
-        if (!object@args$excess && any(h<0)) warning(sprintf("Predicted hazards less than zero (n=%i).",sum(h<0)))
+        if (!object@args$excess && any(ifelse(is.na(h),FALSE,h<0))) warning(sprintf("Predicted hazards less than zero (n=%i).",sum(ifelse(is.na(h),FALSE,h<0))))
         H = link$H(eta)
         Sigma = vcov(object)
         if (!args$excess) type.relsurv <- "excess" ## ugly hack
