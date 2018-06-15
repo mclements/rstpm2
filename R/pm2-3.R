@@ -1005,7 +1005,7 @@ residuals.stpm2.base <- function(object, type=c("li","gradli")) {
     return(out)
 }    
 setMethod("residuals", "stpm2",
-          function(object, type=c("li","gradli"))
+          function(object, type="li")
               residuals.stpm2.base(object=object, type=type))   
 
 predict.stpm2.base <- 
@@ -1611,10 +1611,13 @@ setMethod("predict", "stpm2",
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure"),
                    grid=FALSE,seqLength=300,
                    type.relsurv=c("excess","total","other"), scale=365.24, rmap, ratetable=survival::survexp.us,
-                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,...)
+                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,...) {
+              type <- match.arg(type)
+              type.relsurv <- match.arg(type.relsurv)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
                                  link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr,level=level,
-                                 type.relsurv=type.relsurv, scale=scale, rmap=rmap, ratetable=ratetable, ...))
+                                 type.relsurv=type.relsurv, scale=scale, rmap=rmap, ratetable=ratetable, ...)
+          })
 
 ##`%c%` <- function(f,g) function(...) g(f(...)) # function composition
 plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", exposed=NULL, var=NULL, add=FALSE, ci=!add, rug=!add, recent=FALSE,
@@ -2404,6 +2407,7 @@ setMethod("summary", "pstpm2",
               newobj <- as(summary(as(object,"mle2")),"summary.pstpm2")
               newobj@pstpm2 <- object
               newobj@frailty <- object@frailty
+              newobj@call <- object@Call
               if (object@frailty) {
                   coef <- coef(newobj)
                   theta <- exp(coef[nrow(coef),1])
@@ -2527,6 +2531,11 @@ setMethod("eform", signature(object="pstpm2"),
               colnames(val) <- c(name, colnames(val)[-1])
               val[parm, ]
           })
+setMethod("show", "pstpm2",
+          function(object) {
+              object@call.orig <- object@Call
+              show(as(object,"mle2"))
+              })
 
 ## Revised from bbmle:
 ## changed the calculation of the degrees of freedom in the third statement of the .local function
@@ -2591,9 +2600,11 @@ setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst"),
                    grid=FALSE,seqLength=300,
-                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95, ...)
+                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95, ...) {
+              type <- match.arg(type)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
-                                 link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr, level=level, ...))
+                                 link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr, level=level, ...)
+              })
 
 setMethod("residuals", "pstpm2",
           function(object, type=c("li","gradli"))
