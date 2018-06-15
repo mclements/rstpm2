@@ -789,7 +789,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  kappa=1, trace = trace, oldcluster=cluster, frailty=frailty, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
                  RandDist=RandDist, optimiser=optimiser, log.time.transform=log.time.transform,
                  type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD, maxkappa=maxkappa, Z=Z, Z.formula = Z.formula, thetaAO = theta.AO, excess=excess, data=data,
-                 robust_initial = robust_initial)
+                 robust_initial = robust_initial, .include=.include)
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x
@@ -2157,7 +2157,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  log.time.transform=log.time.transform,
                  type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2", recurrent = recurrent, maxkappa=maxkappa,
                  transX=transX, transXD=transXD, Z.formula = Z, thetaAO = theta.AO, excess=excess,
-                 return_type="optim", data=data, robust_initial=robust_initial)
+                 return_type="optim", data=data, robust_initial=robust_initial, .include=.include)
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(nodes)
         args$gauss_x <- rule$x
