@@ -18,6 +18,40 @@
 ##   require(bbmle)
 ## }
 
+## Missing values in predictions
+library(rstpm2)
+brcancer2 <- brcancer
+brcancer$rectime[1] <- NA
+fit1 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2)
+pred1 <- predict(fit1,newdata=brcancer2)
+head(pred1)
+fit1
+summary(fit1)
+brcancer2 <- brcancer
+brcancer$hormon[1] <- NA
+fit1 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2)
+pred1 <- predict(fit1,newdata=brcancer2)
+head(pred1)
+fit1
+summary(fit1)
+##
+library(rstpm2)
+brcancer2 <- brcancer
+brcancer$rectime[1] <- NA
+fit1 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2)
+pred1 <- predict(fit1,newdata=brcancer2)
+head(pred1)
+fit1
+summary(fit1)
+brcancer2 <- brcancer
+brcancer$hormon[1] <- NA
+fit1 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2)
+pred1 <- predict(fit1,newdata=brcancer2)
+head(pred1)
+fit1
+summary(fit1)
+
+
 ## Examples using predictnl for Alessandro
 library(rstpm2)
 brcancer2 <- transform(brcancer, x4.23=x4 %in% 2:3)
