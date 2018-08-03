@@ -110,6 +110,16 @@ A current limitation of the implementation is that the dataset \verb+data+ needs
 
 Type of link is specified with the \verb+link.type+ argument; this defaults to a log$-$log link for proportional hazards (see Table~\ref{tab:links}). For the Aranda-Ordaz link, the fixed value of the scale term $\psi$ is specified using the \verb+theta.AO+ argument.  For relative survival, a vector for the baseline hazard can be specified using the \verb+bhazard+ argument. A vector for the clusters can be specified with the \verb+cluster+ argument. The calculation of robust standard errors can be specified with the \verb+robust=TRUE+ argument; if \verb+robust+ is false, then the model assumes a frailty or random effects model, with either a default Gamma frailty (\verb+RandDist="Gamma"+) or a normal random effect (\verb+RandDist="LogN"+, using notation from the \verb+frailtypack+ package).
 
+The default specification for the additive hazards (\verb+link.type=="AH"+) models follows that for the \verb+ahaz+ package on CRAN: for a model specified as 
+
+\verb+stpm2(Surv(time,event)~x, data=data, link.type="AH")+
+
+we assume natural splines for the baseline time effect and a constant hazard for a unit change in the covariate \verb+x+; an equivalent specification is 
+
+\verb!stpm2(Surv(time,event)~1, data=data, link.type="AH", smooth.formula=~nsx(time,df=3)+x:time)!
+
+where there is default smoother for time and an interaction between linear x and linear time. The regression coefficient for \verb+x:time+ can be interpreted as the additive rate for a unit change in \verb+x+.
+
 The syntax for the fitting the penalised models with \verb+pstpm2+ is very similar. A subset of the arguments are:
 \begin{Verbatim}
 pstpm2(formula, data, smooth.formula = NULL, 
@@ -123,11 +133,11 @@ pstpm2(formula, data, smooth.formula = NULL,
        ...)
 \end{Verbatim}
 
-The penalised smoothers are specified using the \verb+s()+ function from the \verb+mgcv+ package within the \verb+smooth.formula+ argument; by default, not specifying \verb+smooth.formula+ will lead to \verb!smooth.formula=~s(log(time))!. Interactions with time (both penalised and unpenalised) and penalised covariate effects should be specified using \verb+smooth.formula+. 
+The penalised smoothers are specified using the \verb+s()+ function from the \verb+mgcv+ package within the \verb+smooth.formula+ argument; by default, not specifying \verb+smooth.formula+ will lead to
 
-Note that the \verb+df+ argument is not included. By default, the smoothing parameter(s) are using the \verb+criterion+ argument; the smoothing parameters can also be fixed using the \verb+sp+ argument. 
+\verb!smooth.formula=~s(log(time))!
 
-The specifications for relative survival, link type, and clustered data follow that for the \verb+stpm2+ function.
+Interactions with time (both penalised and unpenalised) and penalised covariate effects should be specified using \verb+smooth.formula+. Note that the \verb+df+ argument is not included. By default, the smoothing parameter(s) are using the \verb+criterion+ argument; the smoothing parameters can also be fixed using the \verb+sp+ argument. The specifications for relative survival, link type, and clustered data follow that for the \verb+stpm2+ function.
 
 \subsection{Post-estimation}
 
@@ -222,69 +232,85 @@ baseline smoother is to use the nsx function, which is a limited
 extension to the splines::ns function, with log of the time effect.
 
 <<>>=
-
-fit <- stpm2(Surv(rectime,censrec==1)~hormon,
-             data=brcancer, df=4)
+brcancer <- transform(brcancer, recyear=rectime / 365.24)
+fit <- stpm2(Surv(recyear,censrec==1)~hormon, data=brcancer, df=4)
 summary(fit)
-
-## utility to exponentiate the ith components
-expi <- function(x,i=1:length(x)) { x[i] <- exp(x[i]); x }
-fit.cox <- coxph(Surv(rectime,censrec==1)~hormon, data=brcancer)
-rbind(coxph=coef(summary(fit.cox)),
-      stpm2=expi(coef(summary(fit))["hormon",c(1,1,2:4)],2))
-
+## utility 
+eform.coxph <- function(object) exp(cbind(coef(object),confint(object)))
+fit.cox <- coxph(Surv(recyear,censrec==1)~hormon, data=brcancer)
+rbind(cox=eform(fit.cox),
+      eform(fit)[2,,drop=FALSE])
 @ 
 
 We see that the hazard ratios are very similar to the coxph model. The
 model fit can also be used to estimate a variety of parameters. For
-example, we can easily estimate survival for a given parameter.
+example, we can easily estimate survival and compare with the
+Kaplan-Meier curves:
 
-<<fig=TRUE>>=
-
-# tms=seq(0,10,length=301)[-1]
-plot(fit,newdata=data.frame(hormon=1), 
-     xlab="Time since diagnosis (days)")
-lines(fit, newdata=data.frame(hormon=0), col=2, lty=2)
-legend("topright", c("hormon=1","hormon=0"),lty=1:2,col=1:2,bty="n")
-
+<<fig=TRUE,height=5,width=6>>=
+plot(fit, newdata=data.frame(hormon=0), xlab="Time since diagnosis (years)")
+lines(fit, newdata=data.frame(hormon=1), lty=2)
+lines(survfit(Surv(recyear,censrec==1)~hormon, data=brcancer), col="blue", lty=1:2)
+legend("topright", c("PH hormon=0","PH hormon=1","KM hormon=0","KM hormon=1"), 
+       lty=1:2, col=c("black","black","blue","blue"))
 @ 
-
 We can also calculate the hazards.
-
-<<fig=TRUE>>=
-
-# tms=seq(0,10,length=301)[-1]
+<<fig=TRUE,height=5,width=6>>=
 plot(fit,newdata=data.frame(hormon=1), type="hazard",
-     xlab="Time since diagnosis (days)", ylim=c(0,8e-4))
+     xlab="Time since diagnosis (years)", ylim=c(0,0.3))
 lines(fit, newdata=data.frame(hormon=0), col=2, lty=2, type="hazard")
 legend("topright", c("hormon=1","hormon=0"),lty=1:2,col=1:2,bty="n")
-
 @ 
-
 Usefully, we can also estimate survival differences and hazard
 differences. We define the survival differences using a reference
 covariate pattern using the newdata argument, and then define an
 exposed function which takes the newdata and transforms for the
-'exposed' covariate pattern. As an example
-
-<<fig=TRUE>>=
-
+'exposed' covariate pattern. As an example:
+<<fig=TRUE,height=5,width=6>>=
 plot(fit,newdata=data.frame(hormon=0), type="hdiff",
      exposed=function(data) transform(data, hormon=1),
      main="hormon=1 compared with hormon=0",
-     xlab="Time since diagnosis (days)")
-
+     xlab="Time since diagnosis (years)")
 @ 
-
-<<fig=TRUE>>=
-
+<<fig=TRUE,height=5,width=6>>=
 plot(fit,newdata=data.frame(hormon=0), type="sdiff",
      exposed=function(data) transform(data, hormon=1),
      main="hormon=1 compared with hormon=0",
-     xlab="Time since diagnosis (days)")
-
+     xlab="Time since diagnosis (years)")
 @ 
 
+\section{Additive hazards}
+
+The additive hazards models takes the general form $H(t|x;\,\theta) = \eta(t,x;\,\theta)$. As a recent change, the default model specification for \verb!formula=Surv(t,e)~x! without specifying \verb+smooth.formula+ is to use $H(t|x;\,\theta) = B(t)\theta_B+ t(x^T\theta_x)$, where $B(t)$ is a natural spline design matrix with parameters $\theta_B$, and with $\theta_x$ as the parameters for $x$; the hazard is then $h(t|x;\,\theta) = B'(t)\theta_B+ x^T\theta_x$. 
+
+The additive hazards have the attractive property that the effects are collapsible: adjusting for an uncorrelated covariate will not change the estimated conditional effect. These models have received some uptake within the causal inference field. This implementation is flexible, where the baseline (cumulative) hazard can be modelled using splines and we can model for both constant hazards and smooth effects over time. One possible issue with their interpretation is whether the rates will be approximately additive for different effects. One approach to conceptualise these models is to consider the effects as being competing risks and where we are adding competing risks together.
+
+For our example using the breast cancer dataset with the randomised assignment to hormonal therapy, we find that hazard for those on hormonal therapy was -0.047 per year (95\% confidence interval: -0.066, -0.024) compared with those not on hormonal therapy. 
+
+<<fig=TRUE,height=5,width=6>>=
+brcancer <- transform(brcancer, recyear=rectime / 365.24)
+fit <- stpm2(Surv(recyear,censrec==1)~hormon, data=brcancer, link.type="AH")
+summary(fit)
+confint(fit)
+plot(fit, newdata=data.frame(hormon=0), xlab="Time on study (years)")
+lines(fit, newdata=data.frame(hormon=1), lty=2)
+lines(survfit(Surv(recyear,censrec==1)~hormon, data=brcancer), col="blue", lty=1:2)
+legend("topright", c("AH hormon=0","AH hormon=1","KM hormon=0","KM hormon=1"), 
+       lty=1:2, col=c("black","black","blue","blue"))
+@ 
+
+This can be modelled more flexibly using the \verb+smooth.formula+ argument. For example, we could model for \verb+sqrt(recyear)+  and include a natural spline smoother for the effect of \verb+hormon+:
+<<fig=TRUE,height=5,width=6>>=
+fit <- stpm2(Surv(recyear,censrec==1)~1, data=brcancer, link.type="AH",
+             smooth.formula=~ns(sqrt(recyear),df=3)+hormon:ns(recyear,df=3))
+summary(fit)
+plot(fit, newdata=data.frame(hormon=0), xlab="Time on study (years)")
+suppressWarnings(lines(fit, newdata=data.frame(hormon=1), lty=2))
+lines(survfit(Surv(recyear,censrec==1)~hormon, data=brcancer), col="blue", lty=1:2)
+legend("topright", c("AH hormon=0","AH hormon=1","KM hormon=0","KM hormon=1"), 
+       lty=1:2, col=c("black","black","blue","blue"))
+@ 
+The square root transform seems to considerably improve the fit at earlier times. 
 
 \section{Mean survival}
 
@@ -371,7 +397,7 @@ predict(fit, newdata.eof, type="haz", se.fit=TRUE)
 @ 
 We can plot the predicted survival estimates:
 \begin{center}
-<<fig=TRUE>>=
+<<fig=TRUE,height=5,width=6>>=
 
 tms=seq(0,10,length=301)[-1]
 plot(fit0,newdata=data.frame(year8594 = "Diagnosed 85-94", tm=tms), ylim=0:1,
@@ -393,7 +419,7 @@ legend("topright",c("85-94 without cure","75-84 without cure",
 And the hazard curves:
 
 \begin{center}
-<<fig=TRUE>>=
+<<fig=TRUE,height=5,width=6>>=
 
 plot(fit0,newdata=data.frame(year8594 = "Diagnosed 85-94", tm=tms), 
      ylim=c(0,0.5), type="hazard",
