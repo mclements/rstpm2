@@ -390,8 +390,8 @@ We can estimate the proportion of failures prior to the last event time:
 
 newdata.eof <- data.frame(year8594 = unique(colon2$year8594),
                           tm=10)
-1-predict(fit0, newdata.eof, type="surv", se.fit=TRUE)
-1-predict(fit, newdata.eof, type="surv", se.fit=TRUE)
+predict(fit0, newdata.eof, type="fail", se.fit=TRUE)
+predict(fit, newdata.eof, type="fail", se.fit=TRUE)
 predict(fit, newdata.eof, type="haz", se.fit=TRUE)
 
 @ 
@@ -440,11 +440,28 @@ legend("topright",c("85-94 without cure","75-84 without cure",
 @
 \end{center}
 
+The current implementation does not provide a test for differences in cure. We can code this using the \code{predictnl} function:
+
+<<>>=
+
+newdata.eof <- data.frame(year8594 = unique(colon2$year8594),
+                          tm=10)
+test <- predictnl(fit, function(object,newdata=NULL) {
+    lp1 <- predict(object, newdata.eof[1,], type="link")
+    lp2 <- predict(object, newdata.eof[2,], type="link")
+    lp1-lp2
+})
+with(test, c(fit=fit,
+             se.fit=se.fit,
+             statistic=fit/se.fit,
+             p=2*pnorm(abs(fit/se.fit), lower.tail=FALSE)))
+
+@ 
 
 \section{Potential limitations and next steps}
 
 \begin{itemize}
-\item The calculation of the matrix $X_D(t,x)$ using finite differences can be inaccurate for small event times. The functions \verb+stpm2+ and \verb+pstpm2+ raise errors when the event times are less than 1e-4. One working solution is to scale the event times (e.g. multiply by 1000) for analysis. TODO: investigate whether we can calculate $X_D(t,x)$ more accurately using the \verb+numDeriv+ package.
+\item TODO: investigate whether we can calculate $X_D(t,x)$ more accurately using the \verb+numDeriv+ package.
   \item TODO: Extend the generalised survival models to use multiple random effects.
   \item TODO: Extend the generalised survival models to use automatic differentiation.
 \end{itemize}
