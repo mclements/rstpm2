@@ -93,7 +93,6 @@
                data-frame for those exposed or the counterfactual (defaults to incrementing ``var'')}
   \item{var}{specify the variable name or names for the
                exposed/unexposed (names are given as characters)}
-  \item{level}{significance level for the confidence interval}
   \item{keep.attributes}{Boolean to determine whether the output should
                include the newdata as an attribute (default=TRUE)}
   \item{use.gr}{Boolean to determine whether to use gradients in the
