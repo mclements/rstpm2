@@ -1005,8 +1005,8 @@ residuals.stpm2.base <- function(object, type=c("li","gradli")) {
     return(out)
 }    
 setMethod("residuals", "stpm2",
-          function(object, type="li")
-              residuals.stpm2.base(object=object, type=type))   
+          function(object, type=c("li","gradli"))
+              residuals.stpm2.base(object=object, type=match.arg(type)))
 
 predict.stpm2.base <- 
           function(object, newdata=NULL,
@@ -2630,7 +2630,7 @@ setMethod("predict", "pstpm2",
 
 setMethod("residuals", "pstpm2",
           function(object, type=c("li","gradli"))
-              residuals.stpm2.base(object=object, type=type))
+              residuals.stpm2.base(object=object, type=match.arg(type)))
 
 ##`%c%` <- function(f,g) function(...) g(f(...)) # function composition
 ## to do:
