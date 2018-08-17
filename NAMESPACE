@@ -32,6 +32,6 @@ importFrom(stats, quantile, lm, as.formula, coef, makepredictcall, na.fail, pred
            anova, var, residuals, confint, qnorm, complete.cases)
 importFrom(mgcv,gam,s)
 importFrom(Rcpp,sourceCpp)
-import(bbmle,methods,survival,splines,numDeriv)
+import(bbmle,methods,survival,splines)
 
 
