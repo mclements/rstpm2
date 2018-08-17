@@ -1009,29 +1009,45 @@ setMethod("residuals", "stpm2",
               residuals.stpm2.base(object=object, type=type))   
 
 predict.stpm2.base <- 
-          function(object,newdata=NULL,
+          function(object, newdata=NULL,
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure"),
-                   grid=FALSE,seqLength=300,
-                   type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us, rmap, scale=365.24,
-                   se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,n.gauss.quad=100,full=FALSE,...)
+                   grid=FALSE, seqLength=300,
+                   type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us,
+                   rmap, scale=365.24,
+                   se.fit=FALSE, link=NULL, exposed=NULL, var=NULL, keep.attributes=FALSE,
+                   use.gr=TRUE, level=0.95, n.gauss.quad=100, full=FALSE, ...)
 {
     type <- match.arg(type)
     type.relsurv <- match.arg(type.relsurv)
     args <- object@args
+    if (type %in% c("fail","margfail")) {
+        out <- 1-predict.stpm2.base(object, newdata=newdata,
+                                    type=switch(type, fail="surv", margfail="margsurv"),
+                                    grid=grid, seqLength=seqLength, type.relsurv=type.relsurv,
+                                    ratetable=ratetable, rmap=rmap, scale=scale,
+                                    se.fit=se.fit, link=link, exposed=exposed,
+                                    var=var, keep.attributes=keep.attributes,
+                                    use.gr=use.gr, level=level, n.gauss.quad=n.gauss.quad,
+                                    full=full, ...)
+        if (se.fit) {temp <- out$lower; out$lower <- out$upper; out$upper <- temp}
+        return(out)
+    }
     if (is.null(link)) {
         if(args$excess){
             link <- switch(type, surv = "log", cumhaz = "I",
                            hazard = "I", hr = "I", sdiff = "I", hdiff = "I",
                            loghazard = "I", link = "I", odds = "log", or = "log",
                            margsurv = "log", marghaz = "I", marghr = "I",
-                           meansurv = "I", meanhr = "I", meanhaz = "I", af = "I", uncured = "log",
+                           meansurv = "I", meanhr = "I", meanhaz = "I", af = "I",
+                           fail = "cloglog", uncured = "log",
                            rmst = "I", probcure = "cloglog")
         } else {
             link <- switch(type, surv = "cloglog", cumhaz = "log",
                            hazard = "log", hr = "log", sdiff = "I", hdiff = "I",
                            loghazard = "I", link = "I", odds = "log", or = "log",
                            margsurv = "cloglog", marghaz = "log", marghr = "log",
-                           meansurv = "I", meanhr="log", meanhaz = "I", af = "I", uncured = "cloglog",
+                           meansurv = "I", meanhr="log", meanhaz = "I", af = "I",
+                           fail = "cloglog", uncured = "cloglog",
                            rmst = "I", probcure = "cloglog")
         }
     }
@@ -1039,12 +1055,7 @@ predict.stpm2.base <-
     linkf <- eval(parse(text=link))
     if (type %in% c("uncured","probcure") && is.null(exposed))
         exposed <- function(data) data[[object@timeVar]] <- max(args$time[args$event])
-    if (type %in% c("fail","margfail")) {
-        out <- 1-predict.stpm2.base(object,newdata=newdata,type=switch(type, fail="surv", margfail="margsurv"),grid,seqLength,se.fit,link,exposed,var,keep.attributes,use.gr,...)
-        if (se.fit) {temp <- out$lower; out$lower <- out$upper; out$upper <- temp}
-        return(out)
-    }
-      if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure"))
+    if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure"))
           stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure")')
       if (type %in% c('margsurv','marghaz','marghr','margfail','meanmargsurv') && !object@args$frailty)
           stop("Marginal prediction only for frailty models")
@@ -2611,10 +2622,10 @@ setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst"),
                    grid=FALSE,seqLength=300,
-                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95, full=FALSE, ...) {
+                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95, n.gauss.quad=100, full=FALSE, ...) {
               type <- match.arg(type)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
-                                 link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr, level=level, full=full, ...)
+                                 link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr, level=level, n.gauss.quad=n.gauss.quad, full=full, ...)
               })
 
 setMethod("residuals", "pstpm2",
