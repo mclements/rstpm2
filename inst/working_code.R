@@ -208,7 +208,10 @@ brcancer2 <- transform(brcancer, id=rep(1:(nrow(brcancer)/2),each=2))
 brcancer2$hormon[1] <- NA
 fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2, cluster=brcancer2$id)
 summary(fit)
-plot(fit,newdata=data.frame(one=1),type="margsurv")
+plot(fit,newdata=data.frame(hormon=1),type="margsurv")
+fit2 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2, cluster=brcancer2$id)
+summary(fit2)
+plot(fit2,newdata=data.frame(hormon=1),type="margsurv")
 
 # Aranda-Ordaz link
 refresh
