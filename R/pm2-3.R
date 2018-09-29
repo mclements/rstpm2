@@ -658,6 +658,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         ## Cox regression
         coxph.call <- mf
         coxph.call[[1L]] <- as.name("coxph")
+        coxph.call$subset <- .include
         coxph.strata <- substitute(coxph.strata)
         if (!is.null(coxph.strata)) {
             coxph.formula <- formula
