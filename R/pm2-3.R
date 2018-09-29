@@ -672,16 +672,15 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                             pmax(-18,link$link(Shat(coxph.obj)))
                         } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-bhazinit*bhazard*time)))
         if (frailty && is.null(logtheta)) {
-            assign(".cluster", as.vector(unclass(factor(cluster)))[.include], envir=parent.frame())
+            assign(".cluster", as.vector(unclass(factor(cluster))), envir=parent.frame())
             coxph.formula <- coxph.call$formula #
             rhs(coxph.formula) <- rhs(coxph.formula) %call+%
                 call("frailty",as.name(".cluster"),
                      distribution=switch(RandDist,LogN="gaussian",Gamma="gamma"))
             coxph.call$formula <- coxph.formula
             ## coxph.call$init <- coef(coxph.obj)
-            coxph.call$subset <- .include
             coxph.obj <- eval(coxph.call, envir=parent.frame())
-            logtheta <- coxph.obj$history[[1]]$theta
+            logtheta <- log(coxph.obj$history[[1]]$theta)
             rm(.cluster, envir=parent.frame())
         }
     }
@@ -811,7 +810,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     names(parscale) <- names(init)
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
-                 kappa=1, trace = trace, oldcluster=cluster, frailty=frailty, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
+                 kappa=1, trace = trace, oldcluster=cluster, frailty=frailty, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster)))[.include] else NULL, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
                  RandDist=RandDist, optimiser=optimiser, log.time.transform=log.time.transform,
                  type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD, maxkappa=maxkappa, Z=Z, Z.formula = Z.formula, thetaAO = theta.AO, excess=excess, data=data,
                  robust_initial = robust_initial, .include=.include)
