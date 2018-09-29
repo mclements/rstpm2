@@ -26,7 +26,7 @@ stpm2(formula, data,
       optimiser=c("BFGS","NelderMead"), log.time.transform=TRUE,
       reltol=1.0e-8, trace = 0,
       link.type=c("PH","PO","probit","AH","AO"), theta.AO=0, 
-      frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=-6, nodes=9,
+      frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=NULL, nodes=9,
       RandDist=c("Gamma","LogN"), recurrent = FALSE, adaptive=TRUE,
       maxkappa=1000, Z=~1,
       contrasts = NULL,
@@ -129,8 +129,9 @@ hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta
 \item{recurrent}{logical for whether clustered, left truncated data are
   recurrent or for first event (where the latter requires an adjustment
   for the frailties or random effects)}
-\item{logtheta}{initial value for log-theta used in the gamma shared frailty
-  model}
+\item{logtheta}{initial value for log-theta used in the gamma or
+  log-normal shared frailty
+  model (defaults to an initial value from a Cox model fit)}
 \item{adaptive}{logical for whether to use adaptive or non-adaptive
   quadrature}
 \item{maxkappa}{double float value for the maximum value of the weight
