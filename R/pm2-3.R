@@ -673,12 +673,11 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                         } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-bhazinit*bhazard*time)))
         if (frailty && is.null(logtheta)) {
             assign(".cluster", as.vector(unclass(factor(cluster))), envir=parent.frame())
-            coxph.formula <- coxph.call$formula #
+            coxph.formula <- coxph.call$formula
             rhs(coxph.formula) <- rhs(coxph.formula) %call+%
                 call("frailty",as.name(".cluster"),
                      distribution=switch(RandDist,LogN="gaussian",Gamma="gamma"))
             coxph.call$formula <- coxph.formula
-            ## coxph.call$init <- coef(coxph.obj)
             coxph.obj <- eval(coxph.call, envir=parent.frame())
             logtheta <- log(coxph.obj$history[[1]]$theta)
             rm(.cluster, envir=parent.frame())
@@ -1919,7 +1918,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                    optimiser=c("BFGS","NelderMead","Nlm"),
                    log.time.transform=TRUE,
                    recurrent = FALSE,
-                  frailty=!is.null(cluster) & !robust, cluster = NULL, logtheta=-6, nodes=9,RandDist=c("Gamma","LogN"),
+                  frailty=!is.null(cluster) & !robust, cluster = NULL, logtheta=NULL, nodes=9,RandDist=c("Gamma","LogN"),
                   adaptive=TRUE, maxkappa = 1e3, Z = ~1,
                    reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-5),outer_optim=1,
                    contrasts = NULL, subset = NULL, robust_initial = FALSE, ...) {
@@ -2040,6 +2039,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         coxph.call[[1L]] <- as.name("coxph")
         coxph.strata <- substitute(coxph.strata)
         coxph.call$data <- quote(coxph.data)
+        coxph.call$subset <- .include
         coxph.data <- data
         if (!is.null(coxph.formula)) {
             coxph.formula2 <- coxph.call$formula
@@ -2058,7 +2058,18 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         data$logHhat <- if (is.null(bhazard)) {
                             pmax(-18,link$link(Shat(coxph.obj)))
                         } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-bhazinit*bhazard*time)))
-    }
+         if (frailty && is.null(logtheta)) {
+            assign(".cluster", as.vector(unclass(factor(cluster))), envir=parent.frame())
+            coxph.formula <- coxph.call$formula
+            rhs(coxph.formula) <- rhs(coxph.formula) %call+%
+                call("frailty",as.name(".cluster"),
+                     distribution=switch(RandDist,LogN="gaussian",Gamma="gamma"))
+            coxph.call$formula <- coxph.formula
+            coxph.obj <- eval(coxph.call, envir=parent.frame())
+            logtheta <- log(coxph.obj$history[[1]]$theta)
+            rm(.cluster, envir=parent.frame())
+        }
+   }
     if (interval) {
         ## survref regression
         survreg.call <- mf
@@ -2068,6 +2079,10 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         weibullScale <- predict(survreg.obj)
         y <- model.extract(model.frame(survreg.obj),"response")
         data$logHhat <- pmax(-18,link$link(pweibull(time,weibullShape,weibullScale,lower.tail=FALSE)))
+        ##
+        if (frailty && is.null(logtheta)) {
+            logtheta <- -1
+        }
     }
     ##
     ## initial values and object for lpmatrix predictions
@@ -2212,7 +2227,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  sp=sp, reltol_search=reltol$search, reltol=reltol$final, reltol_outer=reltol$outer, trace=trace,
                  kappa=1.0,outer_optim=outer_optim,
                  alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2),
-                 oldcluster=cluster, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL, frailty=frailty,
+                 oldcluster=cluster, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster)))[.include] else NULL, frailty=frailty,
                  map0 = map0 - 1L, ind0 = ind0, which0=which0 - 1L, link = link.type,
                  penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser=optimiser,
                  log.time.transform=log.time.transform,
@@ -2367,6 +2382,18 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         "optim_multivariate"
     } else {
         "optim_first"
+    }
+    if (frailty) { # first fit without the frailty
+        args2 <- args
+        args2$frailty <- FALSE
+        args2$cluster <- NULL
+        args2$type <- "pstpm2"
+        localIndex <- 1:(length(args2$init)-1)
+        args2$init <- args2$init[localIndex]
+        args2$parscale <- args2$parscale[localIndex]
+        fit <- .Call("model_output", args2, PACKAGE="rstpm2")
+        rm(args2)
+        args$init <- c(fit$coef,logtheta)
     }
     fit <- .Call("model_output", args, PACKAGE = "rstpm2")
     fit$coef <- as.vector(fit$coef)
