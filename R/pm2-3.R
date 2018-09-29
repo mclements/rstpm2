@@ -693,6 +693,10 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         weibullScale <- predict(survreg.obj)
         y <- model.extract(model.frame(survreg.obj),"response")
         data$logHhat <- pmax(-18,link$link(pweibull(time,weibullShape,weibullScale,lower.tail=FALSE)))
+        ##
+        if (frailty && is.null(logtheta)) {
+            logtheta <- -1
+        }
     }
     ##
     ## initial values and object for lpmatrix predictions
