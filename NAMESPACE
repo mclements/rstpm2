@@ -4,7 +4,7 @@ exportClasses(stpm2,pstpm2,tvcCoxph,aft)
 
 export(stpm2,pstpm2,incrVar,nsx,predictnl,"coef<-",cox.tvc,aft,nsxD,
        eform, predictnl, coef, confint)
-export(predictnl.default, confint.predictnl)
+export(predictnl.default, confint.predictnl, vuniroot)
 
 S3method(makepredictcall, nsx)
 S3method(makepredictcall, nsxD)

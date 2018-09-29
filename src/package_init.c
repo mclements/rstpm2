@@ -14,16 +14,18 @@ extern SEXP test_cox_tvc2(SEXP);
 extern SEXP test_cox_tvc2_grad(SEXP);
 extern SEXP fitCureModel(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
 extern SEXP aft_model_output(SEXP);
+extern SEXP vunirootRcpp(SEXP,SEXP,SEXP,SEXP,SEXP);
 
-/* .Fortran calls -- thanks for Gordon Smyth */
+/* .Fortran calls -- thanks to Gordon Smyth */
 extern void F77_NAME(gausq2)(void *, void *, void *, void *, void *);
 
 static const R_CallMethodDef CallEntries[] = {
     {"model_output",       (DL_FUNC) &model_output,       1},
     {"test_cox_tvc2",      (DL_FUNC) &test_cox_tvc2,      1},
     {"test_cox_tvc2_grad", (DL_FUNC) &test_cox_tvc2_grad, 1},
-    {"fitCureModel", (DL_FUNC) &fitCureModel, 6},
-    {"aft_model_output", (DL_FUNC) &aft_model_output, 1},
+    {"fitCureModel",       (DL_FUNC) &fitCureModel,       6},
+    {"aft_model_output",   (DL_FUNC) &aft_model_output,   1},
+    {"vunirootRcpp",       (DL_FUNC) &vunirootRcpp,       5},
     {NULL, NULL, 0}
 };
 
