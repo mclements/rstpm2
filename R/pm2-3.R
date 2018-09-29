@@ -2039,7 +2039,6 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         coxph.call[[1L]] <- as.name("coxph")
         coxph.strata <- substitute(coxph.strata)
         coxph.call$data <- quote(coxph.data)
-        coxph.call$subset <- .include
         coxph.data <- data
         if (!is.null(coxph.formula)) {
             coxph.formula2 <- coxph.call$formula
@@ -2058,16 +2057,15 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         data$logHhat <- if (is.null(bhazard)) {
                             pmax(-18,link$link(Shat(coxph.obj)))
                         } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-bhazinit*bhazard*time)))
-         if (frailty && is.null(logtheta)) {
-            assign(".cluster", as.vector(unclass(factor(cluster))), envir=parent.frame())
+        if (frailty && is.null(logtheta)) {
+            coxph.data$.cluster <- as.vector(unclass(factor(cluster)))[.include]
             coxph.formula <- coxph.call$formula
             rhs(coxph.formula) <- rhs(coxph.formula) %call+%
                 call("frailty",as.name(".cluster"),
                      distribution=switch(RandDist,LogN="gaussian",Gamma="gamma"))
             coxph.call$formula <- coxph.formula
-            coxph.obj <- eval(coxph.call, envir=parent.frame())
+            coxph.obj <- eval(coxph.call, enclos=parent.frame())
             logtheta <- log(coxph.obj$history[[1]]$theta)
-            rm(.cluster, envir=parent.frame())
         }
    }
     if (interval) {
