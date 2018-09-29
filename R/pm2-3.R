@@ -544,7 +544,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                   optimiser=c("BFGS","NelderMead"), log.time.transform=TRUE,
                      reltol=1.0e-8, trace = 0,
                      link.type=c("PH","PO","probit","AH","AO"), theta.AO=0, 
-                  frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=-6, nodes=9, RandDist=c("Gamma","LogN"), recurrent = FALSE,
+                  frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=NULL, nodes=9, RandDist=c("Gamma","LogN"), recurrent = FALSE,
                   adaptive = TRUE, maxkappa = 1e3, Z = ~1,
                      contrasts = NULL, subset = NULL, robust_initial=FALSE, ...) {
     link.type <- match.arg(link.type)
@@ -670,6 +670,19 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         data$logHhat <- if (is.null(bhazard)) {
                             pmax(-18,link$link(Shat(coxph.obj)))
                         } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-bhazinit*bhazard*time)))
+        if (frailty && is.null(logtheta)) {
+            assign(".cluster", as.vector(unclass(factor(cluster)))[.include], envir=parent.frame())
+            coxph.formula <- coxph.call$formula #
+            rhs(coxph.formula) <- rhs(coxph.formula) %call+%
+                call("frailty",as.name(".cluster"),
+                     distribution=switch(RandDist,LogN="gaussian",Gamma="gamma"))
+            coxph.call$formula <- coxph.formula
+            ## coxph.call$init <- coef(coxph.obj)
+            coxph.call$subset <- .include
+            coxph.obj <- eval(coxph.call, envir=parent.frame())
+            logtheta <- coxph.obj$history[[1]]$theta
+            rm(.cluster, envir=parent.frame())
+        }
     }
     if (interval) {
         ## survref regression
@@ -838,6 +851,18 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     }
     parnames(negll) <- parnames(gradnegll) <- names(init)
     ## MLE
+    if (frailty) { # first fit without the frailty
+        args2 <- args
+        args2$frailty <- FALSE
+        args2$cluster <- NULL
+        args2$type <- "stpm2"
+        localIndex <- 1:(length(args2$init)-1)
+        args2$init <- args2$init[localIndex]
+        args2$parscale <- args2$parscale[localIndex]
+        fit <- .Call("model_output", args2, PACKAGE="rstpm2")
+        rm(args2)
+        args$init <- c(fit$coef,logtheta)
+    }
     fit <- .Call("model_output", args, PACKAGE="rstpm2")
     args$init <- coef <- as.vector(fit$coef)
     args$kappa.final <- fit$kappa
