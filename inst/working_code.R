@@ -203,10 +203,10 @@ head(gradli + gradli2)
 
 
 ## Gamma frailty
-refresh
 require(rstpm2)
 brcancer2 <- transform(brcancer, id=rep(1:(nrow(brcancer)/2),each=2))
-fit <- stpm2(Surv(rectime,censrec==1)~1,data=brcancer2, cluster=brcancer2$id, logtheta=-6)
+brcancer2$hormon[1] <- NA
+fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2, cluster=brcancer2$id)
 summary(fit)
 plot(fit,newdata=data.frame(one=1),type="margsurv")
 
