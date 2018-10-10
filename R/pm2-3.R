@@ -536,17 +536,18 @@ setClass("stpm2", representation(xlevels="list",
                                  ),
          contains="mle2")
 stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
-                     df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
-                     tvc = NULL, tvc.formula = NULL,
-                     control = list(parscale = 1, maxit = 300), init = NULL,
-                     coxph.strata = NULL, weights = NULL, robust = FALSE, baseoff = FALSE, 
+                  df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
+                  tvc = NULL, tvc.formula = NULL,
+                  control = list(parscale = 1, maxit = 300), init = NULL,
+                  coxph.strata = NULL, coxph.formula = NULL,
+                  weights = NULL, robust = FALSE, baseoff = FALSE, 
                   bhazard = NULL, bhazinit=0.1, timeVar = "", time0Var = "", use.gr = TRUE,
                   optimiser=c("BFGS","NelderMead"), log.time.transform=TRUE,
-                     reltol=1.0e-8, trace = 0,
-                     link.type=c("PH","PO","probit","AH","AO"), theta.AO=0, 
+                  reltol=1.0e-8, trace = 0,
+                  link.type=c("PH","PO","probit","AH","AO"), theta.AO=0, 
                   frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=NULL, nodes=9, RandDist=c("Gamma","LogN"), recurrent = FALSE,
                   adaptive = TRUE, maxkappa = 1e3, Z = ~1,
-                     contrasts = NULL, subset = NULL, robust_initial=FALSE, ...) {
+                  contrasts = NULL, subset = NULL, robust_initial=FALSE, ...) {
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH,AO=link.AO(theta.AO))
     RandDist <- match.arg(RandDist)
@@ -660,19 +661,26 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         coxph.call[[1L]] <- as.name("coxph")
         coxph.call$subset <- .include
         coxph.strata <- substitute(coxph.strata)
+        coxph.call$data <- quote(coxph.data)
+        coxph.data <- data
+        if (!is.null(coxph.formula)) {
+            coxph.formula2 <- coxph.call$formula
+            rhs(coxph.formula2) <- rhs(formula) %call+% rhs(coxph.formula)
+            coxph.call$formula <- coxph.formula2
+        }
         if (!is.null(coxph.strata)) {
-            coxph.formula <- formula
-            rhs(coxph.formula) <- rhs(formula) %call+% call("strata",coxph.strata)
-            coxph.call$formula <- coxph.formula
+            coxph.formula2 <- coxph.call$formula
+            rhs(coxph.formula2) <- rhs(formula) %call+% call("strata",coxph.strata)
+            coxph.call$formula <- coxph.formula2
         }
         coxph.call$model <- TRUE
-        coxph.obj <- eval(coxph.call, envir=parent.frame())
+        coxph.obj <- eval(coxph.call, coxph.data)
         y <- model.extract(model.frame(coxph.obj),"response")
         data$logHhat <- if (is.null(bhazard)) {
                             pmax(-18,link$link(Shat(coxph.obj)))
                         } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-bhazinit*bhazard*time)))
         if (frailty && is.null(logtheta)) {
-            assign(".cluster", as.vector(unclass(factor(cluster))), envir=parent.frame())
+            coxph.data$.cluster <- as.vector(unclass(factor(cluster)))[.include]
             coxph.formula <- coxph.call$formula
             rhs(coxph.formula) <- rhs(coxph.formula) %call+%
                 call("frailty",as.name(".cluster"),
@@ -680,7 +688,6 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             coxph.call$formula <- coxph.formula
             coxph.obj <- eval(coxph.call, envir=parent.frame())
             logtheta <- log(coxph.obj$history[[1]]$theta)
-            rm(.cluster, envir=parent.frame())
         }
     }
     if (interval) {
@@ -872,8 +879,29 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     hessian <- fit$hessian
     names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
     mle2 <- if (use.gr) mle2(negll, coef, vecpar=TRUE, control=control, gr=gradnegll, ..., eval.only=TRUE) else mle2(negll, coef, vecpar=TRUE, control=control, ..., eval.only=TRUE)
-    mle2@vcov <- if (!inherits(vcov <- try(solve(hessian)), "try-error")) vcov else matrix(NA,length(coef), length(coef))
     mle2@details$convergence <- fit$fail # fit$itrmcd
+    if (inherits(vcov <- try(solve(hessian)), "try-error")) {
+        if (optimiser=="NelderMead") {
+            warning("Non-invertible Hessian")
+            mle2@vcov <- matrix(NA,length(coef), length(coef))
+        }
+        if (optimiser!="NelderMead") {
+            warning("Non-invertible Hessian - refitting with Nelder-Mead")
+            args$optimiser <- "NelderMead"
+            fit <- .Call("model_output", args, PACKAGE="rstpm2")
+            args$init <- coef <- as.vector(fit$coef)
+            args$kappa.final <- fit$kappa
+            hessian <- fit$hessian
+            names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
+            mle2 <- mle2(negll, coef, vecpar=TRUE, control=control, ..., eval.only=TRUE)
+            mle2@vcov <- if (!inherits(vcov <- try(solve(hessian)), "try-error")) vcov else matrix(NA,length(coef), length(coef))
+            mle2@details$convergence <- fit$fail # fit$itrmcd
+            if (inherits(vcov <- try(solve(hessian)), "try-error"))
+                warning("Non-invertible Hessian - refitting failed") 
+        }
+    } else {
+        mle2@vcov <- vcov
+    }
     out <- new("stpm2",
                call = mle2@call,
                call.orig = mle2@call,
@@ -2051,7 +2079,6 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             coxph.call$formula <- coxph.formula2
         }
         coxph.call$model <- TRUE
-        ## coxph.obj <- eval(coxph.call, envir=parent.frame())
         coxph.obj <- eval(coxph.call, coxph.data)
         y <- model.extract(model.frame(coxph.obj),"response")
         data$logHhat <- if (is.null(bhazard)) {
@@ -2412,8 +2439,29 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         } else mle2(negll,init,vecpar=TRUE, control=control, eval.only=TRUE, ...)
     mle2@details$hessian <- fit$hessian
     ## mle2@vcov <- solve(optimHess(coef(mle2),negll,gradnegll))
-    mle2@vcov <- solve(fit$hessian)
     mle2@details$convergence <- 0
+    if (inherits(vcov <- try(solve(hessian)), "try-error")) {
+        if (optimiser=="NelderMead") {
+            warning("Non-invertible Hessian")
+            mle2@vcov <- matrix(NA,length(coef), length(coef))
+        }
+        if (optimiser!="NelderMead") {
+            warning("Non-invertible Hessian - refitting with Nelder-Mead")
+            args$optimiser <- "NelderMead"
+            fit <- .Call("model_output", args, PACKAGE="rstpm2")
+            args$init <- coef <- as.vector(fit$coef)
+            args$kappa.final <- fit$kappa
+            hessian <- fit$hessian
+            names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
+            mle2 <- mle2(negll, coef, vecpar=TRUE, control=control, ..., eval.only=TRUE)
+            mle2@vcov <- if (!inherits(vcov <- try(solve(hessian)), "try-error")) vcov else matrix(NA,length(coef), length(coef))
+            mle2@details$convergence <- fit$fail # fit$itrmcd
+            if (inherits(vcov, "try-error"))
+                    warning("Non-invertible Hessian - refitting failed") 
+        }
+    } else {
+        mle2@vcov <- vcov
+        }
     out <- new("pstpm2",
                call = mle2@call,
                call.orig = mle2@call,

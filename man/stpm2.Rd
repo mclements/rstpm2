@@ -92,6 +92,8 @@ initial values. Default=0.1.
                   vector of initial values.}
 \item{coxph.strata}{variable in the \code{data} argument for
   stratification of the \code{coxph} model fit for estimating initial values.}
+\item{coxph.formula}{additional formula used to improve the fitting of
+  initial values [optional and rarely used].}
 \item{weights}{an optional vector of 'prior weights' to be used in the
   fitting process. Should be \code{NULL} or a numeric vector.}
 \item{robust}{Boolean used to determine whether to use a robust variance

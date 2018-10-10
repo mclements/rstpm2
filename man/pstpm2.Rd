@@ -32,7 +32,7 @@ pstpm2(formula, data, smooth.formula = NULL, smooth.args = NULL,
        link.type=c("PH","PO","probit","AH","AO"), theta.AO=0,
        optimiser = c("BFGS", "NelderMead", "Nlm"), log.time.transform=TRUE,
        recurrent = FALSE, frailty=!is.null(cluster) & !robust,cluster = NULL,
-       logtheta=-6, nodes=9,
+       logtheta=NULL, nodes=9,
        RandDist=c("Gamma","LogN"), adaptive = TRUE, maxkappa=1000, Z = ~1, 
        reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-5),outer_optim=1,
        contrasts = NULL, subset = NULL, robust_initial = FALSE, ...)
@@ -119,7 +119,7 @@ hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta
 \item{cluster}{string for the data variable that determines the cluster
   for the frailty}
 \item{logtheta}{initial value for log-theta used in the gamma shared frailty
-  model}
+  model (defaults to value from a \code{coxph} model fit)}
 \item{nodes}{number of integration points for Gaussian quadrature}
 \item{RandDist}{type of distribution for the random effect or frailty}
 \item{adaptive}{logical for whether to use adaptive or non-adaptive
