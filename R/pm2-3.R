@@ -2840,3 +2840,8 @@ function (x, width = 0.9 * getOption("width"), indent = 0, exdent = 0,
     y <- unlist(y)
   y
 }
+
+## S3 methods
+coef.pstpm2 <- coef.stpm2 <- coef
+vcov.pstpm2 <- vcov.stpm2 <- vcov
+

@@ -18,6 +18,10 @@ S3method(confint, predictnl)
 S3method(lines, stpm2)
 S3method(lines, pstpm2)
 S3method(eform, stpm2)
+S3method(coef, stpm2)
+S3method(vcov, stpm2)
+S3method(coef, pstpm2)
+S3method(vcov, pstpm2)
 
 ## All methods for imported generics:
 exportMethods(plot,predict,predictnl,coef,confint,summary,update,anova,vcov,formula,
