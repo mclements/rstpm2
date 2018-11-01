@@ -18,6 +18,41 @@
 ##   require(bbmle)
 ## }
 
+## predictions for relative survival (email from Anke Richters)
+set.seed(12345)
+d <- with(list(t0=rexp(10000), # constant hazard
+               t1=rweibull(10000, 1.5), # rising hazard
+               bg=rexp(2*10000)), # constant background hazard (rate=1)
+          data.frame(t=pmin(bg,c(t0,t1)), x=rep(0:1,each=10000), e=TRUE, bhazard=1))
+library(rstpm2)
+uniroot(function(x) pexp(x)-pweibull(x,shape=1.5), c(1e-6,10)) # survival overlaps at 1
+uniroot(function(x) 1-dweibull(x,shape=1.5)/pweibull(x,shape=1.5,lower=FALSE),
+        c(1e-6,10)) # hazards overlap at 0.444
+fit <- stpm2(Surv(t,e)~x,data=d,tvc=list(x=3),bhazard=d$bhazard)
+## fit <- pstpm2(Surv(t,e)~1,data=d,smooth.formula=~s(log(t))+s(log(t),by=x),bhazard=d$bhazard)
+ts <- seq(0,4,length=301)[-1]
+## hazard plot - ok
+plot(fit,newdata=data.frame(x=0),type="hazard",ylim=c(0,4))
+lines(fit,newdata=data.frame(x=1),type="hazard",lty=2)
+abline(h=1,col="blue") # theorical
+lines(ts,dweibull(ts,shape=1.5)/pweibull(ts,shape=1.5,lower.tail=FALSE),lty=2,col="blue") # theorical
+## survival plot - ok
+plot(fit,newdata=data.frame(x=0),type="surv")
+lines(fit,newdata=data.frame(x=1),type="surv",lty=2)
+lines(ts, pexp(ts,lower.tail=FALSE), col="blue") # theoretical
+lines(ts, pweibull(ts,shape=1.5,lower.tail=FALSE), lty=2, col="blue") # theoretical
+## hr - now fixed
+plot(fit,newdata=data.frame(x=0),type="hr",var="x")
+lines(ts, dweibull(ts,shape=1.5)/pweibull(ts,shape=1.5,lower.tail=FALSE), lty=2, col="blue") # theoretical
+abline(h=1,lty=2)
+## plot(fit,newdata=data.frame(x=0),type="hr",exposed=function(data) transform(data,x=1)) # same mistake
+plot(fit,newdata=data.frame(x=0),type="sdiff",var="x",ylim=c(-1,1))
+S0 <- predict(fit,newdata=data.frame(x=0),grid=TRUE,full=TRUE)
+S1 <- predict(fit,newdata=data.frame(x=1),grid=TRUE,full=TRUE)
+lines(S0$t,S1$Estimate-S0$Estimate,col="blue")
+abline(h=0)
+abline(v=1)
+
 ## Missing values in predictions
 library(rstpm2)
 brcancer2 <- brcancer
