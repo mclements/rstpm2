@@ -6,7 +6,11 @@ Authors@R: c(person("Mark", "Clements", role = c("aut", "cre"),
 	      person("Xing-Rong", "Liu", role = "aut",
 		     email = "xingrong.liu@ki.se"),
 	      person("Paul", "Lambert", role = "ctb", email="pl4@leicester.ac.uk"),
-	      person("Lasse", "Hjort Jakobsen", role = "ctb", email="lasse.j@rn.dk"))
+	      person("Lasse", "Hjort Jakobsen", role = "ctb", email="lasse.j@rn.dk"),
+	      person("Gordon","Smyth", role="cph"),
+	      person("Patrick","Alken", role="cph"),
+	      person("Simon","Wood", role="cph"),
+	      person("Rhys","Ulerich", role="cph"))
 Version: 1.4.4
 Date: 2018-10-10
 Depends: R (>= 3.0.2), methods, survival, splines
