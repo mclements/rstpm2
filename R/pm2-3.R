@@ -1131,7 +1131,8 @@ predict.stpm2.base <-
         newdata <- as.data.frame(object@data)
     }
     newdata2 <- NULL
-    lpfunc <- if (inherits(object,"pstpm2")) 
+    lpfunc <- function(newdata)
+        if (inherits(object,"pstpm2")) 
         function(x,...) {
             newdata2 <- newdata
             newdata2[[object@timeVar]] <- x
@@ -1195,13 +1196,13 @@ predict.stpm2.base <-
     if (calcX)  {
       if (inherits(object, "stpm2")) {
           X <- object@args$transX(lpmatrix.lm(object@lm, newdata), newdata)
-          XD <- grad1(lpfunc,newdata[[object@timeVar]],
+          XD <- grad1(lpfunc(newdata),newdata[[object@timeVar]],
                       log.transform=object@args$log.time.transform)
           XD <- object@args$transXD(XD)
       }
       if (inherits(object, "pstpm2")) {
            X <- object@args$transX(predict(object@gam, newdata, type="lpmatrix"), newdata)      
-           XD <- object@args$transXD(grad1(lpfunc,newdata[[object@timeVar]],
+           XD <- object@args$transXD(grad1(lpfunc(newdata),newdata[[object@timeVar]],
                                            log.transform=object@args$log.time.transform))
       }
         ## X <- args$transX(lpmatrix.lm(object@lm, newdata), newdata)
@@ -1227,13 +1228,13 @@ predict.stpm2.base <-
         newdata2 <- exposed(newdata)
       if (inherits(object, "stpm2")) {
           X2 <- object@args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
-          XD2 <- grad1(lpfunc,newdata2[[object@timeVar]],
+          XD2 <- grad1(lpfunc(newdata2),newdata2[[object@timeVar]],
                        log.transform=object@args$log.time.transform)
-          XD2 <- object@args$transXD(XD)
+          XD2 <- object@args$transXD(XD2)
       }
       if (inherits(object, "pstpm2")) {
            X2 <- object@args$transX(predict(object@gam, newdata2, type="lpmatrix"), newdata2)      
-           XD2 <- object@args$transXD(grad1(lpfunc,newdata2[[object@timeVar]],
+           XD2 <- object@args$transXD(grad1(lpfunc(newdata2),newdata2[[object@timeVar]],
                                             log.transform=object@args$log.time.transform))
       }
         ## X2 <- args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
