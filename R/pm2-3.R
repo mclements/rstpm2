@@ -2438,7 +2438,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     mle2 <- if (use.gr) {
             mle2(negll,init,vecpar=TRUE, control=control, gr=gradnegll, eval.only=TRUE, ...)
         } else mle2(negll,init,vecpar=TRUE, control=control, eval.only=TRUE, ...)
-    mle2@details$hessian <- fit$hessian
+    hessian <- mle2@details$hessian <- fit$hessian
     ## mle2@vcov <- solve(optimHess(coef(mle2),negll,gradnegll))
     mle2@details$convergence <- 0
     if (inherits(vcov <- try(solve(hessian)), "try-error")) {
