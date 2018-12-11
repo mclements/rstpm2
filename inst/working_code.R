@@ -23,6 +23,18 @@ setwd("~/src/R/rstpm2")
 library(devtools)
 devtools::test()
 
+
+## values for the tests
+library(rstpm2)
+brcancer2 <- transform(rstpm2::brcancer, w=1)
+brcancer2$w[1] <- NA
+fit1 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w)
+nd <- data.frame(hormon=1,rectime=1000)
+predict(fit1, newdata=nd, type="surv")
+predict(fit1, newdata=nd, type="fail")
+predict(fit1, newdata=nd, type="haz")
+
+
 ## predictions for relative survival (email from Anke Richters)
 set.seed(12345)
 d <- with(list(t0=rexp(10000), # constant hazard
