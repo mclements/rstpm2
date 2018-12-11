@@ -132,8 +132,8 @@ df <- data.frame(x=0:1, y=c(10, 20))
 fit <- glm(y ~ x, df, family=poisson)
 
 predictnl(fit,
-          function(obj)
-          diff(predict(obj,type="response")))
+          function(obj,newdata)
+          diff(predict(obj,newdata,type="response")))
 
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
