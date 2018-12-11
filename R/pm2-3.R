@@ -621,12 +621,19 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         !is.na(eval(eventExpr,data,parent.frame())) &
         eval(subset.expr,data,parent.frame())
     options(na.action = na.action.old)
-    if (!interval)
-        .include <- .include & !is.na(eval(timeExpr,data,parent.frame())) 
+    if (!interval) {
+        time <- eval(timeExpr,data,parent.frame())
+        if (any(is.na(time))) warning("Some event times are NA")
+        if (any(ifelse(is.na(time),FALSE,time<=0))) warning("Some event times <= 0")
+        .include <- .include & ifelse(is.na(time), FALSE, time>0)
+    }
     time0Expr <- NULL # initialise
     if (delayed) {
         time0Expr <- lhs(formula)[[2]]
-        .include <- .include & !is.na(eval(time0Expr,data,parent.frame()))
+        time0Var <- eval(time0Expr,data,parent.frame())
+        if (any(is.na(time0Var))) warning("Some entry times are NA")
+        if (any(ifelse(is.na(time0Var),FALSE,time0Var<0))) warning("Some entry times < 0")
+        .include <- .include & ifelse(is.na(time0Var), FALSE, time0Var>=0)
     }
     if (!is.null(substitute(weights)))
         .include <- .include & !is.na(eval(substitute(weights),data,parent.frame()))
@@ -659,7 +666,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         ## Cox regression
         coxph.call <- mf
         coxph.call[[1L]] <- as.name("coxph")
-        coxph.call$subset <- .include
+        ## coxph.call$subset <- .include
         coxph.strata <- substitute(coxph.strata)
         coxph.call$data <- quote(coxph.data)
         coxph.data <- data
