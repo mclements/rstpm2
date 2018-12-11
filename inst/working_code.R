@@ -18,6 +18,11 @@
 ##   require(bbmle)
 ## }
 
+## testing - Bug requires loading devtools *before* rstpm2
+setwd("~/src/R/rstpm2")
+library(devtools)
+devtools::test()
+
 ## predictions for relative survival (email from Anke Richters)
 set.seed(12345)
 d <- with(list(t0=rexp(10000), # constant hazard
