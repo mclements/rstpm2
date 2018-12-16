@@ -1,6 +1,6 @@
 ### rstpm2: An R package for link-based survival models ###
 
- 
+#### NOTE: versions 1.4.1 and 1.4.2 of rstpm2 included a critical bug in the predict function for type in "hr", "sdiff", "hdiff", "meansurvdiff", "meanhr", "or", "marghr" or "uncured". ####
 
 Introduction
 -----------
