@@ -693,7 +693,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                 call("frailty",as.name(".cluster"),
                      distribution=switch(RandDist,LogN="gaussian",Gamma="gamma"))
             coxph.call$formula <- coxph.formula
-            coxph.obj <- eval(coxph.call, envir=parent.frame())
+            coxph.obj <- eval(coxph.call, coxph.data)
             logtheta <- log(coxph.obj$history[[1]]$theta)
         }
     }
@@ -2099,7 +2099,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                 call("frailty",as.name(".cluster"),
                      distribution=switch(RandDist,LogN="gaussian",Gamma="gamma"))
             coxph.call$formula <- coxph.formula
-            coxph.obj <- eval(coxph.call, enclos=parent.frame())
+            coxph.obj <- eval(coxph.call, coxph.data)
             logtheta <- log(coxph.obj$history[[1]]$theta)
         }
    }
