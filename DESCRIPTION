@@ -13,7 +13,7 @@ Authors@R: c(person("Mark", "Clements", role = c("aut", "cre"),
 	      person("Simon","Wood", role="cph"),
 	      person("Rhys","Ulerich", role="cph"))
 Version: 1.4.5
-Date: 2018-11-01
+Date: 2019-01-13
 Depends: R (>= 3.0.2), methods, survival, splines
 Imports: graphics, Rcpp (>= 0.10.2), stats, mgcv, bbmle (>= 1.0.20), fastGHQuad
 Suggests: eha, testthat
