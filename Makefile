@@ -1,6 +1,8 @@
 test:
 	R-devel --slave -e "devtools::test()"
 
-check:
-	R-devel CMD build .
+check: build
 	R-devel CMD check --as-cran rstpm2_`grep Version DESCRIPTION | cut -b 10-15`.tar.gz
+
+build:
+	R-devel CMD build .
