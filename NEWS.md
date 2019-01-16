@@ -1,11 +1,13 @@
-# rstpm2 1.4.5
-    - Fixed a new bug in fitting frailty models
-	- Introduction of formal tests in the package
-	
-# rstpm2 1.4.4
-    - Fixed a critical bug in the `predict` function for comparisons of hazards (e.g. type="hr" and type="hdiff"). This bug was introduced in version 1.4.2.
+# rstpm2
 
-# rstpm2 1.4.2
+# Version 1.4.5
+    - Fixed a bug in fitting frailty models (introduced in 1.4.4)
+	- Introduced package tests
+	
+# Version 1.4.4
+    - Fixed a critical bug in the `predict` function for comparisons of hazards, including type="hr", type="hdiff" and type="marghr" (introduced in 1.4.2).
+
+# Version 1.4.2
     - Belatedly started the NEWS.md file
     - Update to bbmle (>= 1.0.20) required due to new export from that package
     - Possible breaking change: for the `predict()` functions for `stpm2` and `pstpm2`, the `keep.attributes` default has changed from `TRUE` to `FALSE`. Any code that used `predict()` and needs the `newdata` attributes should now add the `keep.attributes=TRUE` argument. The previous default was noisy.
