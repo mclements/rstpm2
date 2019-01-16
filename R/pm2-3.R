@@ -510,6 +510,42 @@ if (FALSE) {
     }
 }
 
+stpm2.control <- function(parscale=1,
+                          maxit=300,
+                          optimiser=c("BFGS","NelderMead"),
+                          reltol=1e-8,
+                          trace=0,
+                          nodes=9,
+                          adaptive=TRUE,
+                          kappa.init=1,
+                          maxkappa=1e3,
+                          suppressWarnings.coxph.frailty=TRUE,
+                          robust_initial=FALSE,
+                          bhazinit=0.1,
+                          use.gr=TRUE) {
+    stopifnot.logical <- function(arg)
+        stopifnot(is.logical(arg) || (is.numeric(arg) && arg>=0))
+    stopifnot(parscale>0)
+    stopifnot(maxit>1)
+    optimiser <- match.arg(optimiser)
+    stopifnot(reltol>0)
+    stopifnot(trace>=0)
+    stopifnot(nodes>=3)
+    stopifnot.logical(adaptive)
+    stopifnot(maxkappa>0)
+    stopifnot.logical(suppressWarnings.coxph.frailty)
+    stopifnot.logical(robust_initial)
+    stopifnot(bhazinit>0)
+    stopifnot.logical(use.gr)
+    stopifnot(kappa.init>0)
+    list(mle2.control=list(parscale=parscale, maxit=maxit),
+         optimiser=optimiser, reltol=reltol, trace=trace, nodes=nodes,
+         adaptive=adaptive, maxkappa=maxkappa,
+         suppressWarnings.coxph.frailty=suppressWarnings.coxph.frailty,
+         robust_initial=robust_initial, bhazinit=bhazinit, use.gr=use.gr,
+         kappa.init=kappa.init)
+}
+
 ## general link functions
 setClass("stpm2", representation(xlevels="list",
                                  contrasts="listOrNULL",
@@ -535,23 +571,38 @@ setClass("stpm2", representation(xlevels="list",
                                  args="list"
                                  ),
          contains="mle2")
+
 stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                   df = 3, cure = FALSE, logH.args = NULL, logH.formula = NULL,
                   tvc = NULL, tvc.formula = NULL,
-                  control = list(parscale = 1, maxit = 300), init = NULL,
+                  control = list(), init = NULL,
                   coxph.strata = NULL, coxph.formula = NULL,
                   weights = NULL, robust = FALSE, baseoff = FALSE, 
-                  bhazard = NULL, bhazinit=0.1, timeVar = "", time0Var = "", use.gr = TRUE,
-                  optimiser=c("BFGS","NelderMead"), log.time.transform=TRUE,
-                  reltol=1.0e-8, trace = 0,
+                  bhazard = NULL, bhazinit=NULL, timeVar = "", time0Var = "", use.gr = NULL,
+                  optimiser=NULL, log.time.transform=TRUE,
+                  reltol=NULL, trace = NULL,
                   link.type=c("PH","PO","probit","AH","AO"), theta.AO=0, 
-                  frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=NULL, nodes=9, RandDist=c("Gamma","LogN"), recurrent = FALSE,
-                  adaptive = TRUE, maxkappa = 1e3, Z = ~1,
-                  contrasts = NULL, subset = NULL, robust_initial=FALSE, ...) {
+                  frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=NULL, nodes=NULL, RandDist=c("Gamma","LogN"), recurrent = FALSE,
+                  adaptive = NULL, maxkappa = NULL, Z = ~1,
+                  contrasts = NULL, subset = NULL, robust_initial=NULL,
+                  ...) {
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH,AO=link.AO(theta.AO))
     RandDist <- match.arg(RandDist)
-    optimiser <- match.arg(optimiser)
+    ## handle deprecated args
+    deprecated.arg <- function(name)
+        if (!is.null(val <- get(name))) {
+            warning(sprintf("%s argument is deprecated. Use control=list(%s=value)",
+                            name,name))
+            control[[name]] <- val
+            TRUE
+        } else FALSE
+    deprecated <- lapply(c("optimiser","reltol","trace","nodes","adaptive","maxkappa",
+                           "robust_initial","bhazinit", "use.gr"),
+                         deprecated.arg)
+    ## read from control list
+    control <- do.call("stpm2.control", control)
+    ##
     ## use.gr <- TRUE # old code
     ## logH.formula and logH.args are deprecated
     if (!is.null(smooth.formula) && is.null(logH.formula))
@@ -685,7 +736,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         y <- model.extract(model.frame(coxph.obj),"response")
         data$logHhat <- if (is.null(bhazard)) {
                             pmax(-18,link$link(Shat(coxph.obj)))
-                        } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-bhazinit*bhazard*time)))
+                        } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-control$bhazinit*bhazard*time)))
         if (frailty && is.null(logtheta)) {
             coxph.data$.cluster <- as.vector(unclass(factor(cluster)))[.include]
             coxph.formula <- coxph.call$formula
@@ -693,7 +744,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                 call("frailty",as.name(".cluster"),
                      distribution=switch(RandDist,LogN="gaussian",Gamma="gamma"))
             coxph.call$formula <- coxph.formula
-            coxph.obj <- eval(coxph.call, coxph.data)
+            coxph.obj <- if (control$suppressWarnings.coxph.frailty) suppressWarnings(eval(coxph.call, coxph.data)) else eval(coxph.call, coxph.data)
             logtheta <- log(coxph.obj$history[[1]]$theta)
         }
     }
@@ -813,27 +864,30 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             init <- c(init,logtheta1=logtheta,corrtrans=0,logtheta2=logtheta)
         } else init <- c(init, logtheta=logtheta)
     }
-    if (!is.null(control) && "parscale" %in% names(control)) {
-      if (length(control$parscale)==1)
-        control$parscale <- rep(control$parscale,length(init))
-      if (is.null(names(control$parscale)))
-        names(control$parscale) <- names(init)
-    }
-    parscale <- rep(if (is.null(control$parscale)) 1 else control$parscale,length=length(init))
-    names(parscale) <- names(init)
+    if (length(control$mle2.control$parscale)==1)
+        control$mle2.control$parscale <- rep(control$mle2.control$parscale,length(init))
+    if (is.null(names(control$mle2.control$parscale)))
+        names(control$mle2.control$parscale) <- names(init)
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
-                 delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=parscale, reltol=reltol,
-                 kappa=1, trace = trace, oldcluster=cluster, frailty=frailty, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster)))[.include] else NULL, map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
-                 RandDist=RandDist, optimiser=optimiser, log.time.transform=log.time.transform,
-                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2", recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD, maxkappa=maxkappa, Z=Z, Z.formula = Z.formula, thetaAO = theta.AO, excess=excess, data=data,
-                 robust_initial = robust_initial, .include=.include)
+                 delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1,
+                 parscale=control$mle2.control$parscale, reltol=control$reltol,
+                 kappa=control$kappa.init, trace = control$trace,
+                 oldcluster=cluster, frailty=frailty,
+                 cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster)))[.include] else NULL,
+                 map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
+                 RandDist=RandDist, optimiser=control$optimiser, log.time.transform=log.time.transform,
+                 type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2",
+                 recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD,
+                 maxkappa=control$maxkappa, Z=Z, Z.formula = Z.formula, thetaAO = theta.AO,
+                 excess=excess, data=data,
+                 robust_initial = control$robust_initial, .include=.include)
     if (frailty) {
-        rule <- fastGHQuad::gaussHermiteData(nodes)
+        rule <- fastGHQuad::gaussHermiteData(control$nodes)
         args$gauss_x <- rule$x
         args$gauss_w <- rule$w
-        args$adaptive <- adaptive
+        args$adaptive <- control$adaptive
         if (ncol(args$Z)>1) {
-            use.gr <- FALSE
+            control$use.gr <- FALSE
             args$type <- "stpm2_normal_frailty_2d"
             args$Z <- as.matrix(args$Z)
             ## args$adaptive <- FALSE # adaptive not defined
@@ -885,7 +939,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     args$kappa.final <- fit$kappa
     hessian <- fit$hessian
     names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
-    mle2 <- if (use.gr) mle2(negll, coef, vecpar=TRUE, control=control, gr=gradnegll, ..., eval.only=TRUE) else mle2(negll, coef, vecpar=TRUE, control=control, ..., eval.only=TRUE)
+    mle2 <- if (control$use.gr) mle2(negll, coef, vecpar=TRUE, control=control$mle2.control, gr=gradnegll, ..., eval.only=TRUE) else mle2(negll, coef, vecpar=TRUE, control=control$mle2.control, ..., eval.only=TRUE)
     mle2@details$convergence <- fit$fail # fit$itrmcd
     if (inherits(vcov <- try(solve(hessian)), "try-error")) {
         if (optimiser=="NelderMead") {
@@ -949,6 +1003,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
       out@vcov <- sandwich.stpm2(out, cluster=cluster)
     return(out)
   }
+
 setMethod("show", "stpm2",
           function(object) {
               object@call.orig <- object@Call
@@ -1911,6 +1966,8 @@ smootherDesign <- function(gamobj,data,parameters = NULL) {
 ## TODO: If we transform a smoother (e.g. log(time)), we can use information on
 ## (i) the variable name, (ii) the transform and (iii) the inverse transform.
 
+
+
 ## penalised stpm2
 setOldClass("gam")
 setClass("pstpm2", representation(xlevels="list",
@@ -1940,28 +1997,91 @@ setClass("pstpm2", representation(xlevels="list",
                                   df="numeric",
                                   args="list"),
          contains="mle2")
+
+pstpm2.control <- function(parscale=1,
+                           maxit=300,
+                           optimiser=c("BFGS","NelderMead"),
+                           trace=0,
+                           nodes=9,
+                           adaptive=TRUE,
+                           kappa.init=1,
+                           maxkappa=1e3,
+                           suppressWarnings.coxph.frailty=TRUE,
+                           robust_initial=FALSE,
+                           bhazinit=0.1,
+                           use.gr=TRUE,
+                           penalty=c("logH","h"),
+                           outer_optim=1,
+                           reltol.search=1e-10, reltol.final=1e-10, reltol.outer=1e-5) {
+    stopifnot.logical <- function(arg)
+        stopifnot(is.logical(arg) || (is.numeric(arg) && arg>=0))
+    stopifnot(parscale>0)
+    stopifnot(maxit>1)
+    optimiser <- match.arg(optimiser)
+    stopifnot(trace>=0)
+    stopifnot(nodes>=3)
+    stopifnot.logical(adaptive)
+    stopifnot(maxkappa>0)
+    stopifnot.logical(suppressWarnings.coxph.frailty)
+    stopifnot.logical(robust_initial)
+    stopifnot(bhazinit>0)
+    stopifnot.logical(use.gr)
+    stopifnot(kappa.init>0)
+    penalty <- match.arg(penalty)
+    stopifnot(outer_optim %in% c(0,1))
+    stopifnot(reltol.search>0)
+    stopifnot(reltol.final>0)
+    stopifnot(reltol.outer>0)
+    list(mle2.control=list(parscale=parscale, maxit=maxit),
+         optimiser=optimiser, trace=trace, nodes=nodes,
+         adaptive=adaptive, maxkappa=maxkappa,
+         suppressWarnings.coxph.frailty=suppressWarnings.coxph.frailty,
+         robust_initial=robust_initial, bhazinit=bhazinit, use.gr=use.gr,
+         kappa.init=kappa.init, penalty=penalty, outer_optim=outer_optim,
+         reltol.search=reltol.search, reltol.final=reltol.final,
+         reltol.outer=reltol.outer)
+}
+
 pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                    logH.args = NULL, 
                    tvc = NULL, 
-                   control = list(parscale = 1, maxit = 300), init = NULL,
+                   control = list(), init = NULL,
                    coxph.strata = NULL, coxph.formula = NULL,
                    weights = NULL, robust = FALSE, 
-                   bhazard = NULL, bhazinit=0.1, timeVar = "", time0Var = "",
-                   sp=NULL, use.gr = TRUE, 
-                   criterion=c("GCV","BIC"), penalty = c("logH","h"), smoother.parameters = NULL,
-                   alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=1, trace = 0,
+                   bhazard = NULL, bhazinit=NULL, timeVar = "", time0Var = "",
+                   sp=NULL, use.gr = NULL, 
+                   criterion=c("GCV","BIC"), penalty = NULL, smoother.parameters = NULL,
+                   alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1, sp.init=1, trace = NULL,
                    link.type=c("PH","PO","probit","AH","AO"), theta.AO=0,
-                   optimiser=c("BFGS","NelderMead","Nlm"),
+                   optimiser=NULL,
                    log.time.transform=TRUE,
                    recurrent = FALSE,
-                  frailty=!is.null(cluster) & !robust, cluster = NULL, logtheta=NULL, nodes=9,RandDist=c("Gamma","LogN"),
-                  adaptive=TRUE, maxkappa = 1e3, Z = ~1,
-                   reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-5),outer_optim=1,
-                   contrasts = NULL, subset = NULL, robust_initial = FALSE, ...) {
+                   frailty=!is.null(cluster) & !robust, cluster = NULL, logtheta=NULL, nodes=NULL,RandDist=c("Gamma","LogN"),
+                   adaptive=NULL, maxkappa = NULL, Z = ~1,
+                   reltol = NULL, outer_optim=NULL,
+                   contrasts = NULL, subset = NULL, robust_initial = NULL, ...) {
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH,AO=link.AO(theta.AO))
     RandDist <- match.arg(RandDist)
-    optimiser <- match.arg(optimiser)
+    deprecated.arg <- function(name)
+        if (!is.null(val <- get(name))) {
+            warning(sprintf("%s argument is deprecated. Use control=list(%s=value)",
+                            name,name))
+            control[[name]] <- val
+            TRUE
+        } else FALSE
+    deprecated <- lapply(c("optimiser","trace","nodes","adaptive","maxkappa",
+                           "robust_initial","bhazinit", "use.gr","penalty","outer_optim"),
+                         deprecated.arg)
+    if(!is.null(reltol)) {
+        warning("reltol argument is deprecated.\nUse control=list(reltol.search=value,reltol.final=value,reltol.outer=value).")
+        stopifnot(all(c("search","final","outer") %in% names(reltol)))
+        control$reltol.search <- reltol$search
+        control$reltol.final <- reltol$final
+        control$reltol.outer <- reltol$outer
+    }
+    ## read from control list
+    control <- do.call("pstpm2.control", control)
     ## logH.args is deprecated
     if (!is.null(smooth.args) && is.null(logH.args))
         logH.args <- smooth.args
@@ -1972,7 +2092,6 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     raw.data <- data
     ## data <- get_all_vars(temp.formula, raw.data)
     criterion <- match.arg(criterion)
-    penalty <- match.arg(penalty)
     ##
     ## parse the function call
     Call <- match.call()
@@ -2005,12 +2124,19 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         !is.na(eval(eventExpr,data,parent.frame())) &
         eval(subset.expr,data,parent.frame())
     options(na.action = na.action.old)
-    if (!interval)
-        .include <- .include & !is.na(eval(timeExpr,data,parent.frame())) 
+    if (!interval) {
+        time <- eval(timeExpr,data,parent.frame())
+        if (any(is.na(time))) warning("Some event times are NA")
+        if (any(ifelse(is.na(time),FALSE,time<=0))) warning("Some event times <= 0")
+        .include <- .include & ifelse(is.na(time), FALSE, time>0)
+    }
     time0Expr <- NULL # initialise
     if (delayed) {
         time0Expr <- lhs(formula)[[2]]
-        .include <- .include & !is.na(eval(time0Expr,data,parent.frame()))
+        time0Var <- eval(time0Expr,data,parent.frame())
+        if (any(is.na(time0Var))) warning("Some entry times are NA")
+        if (any(ifelse(is.na(time0Var),FALSE,time0Var<0))) warning("Some entry times < 0")
+        .include <- .include & ifelse(is.na(time0Var), FALSE, time0Var>=0)
     }
     if (!is.null(substitute(weights)))
         .include <- .include & !is.na(eval(substitute(weights),data,parent.frame()))
@@ -2091,7 +2217,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         y <- model.extract(model.frame(coxph.obj),"response")
         data$logHhat <- if (is.null(bhazard)) {
                             pmax(-18,link$link(Shat(coxph.obj)))
-                        } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-bhazinit*bhazard*time)))
+                        } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-control$bhazinit*bhazard*time)))
         if (frailty && is.null(logtheta)) {
             coxph.data$.cluster <- as.vector(unclass(factor(cluster)))[.include]
             coxph.formula <- coxph.call$formula
@@ -2099,7 +2225,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                 call("frailty",as.name(".cluster"),
                      distribution=switch(RandDist,LogN="gaussian",Gamma="gamma"))
             coxph.call$formula <- coxph.formula
-            coxph.obj <- eval(coxph.call, coxph.data)
+            coxph.obj <- if (control$suppressWarnings.coxph.frailty) suppressWarnings(eval(coxph.call, coxph.data)) else eval(coxph.call, coxph.data)
             logtheta <- log(coxph.obj$history[[1]]$theta)
         }
    }
@@ -2243,35 +2369,30 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         sp <- if(is.null(gam.obj$full.sp)) gam.obj$sp else gam.obj$full.sp
         if (!is.null(sp.init)) sp <- sp.init
     }
-    if (!is.null(control) && "parscale" %in% names(control)) {
-      if (length(control$parscale)==1)
-        control$parscale <- rep(control$parscale,length(init))
-      if (is.null(names(control$parscale)))
-        names(control$parscale) <- names(init)
-    } else {
-        if(is.null(control)) 
-            control <- list()
-        control$parscale <- rep(1,length(init))
-        names(control$parscale) <- names(init)
-    }
+    if (length(control$mle2.control$parscale)==1)
+        control$mle2.control$parscale <- rep(control$mle2.control$parscale,length(init))
+    if (is.null(names(control$mle2.control$parscale)))
+        names(control$mle2.control$parscale) <- names(init)
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
-                 delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1, parscale=control$parscale,
-                 smooth=if(penalty == "logH") smooth else design,
-                 sp=sp, reltol_search=reltol$search, reltol=reltol$final, reltol_outer=reltol$outer, trace=trace,
-                 kappa=1.0,outer_optim=outer_optim,
+                 delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1,
+                 parscale=control$mle2.control$parscale,
+                 smooth=if(control$penalty == "logH") smooth else design,
+                 sp=sp, reltol_search=control$reltol.search, reltol=control$reltol.final,
+                 reltol_outer=control$reltol.outer, trace=control$trace,
+                 kappa=control$kappa.init,outer_optim=control$outer_optim,
                  alpha=alpha,criterion=switch(criterion,GCV=1,BIC=2),
                  oldcluster=cluster, cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster)))[.include] else NULL, frailty=frailty,
                  map0 = map0 - 1L, ind0 = ind0, which0=which0 - 1L, link = link.type,
-                 penalty = penalty, ttype=ttype, RandDist=RandDist, optimiser=optimiser,
+                 penalty = control$penalty, ttype=ttype, RandDist=RandDist, optimiser=control$optimiser,
                  log.time.transform=log.time.transform,
-                 type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2", recurrent = recurrent, maxkappa=maxkappa,
+                 type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2", recurrent = recurrent, maxkappa=control$maxkappa,
                  transX=transX, transXD=transXD, Z.formula = Z, thetaAO = theta.AO, excess=excess,
-                 return_type="optim", data=data, robust_initial=robust_initial, .include=.include)
+                 return_type="optim", data=data, robust_initial=control$robust_initial, .include=.include)
     if (frailty) {
-        rule <- fastGHQuad::gaussHermiteData(nodes)
+        rule <- fastGHQuad::gaussHermiteData(control$nodes)
         args$gauss_x <- rule$x
         args$gauss_w <- rule$w
-        args$adaptive <- adaptive
+        args$adaptive <- control$adaptive
         args$Z <- model.matrix(Z, data)
         if (ncol(args$Z)>1) stop("Current implementation only allows for a single random effect")
         args$Z <- as.vector(args$Z)
@@ -2318,7 +2439,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         }
         return(deriv)
     }
-    if (penalty == "h") {
+    if (control$penalty == "h") {
         ## a current limitation is that the hazard penalty needs to extract the variable names from the smoother objects (e.g. log(time) will not work)
         stopifnot(sapply(gam.obj$smooth,function(obj) obj$term) %in% names(data) ||
                   !is.null(smoother.parameters))
@@ -2442,18 +2563,18 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     negll <- function(beta) negllsp(beta,sp)
     gradnegll <- function(beta) gradnegllsp(beta,sp)
     parnames(negll) <- parnames(gradnegll) <- names(init)
-    mle2 <- if (use.gr) {
-            mle2(negll,init,vecpar=TRUE, control=control, gr=gradnegll, eval.only=TRUE, ...)
-        } else mle2(negll,init,vecpar=TRUE, control=control, eval.only=TRUE, ...)
+    mle2 <- if (control$use.gr) {
+            mle2(negll,init,vecpar=TRUE, control=control$mle2.control, gr=gradnegll, eval.only=TRUE, ...)
+        } else mle2(negll,init,vecpar=TRUE, control=control$mle2.control, eval.only=TRUE, ...)
     hessian <- mle2@details$hessian <- fit$hessian
     ## mle2@vcov <- solve(optimHess(coef(mle2),negll,gradnegll))
     mle2@details$convergence <- 0
     if (inherits(vcov <- try(solve(hessian)), "try-error")) {
-        if (optimiser=="NelderMead") {
+        if (control$optimiser=="NelderMead") {
             warning("Non-invertible Hessian")
             mle2@vcov <- matrix(NA,length(coef), length(coef))
         }
-        if (optimiser!="NelderMead") {
+        if (control$optimiser!="NelderMead") {
             warning("Non-invertible Hessian - refitting with Nelder-Mead")
             args$optimiser <- "NelderMead"
             fit <- .Call("model_output", args, PACKAGE="rstpm2")
@@ -2461,7 +2582,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             args$kappa.final <- fit$kappa
             hessian <- fit$hessian
             names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
-            mle2 <- mle2(negll, coef, vecpar=TRUE, control=control, ..., eval.only=TRUE)
+            mle2 <- mle2(negll, coef, vecpar=TRUE, control=control$mle2.control, ..., eval.only=TRUE)
             mle2@vcov <- if (!inherits(vcov <- try(solve(hessian)), "try-error")) vcov else matrix(NA,length(coef), length(coef))
             mle2@details$convergence <- fit$fail # fit$itrmcd
             if (inherits(vcov, "try-error"))

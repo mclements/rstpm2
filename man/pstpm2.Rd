@@ -20,22 +20,22 @@ Gamma frailties and normal random effects.
 pstpm2(formula, data, smooth.formula = NULL, smooth.args = NULL,
        logH.args = NULL, 
        tvc = NULL, 
-       control = list(parscale = 1, maxit = 300), init = NULL,
+       control = list(), init = NULL,
        coxph.strata = NULL, coxph.formula = NULL,
        weights = NULL, robust = FALSE, 
-       bhazard = NULL, bhazinit = 0.1, timeVar = "", time0Var = "",
-       sp=NULL, use.gr = TRUE, 
-       criterion=c("GCV","BIC"), penalty = c("logH","h"),
+       bhazard = NULL, bhazinit = NULL, timeVar = "", time0Var = "",
+       sp=NULL, use.gr = NULL, 
+       criterion=c("GCV","BIC"), penalty = NULL,
        smoother.parameters = NULL,
        alpha=if (is.null(sp)) switch(criterion,GCV=1,BIC=1) else 1,
-       sp.init=1, trace = 0,
+       sp.init=1, trace = NULL,
        link.type=c("PH","PO","probit","AH","AO"), theta.AO=0,
-       optimiser = c("BFGS", "NelderMead", "Nlm"), log.time.transform=TRUE,
+       optimiser = NULL, log.time.transform=TRUE,
        recurrent = FALSE, frailty=!is.null(cluster) & !robust,cluster = NULL,
-       logtheta=NULL, nodes=9,
-       RandDist=c("Gamma","LogN"), adaptive = TRUE, maxkappa=1000, Z = ~1, 
-       reltol = list(search = 1.0e-10, final = 1.0e-10, outer=1.0e-5),outer_optim=1,
-       contrasts = NULL, subset = NULL, robust_initial = FALSE, ...)
+       logtheta=NULL, nodes=NULL,
+       RandDist=c("Gamma","LogN"), adaptive = NULL, maxkappa=NULL, Z = ~1, 
+       reltol = NULL, outer_optim=NULL,
+       contrasts = NULL, subset = NULL, robust_initial = NULL, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -66,7 +66,7 @@ as per \code{smooth.args}. Deprecated.
 a list with the names of the time-varying coefficients
 (e.g. tvc=list(hormon), which is equivalent to smooth.formula=~...+s(log(time),by=hormon)).
 }
-\item{control}{\code{control} argument passed to \code{optim}.}
+\item{control}{list of arguments passed to \code{pstpm2.control}.}
 \item{init}{\code{init} should either be \code{FALSE}, such that initial
                   values will be determined using Cox regression, or a numeric
                   vector of initial values.}
@@ -79,7 +79,8 @@ a list with the names of the time-varying coefficients
 \item{bhazard}{variable for the baseline hazard for relative survival}
   \item{bhazinit}{
 scalar used to adjust the background cumulative hazards for calculating
-initial values. Default=0.1.
+initial values. Default=0.1. Deprecated argument: use of the
+\code{control} argument is preferred.
 }
 \item{timeVar}{variable defining the time variable. By default, this is
 determined from the survival object, however this may be ambiguous if
@@ -88,13 +89,19 @@ two variables define the time}
 % determined from the survival object, however this may be ambiguous if
 % two variables define the entry time}
 \item{sp}{fix the value of the smoothing parameters.}
-\item{use.gr}{in R, a Boolean to determine whether to use the gradient in the optimisation}
+\item{use.gr}{in R, a Boolean to determine whether to use the gradient
+  in the optimisation. Default=TRUE, Deprecated argument: use of the
+\code{control} argument is preferred.}
 \item{criterion}{in Rcpp, determine whether to use "GCV" or "BIC" for for the smoothing parameter selection.}
-\item{penalty}{use either the "logH" penalty, which is the default penalty from mgcv, or the "h" hazard penalty.}
+\item{penalty}{use either the "logH" penalty, which is the default
+  penalty from mgcv, or the "h" hazard penalty. Default="logH". Deprecated argument: use of the
+\code{control} argument is preferred.}
 \item{smoother.parameters}{for the hazard penalty, a list with components which are lists with components var, transform and inverse.}
 \item{alpha}{an ad hoc tuning parameter for the smoothing parameter.}
 \item{sp.init}{initial values for the smoothing parameters.}
-\item{trace}{integer for trace reporting; 0 represents no additional reporting.}
+\item{trace}{integer for trace reporting; 0 represents no additional
+  reporting. Default=0. Deprecated argument: use of the
+\code{control} argument is preferred.}
 \item{contrasts}{an optional list. See the \code{contrasts.arg}
     of \code{\link{model.matrix.default}}.
 }
@@ -109,7 +116,8 @@ two variables define the time}
 (generalised probit), g(S)=-probit(S); for "AH" (generalised additive
 hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta.AO)-1)/theta.AO).}
 \item{theta.AO}{theta parameter for the Aranda-Ordaz link type.}
-\item{optimiser}{select which optimiser is used}
+\item{optimiser}{select which optimiser is used. Default="BFGS". Deprecated argument: use of the
+\code{control} argument is preferred.}
 \item{log.time.transform}{should a log-transformation be used for
   calculating the derivative of the design matrix with respect to time? (default=TRUE)}
 \item{recurrent}{logical for whether clustered, left truncated data are
@@ -120,18 +128,28 @@ hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta
   for the frailty}
 \item{logtheta}{initial value for log-theta used in the gamma shared frailty
   model (defaults to value from a \code{coxph} model fit)}
-\item{nodes}{number of integration points for Gaussian quadrature}
+\item{nodes}{number of integration points for Gaussian
+  quadrature. Default=9. Deprecated argument: use of the
+\code{control} argument is preferred.}
 \item{RandDist}{type of distribution for the random effect or frailty}
 \item{adaptive}{logical for whether to use adaptive or non-adaptive
-  quadrature}
+  quadrature, Default=TRUE. Deprecated argument: use of the
+\code{control} argument is preferred.}
 \item{maxkappa}{double float value for the maximum value of the weight
-  used in the constraint}
+  used in the constraint. Default=1000. Deprecated argument: use of the
+\code{control} argument is preferred.}
 \item{Z}{formula for the design matrix for the random effects}
-\item{reltol}{list with components for search and final relative tolerances.}
-\item{outer_optim}{Integer to indicate the algorithm for outer optimisation. If outer_optim=1, then use Neldear-Mead, otherwise use Nlm.}
+\item{reltol}{list with components for search and final relative
+  tolerances. Default=list(search=1e-10, final=1e-10, outer=1e-5). Deprecated argument: use of the
+\code{control} argument with arguments \code{reltol.search},
+\code{reltol.final} and \code{reltol.outer} is preferred.}
+\item{outer_optim}{Integer to indicate the algorithm for outer
+  optimisation. If outer_optim=1 (default), then use Neldear-Mead,
+  otherwise use Nlm.} 
 \item{robust_initial}{logical for whether to use Nelder-Mead
   to find initial values (max 50 iterations). This is useful for
-  ill-posed initial values.}  
+  ill-posed initial values. Default= FALSE. Deprecated argument: use of the
+\code{control} argument is preferred.}  
 \item{\dots}{
   additional arguments to be passed to the \code{\link{mle2}} .
 }

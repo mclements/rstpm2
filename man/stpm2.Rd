@@ -18,20 +18,20 @@ stpm2(formula, data,
       smooth.formula = NULL, smooth.args = NULL,
       df = 3, cure = FALSE, logH.args = NULL,
       logH.formula = NULL, tvc = NULL, tvc.formula =
-      NULL, control = list(parscale = 1, maxit = 300),
+      NULL, control = list(),
       init = NULL, coxph.strata = NULL,
       coxph.formula = NULL, weights = NULL,
       robust = FALSE, baseoff = FALSE, bhazard = NULL,
-      bhazinit = 0.1,
-      timeVar = "", time0Var = "", use.gr = TRUE,
-      optimiser=c("BFGS","NelderMead"), log.time.transform=TRUE,
-      reltol=1.0e-8, trace = 0,
+      bhazinit = NULL,
+      timeVar = "", time0Var = "", use.gr = NULL,
+      optimiser=NULL, log.time.transform=TRUE,
+      reltol=NULL, trace = NULL,
       link.type=c("PH","PO","probit","AH","AO"), theta.AO=0, 
-      frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=NULL, nodes=9,
-      RandDist=c("Gamma","LogN"), recurrent = FALSE, adaptive=TRUE,
-      maxkappa=1000, Z=~1,
+      frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=NULL, nodes=NULL,
+      RandDist=c("Gamma","LogN"), recurrent = FALSE, adaptive=NULL,
+      maxkappa=NULL, Z=~1,
       contrasts = NULL,
-      subset = NULL, robust_initial = FALSE, ...)
+      subset = NULL, robust_initial = NULL, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -85,9 +85,9 @@ all individuals - although it is only used at the event times.
 }
   \item{bhazinit}{
 scalar used to adjust the background cumulative hazards for calculating
-initial values. Default=0.1.
+initial values. Default=0.1. Deprecated: the preferred approach is to set using \code{control}.
 }
-\item{control}{\code{control} argument passed to \code{optim}.}
+\item{control}{multiple arguments passed to \code{stpm2.control}. }
 \item{init}{\code{init} should either be \code{FALSE}, such that initial
                   values will be determined using Cox regression, or a numeric
                   vector of initial values.}
@@ -112,8 +112,9 @@ two variables define the time}
 \item{cure}{logical for whether to estimate a cure model.}
 \item{time0Var}{string variable to determine the entry variable; useful
   for when more than one data variable is used in the entry time.}
-\item{use.gr}{logical indicating whether to use gradients in the calculation}
-\item{optimiser}{select which optimiser is used}
+\item{use.gr}{logical indicating whether to use gradients in the
+  calculation. Deprecated: the preferred approach is to set using \code{control}.}
+\item{optimiser}{select which optimiser is used. Default: "BFGS". Deprecated: the preferred approach is to set using \code{control}.}
 \item{log.time.transform}{should a log-transformation be used for
   calculating the derivative of the design matrix with respect to time? (default=TRUE)}
 \item{link.type}{type of link function. For "PH" (generalised
@@ -122,12 +123,13 @@ two variables define the time}
 (generalised probit), g(S)=-probit(S); for "AH" (generalised additive
 hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta.AO)-1)/theta.AO).}
 \item{theta.AO}{theta parameter for the Aranda-Ordaz link type.}
-\item{reltol}{relative tolerance for the model convergence}
-\item{trace}{logical for whether to provide trace information}
+\item{reltol}{relative tolerance for the model convergence. Deprecated: the preferred approach is to set using \code{control}.}
+\item{trace}{integer for providing trace information. Default=0. Deprecated: the preferred approach is to set using \code{control}.}
 \item{frailty}{logical for whether to fit a shared frailty model}
 \item{cluster}{string for the data variable that determines the cluster
   for the frailty}
-\item{nodes}{number of integration points for Gaussian quadrature}
+\item{nodes}{number of integration points for Gaussian
+  quadrature. Default=9. Deprecated: the preferred approach is to set using \code{control}.}
 \item{RandDist}{type of distribution for the random effect or frailty}
 \item{recurrent}{logical for whether clustered, left truncated data are
   recurrent or for first event (where the latter requires an adjustment
@@ -136,13 +138,13 @@ hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta
   log-normal shared frailty
   model (defaults to an initial value from a Cox model fit)}
 \item{adaptive}{logical for whether to use adaptive or non-adaptive
-  quadrature}
+  quadrature, Default=TRUE. Deprecated: the preferred approach is to set using \code{control}.}
 \item{maxkappa}{double float value for the maximum value of the weight
-  used in the constraint}
+  used in the constraint. Default=1000. Deprecated: the preferred approach is to set using \code{control}.}
 \item{Z}{formula for the design matrix for the random effects}
 \item{robust_initial}{logical for whether to use Nelder-Mead
   to find initial values (max 50 iterations). This is useful for
-  ill-posed initial values.}  
+  ill-posed initial values. Default=FALSE. Deprecated: the preferred approach is to set using \code{control}.}  
 \item{\dots}{
   additional arguments to be passed to the \code{\link{mle2}} .
 }
