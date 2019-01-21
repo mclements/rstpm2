@@ -1,5 +1,8 @@
 library(rstpm2)
 
+## for coping with weird test behaviour from CRAN and R-devel
+.CRAN <- FALSE
+
 expect_eps <- function(expr, value, eps=1e-7)
     expect_lt(max(abs(expr-value)),eps)
 
@@ -162,9 +165,10 @@ test_that("Missing weight", {
 
 test_that("Predictions with missing values - pstpm2", {
     test <- c(surv=0.722879512976245, fail=0.277120487023755, haz=0.000318485183272821)
-    ## for(name in names(test))
-    ##     expect_eps(predict(fit3,newdata=data.frame(hormon=1,rectime=1000),type=name),
-    ##                test[name], 1e-6)
+    if (!.CRAN)
+        for(name in names(test))
+            expect_eps(predict(fit3,newdata=data.frame(hormon=1,rectime=1000),type=name),
+                       test[name], 1e-6)
     test <- c(hr=0.695534588854092, hdiff=-9.69677222690393e-05)
     for(name in names(test))
         expect_eps(predict(fit3,newdata=data.frame(hormon=1,rectime=1000),type=name,var="hormon"),
@@ -178,57 +182,61 @@ beta4 <- c(-1.48891150098253, -0.362620195776869, 0.142791036125775, -0.05664904
            0.117733248953996, -0.100057901452175, 1.09553974618122, 1.36750546720977, 
            -19.1138388712341)
 
-## test_that("Missing event time - pstpm2+frailty", {
-##     brcancer2 <- rstpm2::brcancer
-##     brcancer2$id <- rep(1:20,length=nrow(brcancer2))
-##     ##
-##     brcancer2$rectime[1] <- NA
-##     expect_warning(fit4 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
-##                                   cluster=brcancer2$id),
-##                    "Some event times are NA")
-##     expect_eps(coef(fit4),beta4, 1e-8)
-##     expect_length(predict(fit4), 685)
-## })
+if (!.CRAN) {
+    
+    test_that("Missing event time - pstpm2+frailty", {
+        brcancer2 <- rstpm2::brcancer
+        brcancer2$id <- rep(1:20,length=nrow(brcancer2))
+        ##
+        brcancer2$rectime[1] <- NA
+        expect_warning(fit4 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
+                                      cluster=brcancer2$id),
+                       "Some event times are NA")
+        expect_eps(coef(fit4),beta4, 1e-8)
+        expect_length(predict(fit4), 685)
+    })
 
-## test_that("Invalid event time - pstpm2+frailty", {
-##     brcancer2 <- rstpm2::brcancer
-##     brcancer2$rectime[1] <- -1
-##     brcancer2$id <- rep(1:20,length=nrow(brcancer2))
-##     expect_warning(fit4 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
-##                                   cluster=brcancer2$id),
-##                    "Some event times <= 0")
-##     expect_eps(coef(fit4),beta4, 1e-8)
-##     expect_length(predict(fit4), 685)
-## })
+    test_that("Invalid event time - pstpm2+frailty", {
+        brcancer2 <- rstpm2::brcancer
+        brcancer2$rectime[1] <- -1
+        brcancer2$id <- rep(1:20,length=nrow(brcancer2))
+        expect_warning(fit4 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
+                                      cluster=brcancer2$id),
+                       "Some event times <= 0")
+        expect_eps(coef(fit4),beta4, 1e-8)
+        expect_length(predict(fit4), 685)
+    })
 
-## test_that("Missing covariate - pstpm2+frailty", {
-##     brcancer2 <- rstpm2::brcancer
-##     brcancer2$id <- rep(1:20,length=nrow(brcancer2))
-##     brcancer2$hormon[1] <- NA
-##     fit4 <<- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
-##                     cluster=brcancer2$id)
-##     expect_eps(coef(fit4),beta4, 1e-8)
-##     expect_length(predict(fit4), 685)
-## })
+    test_that("Missing covariate - pstpm2+frailty", {
+        brcancer2 <- rstpm2::brcancer
+        brcancer2$id <- rep(1:20,length=nrow(brcancer2))
+        brcancer2$hormon[1] <- NA
+        fit4 <<- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
+                        cluster=brcancer2$id)
+        expect_eps(coef(fit4),beta4, 1e-8)
+        expect_length(predict(fit4), 685)
+    })
 
-brcancer2 <- transform(rstpm2::brcancer, w=1)
-brcancer2$id <- rep(1:20,length=nrow(brcancer2))
-brcancer2$w[1] <- NA
-fit4 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w,
-               cluster=brcancer2$id)
+    brcancer2 <- transform(rstpm2::brcancer, w=1)
+    brcancer2$id <- rep(1:20,length=nrow(brcancer2))
+    brcancer2$w[1] <- NA
+    fit4 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w,
+                   cluster=brcancer2$id)
 
-test_that("Missing weight - pstpm2+frailty", {
-    ## expect_eps(coef(fit4),beta4, 1e-8)
-    expect_length(predict(fit4), 685)
-})
+    test_that("Missing weight - pstpm2+frailty", {
+        expect_eps(coef(fit4),beta4, 1e-8)
+        expect_length(predict(fit4), 685)
+    })
 
-test_that("Predictions with missing values - pstpm2+frailty", {
-    test <- c(surv=0.721670308241423, fail=0.278329691758577, haz=0.000312325072496861)
-    for(name in names(test))
-        expect_eps(predict(fit4,newdata=data.frame(hormon=1,rectime=1000),type=name),
-                   test[name], 1e-3)
-    test <- c(hr=0.695850670340048, hdiff=-9.4993461435916e-05)
-    for(name in names(test))
-        expect_eps(predict(fit4,newdata=data.frame(hormon=1,rectime=1000),type=name,var="hormon"),
-                   test[name], 1e-3)
-})
+    test_that("Predictions with missing values - pstpm2+frailty", {
+        test <- c(surv=0.721670308241423, fail=0.278329691758577, haz=0.000312325072496861)
+        for(name in names(test))
+            expect_eps(predict(fit4,newdata=data.frame(hormon=1,rectime=1000),type=name),
+                       test[name], 1e-3)
+        test <- c(hr=0.695850670340048, hdiff=-9.4993461435916e-05)
+        for(name in names(test))
+            expect_eps(predict(fit4,newdata=data.frame(hormon=1,rectime=1000),type=name,var="hormon"),
+                       test[name], 1e-3)
+    })
+
+}
