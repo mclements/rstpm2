@@ -880,7 +880,8 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD,
                  maxkappa=control$maxkappa, Z=Z, Z.formula = Z.formula, thetaAO = theta.AO,
                  excess=excess, data=data,
-                 robust_initial = control$robust_initial, .include=.include)
+                 robust_initial = control$robust_initial, .include=.include,
+                 offset=rep(0,nrow(X)))
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(control$nodes)
         args$gauss_x <- rule$x
@@ -917,6 +918,13 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     logli <- function(beta) {
         localargs <- args
         localargs$init <- beta
+        localargs$return_type <- "li"
+        return(.Call("model_output", localargs, PACKAGE="rstpm2"))
+    }
+    args$logli2 <- function(beta,offset) {
+        localargs <- args
+        localargs$init <- beta
+        localargs$offset <- offset
         localargs$return_type <- "li"
         return(.Call("model_output", localargs, PACKAGE="rstpm2"))
     }

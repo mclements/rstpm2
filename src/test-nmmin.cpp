@@ -582,6 +582,7 @@ namespace rstpm2 {
       X = as<mat>(list["X"]); 
       XD = as<mat>(list["XD"]); 
       bhazard = as<vec>(list["bhazard"]);
+      offset = as<vec>(list["offset"]);
       wt = as<vec>(list["wt"]);
       event = as<vec>(list["event"]);
       time = as<vec>(list["time"]);
@@ -694,7 +695,7 @@ namespace rstpm2 {
     vec getli(vec beta) {
       vec vbeta = beta;
       vbeta.resize(nbeta);
-      li_constraint lic = li(X*vbeta, XD*vbeta, X0*vbeta, X1*vbeta);
+      li_constraint lic = li(X*vbeta + offset, XD*vbeta, X0*vbeta, X1*vbeta);
       return lic.li;
     }
     mat getgradli(vec beta) {
@@ -707,7 +708,7 @@ namespace rstpm2 {
     double objective(vec beta) {
       vec vbeta = beta;
       vbeta.resize(nbeta);
-      li_constraint s = li(X * vbeta, XD * vbeta, X0 * vbeta, X1 * vbeta);
+      li_constraint s = li(X * vbeta + offset, XD * vbeta, X0 * vbeta, X1 * vbeta);
       return -sum(s.li) + s.constraint;
     }
     // finite-differencing of the gradient for the objective
@@ -912,7 +913,7 @@ namespace rstpm2 {
     SEXP return_modes() { return wrap(-1); } // used in NormalSharedFrailties
     SEXP return_variances() { return wrap(-1); } // used in NormalSharedFrailties
     NumericVector init;
-    vec parscale, ttype, full_which0;
+    vec parscale, ttype, full_which0, offset;
     double kappa_init, kappa, maxkappa, reltol;
     bool delayed, interval, robust_initial;
     int n, N, nbeta;

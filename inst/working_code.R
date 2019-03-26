@@ -24,6 +24,17 @@ library(devtools)
 devtools::test()
 
 
+library(rstpm2)
+fit1 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)
+head(fit1@logli(coef(fit1)))
+head(fit1@args$logli2(coef(fit1),rep(0,686)))
+head(fit1@args$logli2(coef(fit1),rep(1,686)))
+negll2 <- function(beta,svalues,missingIndicator,k=2)
+    sapply(svalues, function(s)
+        fit1@args$logli2(coef(fit1),ifelse(missingIndicator, s*coef(fit1)[k], 0)))
+head(negll2(coef(fit1),c(0,1),(1:686) %% 2))
+
+
 ## values for the tests
 library(rstpm2)
 brcancer2 <- transform(rstpm2::brcancer, w=1)
