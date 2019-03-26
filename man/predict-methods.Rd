@@ -18,7 +18,8 @@
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
                "hdiff","loghazard","link","meansurv","meansurvdiff","meanhr",
                "odds","or","margsurv","marghaz","marghr","meanhaz","af",
-               "fail","margfail","meanmargsurv","uncured","rmst","probcure"),
+               "fail","margfail","meanmargsurv","uncured","rmst","probcure",
+               "lpmatrix"),
                grid=FALSE,seqLength=300,
                type.relsurv=c("excess","total","other"), scale=365.24,
                rmap, ratetable=survival::survexp.us,
@@ -29,7 +30,7 @@
                type=c("surv","cumhaz","hazard","density","hr","sdiff",
                "hdiff","loghazard","link","meansurv","meansurvdiff","meanhr",
                "odds","or","margsurv","marghaz","marghr","meanhaz","af",
-               "fail","margfail","meanmargsurv","rmst"),
+               "fail","margfail","meanmargsurv","rmst","lpmatrix"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,
                keep.attributes=FALSE, use.gr=TRUE,level=0.95,
@@ -70,6 +71,7 @@
       \item{"uncured"}{distribution for the uncured}
       \item{"rmst"}{restricted mean survival time}
       \item{"probcure"}{probability of cure}
+      \item{"lpmatrix"}{design matrix}
     }
   }
   \item{grid}{whether to merge newdata with a regular sequence of event

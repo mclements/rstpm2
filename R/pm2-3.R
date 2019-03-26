@@ -1128,7 +1128,7 @@ setMethod("residuals", "stpm2",
 
 predict.stpm2.base <- 
           function(object, newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix"),
                    grid=FALSE, seqLength=300,
                    type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us,
                    rmap, scale=365.24,
@@ -1158,7 +1158,7 @@ predict.stpm2.base <-
                            margsurv = "log", marghaz = "I", marghr = "I",
                            meansurv = "I", meanhr = "I", meanhaz = "I", af = "I",
                            fail = "cloglog", uncured = "log",
-                           rmst = "I", probcure = "cloglog")
+                           rmst = "I", probcure = "cloglog", lpmatrix="I")
         } else {
             link <- switch(type, surv = "cloglog", cumhaz = "log",
                            hazard = "log", hr = "log", sdiff = "I", hdiff = "I",
@@ -1166,7 +1166,7 @@ predict.stpm2.base <-
                            margsurv = "cloglog", marghaz = "log", marghr = "log",
                            meansurv = "I", meanhr="log", meanhaz = "I", af = "I",
                            fail = "cloglog", uncured = "cloglog",
-                           rmst = "I", probcure = "cloglog")
+                           rmst = "I", probcure = "cloglog", lpmatrix="I")
         }
     }
     invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
@@ -1463,6 +1463,9 @@ predict.stpm2.base <-
         if (type=="link") {
           return(eta)
         }
+        if (type=="lpmatrix") {
+          return(X)
+        }
         if (type=="cumhaz") {
             ## if (object@delayed) {
             ##     eta0 <- as.vector(X0 %*% beta)
@@ -1740,7 +1743,7 @@ predict.stpm2.base <-
 
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix"),
                    grid=FALSE,seqLength=300,
                    type.relsurv=c("excess","total","other"), scale=365.24, rmap, ratetable=survival::survexp.us,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,n.gauss.quad=100,full=FALSE,...) {
@@ -2851,7 +2854,7 @@ setMethod("predictnl", "pstpm2",
 ##
 setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst","lpmatrix"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95, n.gauss.quad=100, full=FALSE, ...) {
               type <- match.arg(type)
