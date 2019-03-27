@@ -1165,7 +1165,7 @@ predict.stpm2.base <-
                            loghazard = "I", link = "I", odds = "log", or = "log",
                            margsurv = "log", marghaz = "I", marghr = "I",
                            meansurv = "I", meanhr = "I", meanhaz = "I", af = "I",
-                           fail = "cloglog", uncured = "log",
+                           fail = "cloglog", uncured = "log", density = "log",
                            rmst = "I", probcure = "cloglog", lpmatrix="I")
         } else {
             link <- switch(type, surv = "cloglog", cumhaz = "log",
@@ -1173,7 +1173,7 @@ predict.stpm2.base <-
                            loghazard = "I", link = "I", odds = "log", or = "log",
                            margsurv = "cloglog", marghaz = "log", marghr = "log",
                            meansurv = "I", meanhr="log", meanhaz = "I", af = "I",
-                           fail = "cloglog", uncured = "cloglog",
+                           fail = "cloglog", uncured = "cloglog", density = "log",
                            rmst = "I", probcure = "cloglog", lpmatrix="I")
         }
     }
