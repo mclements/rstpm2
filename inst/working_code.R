@@ -26,9 +26,6 @@ devtools::test()
 
 library(rstpm2)
 fit1 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)
-head(fit1@logli(coef(fit1)))
-head(fit1@args$logli2(coef(fit1),rep(0,686)))
-head(fit1@args$logli2(coef(fit1),rep(1,686)))
 negll2 <- function(beta,svalues,missingIndicator,k=2)
     sapply(svalues, function(s)
         fit1@args$logli2(coef(fit1),ifelse(missingIndicator, s*coef(fit1)[k], 0)))
@@ -640,37 +637,35 @@ summary(fit2 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,optimiser="
 
 ## delayed entry
 ## Stata estimated coef for hormon (PH): -1.162504
-refresh
-require(rstpm2)
+library(rstpm2)
 brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime/2,0))
 ## brcancer2 <- transform(brcancer,startTime=0.1)
 ##debug(rstpm2:::meat.stpm2)
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
       smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
-summary(fit2 <- pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,optimiser="NelderMead")) # OK
-summary(fit2 <- pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,optimiser="BFGS",trace=0)) # OK!!
+summary(fit2 <- pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,control=list(optimiser="NelderMead"))) # OK
+summary(fit2 <- pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2))
 plot(fit,newdata=data.frame(hormon=1))
-plot(fit2,newdata=data.frame(hormon=1),add=TRUE,lty=2)
+lines(fit2,newdata=data.frame(hormon=1),lty=2)
 head(predict(fit)) # OK
 head(predict(fit,se.fit=TRUE))
 ## delayed entry and tvc (problems?)
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
-                     logH.formula=~nsx(rectime,df=3),
-                     tvc.formula=~hormon:nsx(rectime,df=3,stata=TRUE)))
+                     smooth.formula=~nsx(rectime,df=3)+hormon:nsx(rectime,df=3,stata=TRUE)))
 head(predict(fit,se.fit=TRUE)) 
 pstpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)
 
 ## left truncated with clusters
-require(rstpm2)
+library(rstpm2)
 brcancer2 <- transform(brcancer,
                        startTime=ifelse(hormon==0,rectime/2,0),
                        id=rep(1:(nrow(brcancer)/2),each=2))
 ##debug(stpm2)
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
-                     cluster=brcancer2$id, optimiser="NelderMead",recurrent=TRUE,
+                     cluster=brcancer2$id, control=list(optimiser="NelderMead"),recurrent=TRUE,
                      smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
 summary(fit0 <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
-                     optimiser="NelderMead",
+                     control=list(optimiser="NelderMead"),
                      smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)))
 
 require(foreign)
@@ -1126,17 +1121,17 @@ se.theta <- theta*se.logtheta
 test.statistic <- 1/se.logtheta
 pchisq(test.statistic,df=1,lower.tail=FALSE)/2
 
-refresh
-require(rstpm2)
-require(ICE)
+library(rstpm2)
+library(ICE)
 data(ICHemophiliac)
 ICHemophiliac2 <- transform(as.data.frame(ICHemophiliac),event=3)
+## fit1 <- stpm2(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2,df=3)
 fit1 <- pstpm2(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2,
-               smooth.formula=~s(right,k=7))
+               smooth.formula=~s(left,k=7))
 estimate <- ickde(ICHemophiliac, m=200, h=0.9)
 plot(estimate, type="l", ylim=c(0,0.20))
 tt <- seq(0,20,length=301)[-1]
-lines(tt,predict(fit1,newdata=data.frame(right=tt),type="density"),col="blue")
+lines(tt,predict(fit1,newdata=data.frame(left=tt),type="density"),col="blue")
 
 ## reg1 <- survreg(Surv(left,right,event,type="interval")~1,data=ICHemophiliac2)
 ## weibullShape <- 1/reg1$scale
