@@ -681,10 +681,12 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     time0Expr <- NULL # initialise
     if (delayed) {
         time0Expr <- lhs(formula)[[2]]
-        time0Var <- eval(time0Expr,data,parent.frame())
-        if (any(is.na(time0Var))) warning("Some entry times are NA")
-        if (any(ifelse(is.na(time0Var),FALSE,time0Var<0))) warning("Some entry times < 0")
-        .include <- .include & ifelse(is.na(time0Var), FALSE, time0Var>=0)
+        if (time0Var == "")
+            time0Var <- all.vars(time0Expr)
+        time0 <- eval(time0Expr,data,parent.frame())
+        if (any(is.na(time0))) warning("Some entry times are NA")
+        if (any(ifelse(is.na(time0),FALSE,time0<0))) warning("Some entry times < 0")
+        .include <- .include & ifelse(is.na(time0), FALSE, time0>=0)
     }
     if (!is.null(substitute(weights)))
         .include <- .include & !is.na(eval(substitute(weights),data,parent.frame()))
@@ -697,10 +699,8 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                names(mf), 0L)
     mf <- mf[c(1L, m)]
     ##
-    ## get variables
+    ## get variables (redo with reduced dataset)
     if (delayed) {
-      if (time0Var == "")
-        time0Var <- all.vars(time0Expr)
       time0 <- eval(time0Expr, data, parent.frame())
       if (any(time0>0 & time0<1e-6))
           warning("Some entry times < 1e-6: consider transforming time to avoid problems with finite differences")
@@ -2144,10 +2144,12 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     time0Expr <- NULL # initialise
     if (delayed) {
         time0Expr <- lhs(formula)[[2]]
-        time0Var <- eval(time0Expr,data,parent.frame())
-        if (any(is.na(time0Var))) warning("Some entry times are NA")
-        if (any(ifelse(is.na(time0Var),FALSE,time0Var<0))) warning("Some entry times < 0")
-        .include <- .include & ifelse(is.na(time0Var), FALSE, time0Var>=0)
+        if (time0Var == "")
+            time0Var <- all.vars(time0Expr)
+        time0 <- eval(time0Expr,data,parent.frame())
+        if (any(is.na(time0))) warning("Some entry times are NA")
+        if (any(ifelse(is.na(time0),FALSE,time0<0))) warning("Some entry times < 0")
+        .include <- .include & ifelse(is.na(time0), FALSE, time0>=0)
     }
     if (!is.null(substitute(weights)))
         .include <- .include & !is.na(eval(substitute(weights),data,parent.frame()))
@@ -2155,8 +2157,6 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ## we can now evaluate over data
     time <- eval(timeExpr, data, parent.frame())
     if (delayed) {
-      if (time0Var == "")
-        time0Var <- all.vars(time0Expr)
       time0 <- eval(time0Expr, data, parent.frame())
     }
     event <- eval(eventExpr,data,parent.frame())
