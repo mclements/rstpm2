@@ -950,11 +950,11 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     mle2 <- if (control$use.gr) mle2(negll, coef, vecpar=TRUE, control=control$mle2.control, gr=gradnegll, ..., eval.only=TRUE) else mle2(negll, coef, vecpar=TRUE, control=control$mle2.control, ..., eval.only=TRUE)
     mle2@details$convergence <- fit$fail # fit$itrmcd
     if (inherits(vcov <- try(solve(hessian)), "try-error")) {
-        if (optimiser=="NelderMead") {
+        if (control$optimiser=="NelderMead") {
             warning("Non-invertible Hessian")
             mle2@vcov <- matrix(NA,length(coef), length(coef))
         }
-        if (optimiser!="NelderMead") {
+        if (control$optimiser!="NelderMead") {
             warning("Non-invertible Hessian - refitting with Nelder-Mead")
             args$optimiser <- "NelderMead"
             fit <- .Call("model_output", args, PACKAGE="rstpm2")
