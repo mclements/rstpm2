@@ -1,5 +1,9 @@
 *.o
 *.aux
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
 *.log
 auto
 *.out
@@ -10,10 +14,9 @@ auto
 rstpm2.Rcheck
 *.Rnw.tex
 _region_.tex
-Introduction-*.pdf
-Introduction.tex
-vignettes/predictnl*.pdf
-vignettes/predictnl.tex
+vignettes/*.tex
+vignettes/*.pdf
+
 NEWS.html
 rstpm2*.tar.gz
 ..Rcheck
