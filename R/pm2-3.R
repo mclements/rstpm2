@@ -981,7 +981,7 @@ stpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                details = mle2@details,
                minuslogl = mle2@minuslogl,
                method = mle2@method,
-               data = data,
+               data = as.data.frame(data),
                formula = mle2@formula,
                optimizer = "optim",
                xlevels = .getXlevels(mt, mf),
@@ -1166,7 +1166,8 @@ predict.stpm2.base <-
                            margsurv = "log", marghaz = "I", marghr = "I",
                            meansurv = "I", meanhr = "I", meanhaz = "I", af = "I",
                            fail = "cloglog", uncured = "log", density = "log",
-                           rmst = "I", probcure = "cloglog", lpmatrix="I")
+                           rmst = "I", probcure = "cloglog", lpmatrix="I", gradh="I",
+                           gradH="I")
         } else {
             link <- switch(type, surv = "cloglog", cumhaz = "log",
                            hazard = "log", hr = "log", sdiff = "I", hdiff = "I",
@@ -1174,7 +1175,8 @@ predict.stpm2.base <-
                            margsurv = "cloglog", marghaz = "log", marghr = "log",
                            meansurv = "I", meanhr="log", meanhaz = "I", af = "I",
                            fail = "cloglog", uncured = "cloglog", density = "log",
-                           rmst = "I", probcure = "cloglog", lpmatrix="I")
+                           rmst = "I", probcure = "cloglog", lpmatrix="I", gradh="I",
+                           gradH="I")
         }
     }
     invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
@@ -1629,6 +1631,10 @@ predict.stpm2.base <-
         if (type=="rmst") {
             return(sum(S*weights))
         }
+        if (type=="gradh")
+            return(link$gradh(eta,etaD,list(X=X,XD=XD)))
+        if (type=="gradH")
+            return(link$gradH(eta,list(X=X)))
     }
     if (!se.fit) {
         out <- local(object,newdata,type=type,exposed=exposed,  ...)
@@ -1749,9 +1755,37 @@ predict.stpm2.base <-
     return(out)
 }
 
+predict.cumhaz <-
+          function(object, newdata=NULL)
+{
+    args <- object@args
+    lpfunc <- function(newdata)
+        if (inherits(object,"pstpm2"))
+        function(x,...) {
+            newdata2 <- newdata
+            newdata2[[object@timeVar]] <- x
+            predict(object@gam,newdata2,type="lpmatrix")
+        } else
+            function(x,...) {
+                newdata2 <- newdata
+                newdata2[[object@timeVar]] <- x
+                lpmatrix.lm(object@lm,newdata2)
+            }
+    if (inherits(object, "stpm2")) {
+          X <- object@args$transX(lpmatrix.lm(object@lm, newdata), newdata)
+      }
+    if (inherits(object, "pstpm2")) {
+           X <- object@args$transX(predict(object@gam, newdata, type="lpmatrix"), newdata)
+      }
+    link <- object@link # cf. link for transformation of the predictions
+    eta <- as.vector(X %*% beta)
+    link$H(eta)
+}
+
+
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH"),
                    grid=FALSE,seqLength=300,
                    type.relsurv=c("excess","total","other"), scale=365.24, rmap, ratetable=survival::survexp.us,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,n.gauss.quad=100,full=FALSE,...) {
@@ -2870,7 +2904,7 @@ setMethod("predictnl", "pstpm2",
 ##
 setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst","lpmatrix"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst","lpmatrix","gradh","gradH"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95, n.gauss.quad=100, full=FALSE, ...) {
               type <- match.arg(type)
