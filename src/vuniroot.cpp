@@ -6,18 +6,30 @@ namespace rstpm2 {
   using namespace Rcpp;
   
   // List vunirootRcpp(Function f, NumericVector lower, NumericVector upper, int numiter, double tol) {
-  RcppExport SEXP vunirootRcpp(SEXP __f, SEXP __lower, SEXP __upper, SEXP __numiter, SEXP __tol) {
+  RcppExport SEXP vunirootRcpp(SEXP __f, SEXP __lower, SEXP __upper, SEXP __fa, SEXP __fb, SEXP __numiter, SEXP __tol) {
     Rcpp::Function f = as<Rcpp::Function>(__f);
     NumericVector lower = as<NumericVector>(__lower);
     NumericVector upper = as<NumericVector>(__upper);
+    NumericVector fa = as<NumericVector>(__fa);
+    NumericVector fb = as<NumericVector>(__fb);
     int numiter = as<int>(__numiter);
     double tol = as<double>(__tol);
     int size = lower.size();
-    NumericVector a(clone(lower)), b(clone(upper)), c(clone(a));
-    NumericVector fa = f(a), fb = f(b), fc(clone(fa));
+    NumericVector a(clone(lower)), b(clone(upper)), c(clone(a)), Tol(size,0.0);
+    NumericVector fc(clone(fa));
     LogicalVector converged(size,false);
     IntegerVector ns(size,-1);
     int i;
+    /* First test if we have found a root at an endpoint */
+    for(i=0; i<size; i++) {
+	if (fa[i]==0.0) {
+	  converged[i]=true;
+	  b[i]=a[i];
+	}
+	if (fb[i]==0.0) {
+	  converged[i]=true;
+	}
+    }
     for (int n = 1; n<=numiter; n++) {
       for(i=0; i<size; i++) {
 	if (!converged[i]) {
@@ -39,7 +51,7 @@ namespace rstpm2 {
 	  if( fabs(new_step) <= tol_act || fb[i] == (double)0 )
 	    {
 	      // *Maxit -= maxit;
-	      // *Tol = fabs(c-b);
+	      Tol[i] = fabs(c[i]-b[i]);
 	      converged[i] = true;			/* Acceptable approx. is found	*/
 	      ns[i] = n;
 	    } else {
@@ -92,7 +104,13 @@ namespace rstpm2 {
 	}
       }
     }
-    return wrap(List::create(_("root")  = b, _("iter") = ns));
+    if (is_false(all(converged)))
+      for (i=0; i<size; i++) 
+	if (!converged[i]) {
+	  Tol[i]=fabs(c[i]-b[i]);
+	  ns[i] = -1;
+	}
+    return wrap(List::create(_("root")  = b, _("iter") = ns, _("tol")=Tol));
   }
   
 } // namespace

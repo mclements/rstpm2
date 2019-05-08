@@ -23,6 +23,41 @@ setwd("~/src/R/rstpm2")
 library(devtools)
 devtools::test()
 
+## random draws
+library(rstpm2)
+predict.cumhaz <-
+          function(object, newdata=NULL, ...)
+{
+    stopifnot(inherits(object,"stpm2") || inherits(object,"pstpm2"))
+    args <- object@args
+    beta <- coef(object)
+    if (is.null(newdata))
+        X <- args$X
+    else if (inherits(object, "stpm2")) {
+          X <- object@args$transX(lpmatrix.lm(object@lm, newdata), newdata)
+      }
+    else if (inherits(object, "pstpm2")) {
+           X <- object@args$transX(predict(object@gam, newdata, type="lpmatrix"), newdata)
+      }
+    link <- object@link # cf. link for transformation of the predictions
+    eta <- as.vector(X %*% beta)
+    link$H(eta)
+}
+simulate <- function(object, nsim=nrow(as.data.frame(newdata)),
+                     newdata=as.data.frame(object@data), lower=1e-6, upper=1e5, ...) {
+    e <- rexp(nsim)
+    objective <- function(time) {
+        newdata[[object@timeVar]] <- time
+        predict.cumhaz(object, type="cumhaz", newdata=newdata) - e
+    }
+    vuniroot(objective, lower=rep(lower,length=nsim), upper=rep(upper,length=nsim))$root
+}
+fit1 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)
+
+set.seed(12345)
+d <- do.call(rbind,lapply(1:100,function(i) brcancer))
+system.time(r <- simulate(fit1, newdata=d))
+length(r)
 
 library(rstpm2)
 fit1 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)
