@@ -1136,7 +1136,7 @@ setMethod("residuals", "stpm2",
 
 predict.stpm2.base <- 
           function(object, newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH"),
                    grid=FALSE, seqLength=300,
                    type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us,
                    rmap, scale=365.24,

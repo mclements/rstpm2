@@ -3,8 +3,8 @@ useDynLib(rstpm2, .registration=TRUE)
 exportClasses(stpm2,pstpm2,tvcCoxph,aft)
 
 export(stpm2,pstpm2,incrVar,nsx,predictnl,"coef<-",cox.tvc,aft,nsxD,
-       eform, predictnl, coef, confint)
-export(predictnl.default, confint.predictnl, vuniroot)
+       eform, predictnl, coef, confint, markov_msm, standardise)
+export(predictnl.default, confint.predictnl, vuniroot, zeroRate)
 
 S3method(makepredictcall, nsx)
 S3method(makepredictcall, nsxD)
@@ -15,6 +15,7 @@ S3method(predictnl, default)
 S3method(predictnl, lm)
 S3method(print, predictnl)
 S3method(confint, predictnl)
+
 S3method(lines, stpm2)
 S3method(lines, pstpm2)
 S3method(eform, stpm2)
@@ -22,6 +23,26 @@ S3method(coef, stpm2)
 S3method(vcov, stpm2)
 S3method(coef, pstpm2)
 S3method(vcov, pstpm2)
+
+S3method(as.data.frame, markov_msm)
+S3method(as.data.frame, markov_msm_diff)
+S3method(as.data.frame, markov_msm_ratio)
+S3method(coef, markov_msm)
+S3method(vcov, markov_msm)
+S3method(standardise, markov_msm)
+S3method(print, markov_msm)
+S3method(plot, markov_msm)
+S3method(subset, markov_msm)
+S3method(head, markov_msm)
+S3method(tail, markov_msm)
+S3method(ggplot, markov_msm)
+S3method(ggplot, markov_msm_diff)
+S3method(ggplot, markov_msm_ratio)
+S3method(cbind, markov_msm)
+S3method(transform, markov_msm)
+S3method(nrow, markov_msm)
+S3method(diff, markov_msm)
+
 
 ## All methods for imported generics:
 exportMethods(plot,predict,predictnl,coef,confint,summary,update,anova,vcov,formula,
@@ -36,6 +57,7 @@ importFrom(stats, quantile, lm, as.formula, coef, makepredictcall, na.fail, pred
            anova, var, residuals, confint, qnorm, complete.cases)
 importFrom(mgcv,gam,s)
 importFrom(Rcpp,sourceCpp)
-import(bbmle,methods,survival,splines)
+importFrom(deSolve,ode)
+import(bbmle,methods,survival,splines,ggplot2)
 
 
