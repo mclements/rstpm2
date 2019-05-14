@@ -2,9 +2,14 @@ useDynLib(rstpm2, .registration=TRUE)
 
 exportClasses(stpm2,pstpm2,tvcCoxph,aft)
 
-export(stpm2,pstpm2,incrVar,nsx,predictnl,"coef<-",cox.tvc,aft,nsxD,
-       eform, predictnl, coef, confint, markov_msm, standardise)
-export(predictnl.default, confint.predictnl, vuniroot, zeroRate)
+export(stpm2, pstpm2, aft,
+       cox.tvc, # experimental --- don't export?
+       markov_msm, ratio_markov_msm, zeroRate, 
+       diff, standardise,
+       incrVar, nsx, nsxD, "coef<-",
+       eform, predictnl, coef, confint, 
+       predictnl.default, confint.predictnl,
+       vuniroot)
 
 S3method(makepredictcall, nsx)
 S3method(makepredictcall, nsxD)
@@ -33,31 +38,25 @@ S3method(standardise, markov_msm)
 S3method(print, markov_msm)
 S3method(plot, markov_msm)
 S3method(subset, markov_msm)
-S3method(head, markov_msm)
-S3method(tail, markov_msm)
-S3method(ggplot, markov_msm)
-S3method(ggplot, markov_msm_diff)
-S3method(ggplot, markov_msm_ratio)
-S3method(cbind, markov_msm)
+S3method(rbind, markov_msm)
 S3method(transform, markov_msm)
 S3method(nrow, markov_msm)
 S3method(diff, markov_msm)
-
 
 ## All methods for imported generics:
 exportMethods(plot,predict,predictnl,coef,confint,summary,update,anova,vcov,formula,
               BIC,AIC,AICc,qAICc,simulate,residuals,lines,eform)
 
-importFrom(graphics,plot,lines,matplot,par,polygon,abline,matlines)
-## importFrom(splines,bs,ns,spline.des,splineDesign)
+importFrom(graphics,plot,lines,matplot,par,polygon,abline,matlines,box)
 importFrom(stats, quantile, lm, as.formula, coef, makepredictcall, na.fail, predict,
            contrasts,delete.response, get_all_vars, model.extract, model.frame, 
            model.matrix, model.weights, na.pass, optimHess, pweibull, 
            terms, terms.formula, .checkMFClasses, .getXlevels, pchisq, printCoefmat,
-           anova, var, residuals, confint, qnorm, complete.cases)
+           anova, var, residuals, confint, qnorm, complete.cases, reformulate)
 importFrom(mgcv,gam,s)
 importFrom(Rcpp,sourceCpp)
 importFrom(deSolve,ode)
-import(bbmle,methods,survival,splines,ggplot2)
+import(bbmle,methods,survival,splines)
+
 
 
