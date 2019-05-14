@@ -12,12 +12,12 @@ Authors@R: c(person("Mark", "Clements", role = c("aut", "cre"),
 	      person("Patrick","Alken", role="cph"),
 	      person("Simon","Wood", role="cph"),
 	      person("Rhys","Ulerich", role="cph"))
-Version: 1.4.5
-Date: 2019-01-13
-Depends: R (>= 3.0.2), methods, survival, splines, ggplot2
+Version: 1.5.0
+Date: 2019-05-08
+Depends: R (>= 3.0.2), methods, survival, splines
 Imports: graphics, Rcpp (>= 0.10.2), stats, mgcv, bbmle (>= 1.0.20), fastGHQuad,
-  deSolve
-Suggests: eha, testthat
+  deSolve, utils
+Suggests: eha, testthat, ggplot2, lattice
 LinkingTo: Rcpp,RcppArmadillo
 Maintainer: Mark Clements <mark.clements@ki.se>
 Description: R implementation of generalized survival models (GSMs) and smooth accelerated failure time (AFT) models. For the GSMs, g(S(t|x))=eta(t,x) for a link function g, survival S at time t with covariates x and a linear predictor eta(t,x). The main assumption is that the time effect(s) are smooth. For fully parametric models with natural splines, this re-implements Stata's 'stpm2' function, which are flexible parametric survival models developed by Royston and colleagues. We have extended the parametric models to include any smooth parametric smoothers for time. We have also extended the model to include any smooth penalized smoothers from the 'mgcv' package, using penalized likelihood. These models include left truncation, right censoring, interval censoring, gamma frailties and normal random effects. For the smooth AFTs, S(t|x) = S_0(t*eta(t,x)), where the baseline survival function S_0(t)=exp(-exp(eta_0(t))) is modelled for natural splines for eta_0, and the time-dependent cumulative acceleration factor eta(t,x)=\int_0^t exp(eta_1(u,x)) du for log acceleration factor eta_1(u,x).
