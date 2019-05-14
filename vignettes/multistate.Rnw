@@ -26,9 +26,12 @@
   
   We describe an efficient algorithm and implementation for
   predictions for Markov multi-state models, including state occupancy
-  probabilities, length of stay and their associated standard
-  errors. These methods have applications to a range of disciplines,
-  including epidemiology, causal inference and economics.
+  probabilities, length of stay and costs. The algorithm uses a system
+  of ordinary differential equations to calculate the predictions and
+  their gradients, with standard errors calculated using the delta
+  method. The implementation is 50 times faster than the MULTISTATE
+  package in Stata. These methods have applications to a range of
+  disciplines, including descriptive epidemiology, causal inference and economics.
   
 }
 
@@ -54,7 +57,7 @@ In outline, we provide a theoretical development of a set of ordinary differenti
 
 \section{Methods}
 
-Let the set of states be indexed by $i$ and $j$. We define the row vector or matrix of state occupancy probabilities $\boldsymbol{P}(t_0,t)=(P_{0j}(t_0,t))$ as the probabilities of being in state $j$ at time $t$ given being in an initial state $0$ at entry time $t_0$. For smooth hazards, the Markov property is expressed through Kolmogorov's forward differential equation, such that 
+Let the set of states be indexed by $i$ and $j$. We define the row vector of state occupancy probabilities $\boldsymbol{P}(t_0,t)=(P_{0j}(t_0,t))$ as the probabilities of being in state $j$ at time $t$ given being in an initial state $0$ at entry time $t_0$. For smooth hazards, the Markov property is expressed through Kolmogorov's forward differential equation, such that 
 \begin{align}
   \frac{d\boldsymbol{P}(t_0,t)}{dt} &= \boldsymbol{P}(t_0,t) \boldsymbol{Q}(t) \label{eq:kolmogorov}
 \end{align}
@@ -62,14 +65,15 @@ where $\boldsymbol{Q}(t)=(Q_{ij}(t))$ is a matrix of transition intensities at t
 
 This system of ordinary differential equations in Equation~\ref{eq:kolmogorov} can be augmented to calculate the integral $L_{0j}(t_0,t)=\int_{t_0}^t P_{0j}(t_0,v)u_j(u)e^{-\lambda t}dv$, where 0 is again the index for the initial state, $u_j(v)$ is the utility for state $j$ at time $v$ and $\lambda=\log(1+\delta)$ is the rate of decline for a discount rate $\delta$. The augmented differential equations are then
 \begin{align}
-\frac{d\boldsymbol{L}(t_0,t)}{dt} &= \boldsymbol{P}(t_0,t)\boldsymbol{u}(t)e^{-\lambda t} \label{eq:los}
+\frac{d\boldsymbol{L}(t_0,t)}{dt} &= \left(\boldsymbol{P}(t_0,t)\circ\boldsymbol{u}(t)\right)e^{-\lambda t} \label{eq:los}
 \end{align}
-In health economics, the sum across the states gives the discounted, quality-adjusted life-years $\text{QALY}(t_0,t)=\boldsymbol{L}(t_0,t)\boldsymbol{1}$. If $u_j(v)=1$ and $\lambda=0$ then $L_{0j}(t_0,t)$ is the sojourn time for state $j$ (also called the length of stay; see \cite{Jackson_2016}) . We can also augment the system to model for costs per unit time for being in state $i$ at time $t$, represented by the vector function $\boldsymbol{c}(t)=(c_{i}(t))$ and model for costs for transitions from state $i$ to state $j$ at time $t$, represented by the matrix $\boldsymbol{\mathcal{C}}(t)=(\mathcal{C}_{i,j}(t))$. Then the cumulative costs $\boldsymbol{C}(t_0,t)$ can be represented by the equations
+where $\boldsymbol{P}(t_0,t)\circ\boldsymbol{u}(t)$ is the Hadamard (element-wise) product between row vector $\boldsymbol{P}(t_0,t)$ and row vector $\boldsymbol{u}(t)$.
+In health economics, the sum across the states gives the discounted, quality-adjusted life-years $\text{QALY}(t_0,t)=\boldsymbol{L}(t_0,t)\boldsymbol{1}$. If $u_j(v)=1$ and $\lambda=0$ then $L_{0j}(t_0,t)$ is the the \emph{length of stay} or sojourn time for state $j$; see \cite{Jackson_2016} for an implementation to predict the length of stay using ordinary differential equations. We can also augment the system to model for costs per unit time for being in state $i$ at time $t$, represented by the row vector function $\boldsymbol{c}(t)=(c_{i}(t))$ and model for costs for transitions from state $i$ to state $j$ at time $t$, represented by the matrix $\boldsymbol{\mathcal{C}}(t)=(\mathcal{C}_{i,j}(t))$. Then the cumulative costs $\boldsymbol{C}(t_0,t)$ can be represented by the equations
 \begin{align}
-\frac{d\boldsymbol{C}(t_0,t)}{dt} &= \left(\boldsymbol{P}(t_0,t)\boldsymbol{c}(t)+
+\frac{d\boldsymbol{C}(t_0,t)}{dt} &= \left(\left(\boldsymbol{P}(t_0,t)\circ\boldsymbol{c}(t)\right)+
                                     \boldsymbol{P}(t_0,t)(\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}(t))\right)e^{-\lambda t} \label{eq:costs}
 \end{align}
-where $\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}(t)$ is the Hadamard (element-wise) product between matrix $\boldsymbol{Q}(t)$ and matrix $\boldsymbol{\mathcal{C}}(t)$. The total costs are summed across the health states, such that $\text{Costs}(t_0,t)=\boldsymbol{C}(t_0,t)\boldsymbol{1}$.
+where $\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}(t)$ is the Hadamard product between matrix $\boldsymbol{Q}(t)$ and matrix $\boldsymbol{\mathcal{C}}(t)$. The total costs are summed across the health states, such that $\text{Costs}(t_0,t)=\boldsymbol{C}(t_0,t)\boldsymbol{1}$.
 
 The initial values for Equations~(\ref{eq:kolmogorov})--(\ref{eq:costs}) are     $\boldsymbol{P}(t_0,t_0)=\boldsymbol{I}$ and $\boldsymbol{L}(t_0,t_0)=\boldsymbol{C}(t_0,t_0)=\boldsymbol{0}$.
 
@@ -82,22 +86,20 @@ Following \cite{Titman_2011}, this system of equations can be further augmented 
 \end{align}
 Note that this requires the evaluation of the gradients for the transition intensities. As extensions, we can also calculate the gradient for $\boldsymbol{L}(t_0,t)$ with respect to $\beta_m$, such that
 \begin{align}
-  \frac{d\boldsymbol{L}'_m(t_0,t)}{dt} &= \boldsymbol{P}'_m(t_0,t)\boldsymbol{u}(t)e^{-\lambda t} \label{eq:dLudt}
+  \frac{d\boldsymbol{L}'_m(t_0,t)}{dt} &= \left(\left(\boldsymbol{P}'_m(t_0,t)\circ\boldsymbol{u}(t)\right)+\left(\boldsymbol{P}(t_0,t)\circ\boldsymbol{u}'_m(t)\right)\right)e^{-\lambda t} \label{eq:dLudt}
 \end{align}
 and the gradients for the cumulative costs, such that
 \begin{align}
-  \frac{d\boldsymbol{C}'_m(t_0,t)}{dt} &= \left(\boldsymbol{P}'_m(t_0,t)\boldsymbol{c}(t)+
-                                         \left((\boldsymbol{P}'_m(t_0,t)\boldsymbol{Q}(t) + \boldsymbol{P}(t_0,t)\boldsymbol{Q}'_m(t))\circ \boldsymbol{\mathcal{C}}(t)\right)\right)e^{-\lambda t} \label{eq:dCudt}
+  \frac{d\boldsymbol{C}'_m(t_0,t)}{dt} &= \Big(\left(\boldsymbol{P}'_m(t_0,t)\circ\boldsymbol{c}(t)\right)+ \left(\boldsymbol{P}(t_0,t)\circ\boldsymbol{c}'_m(t)\right)+\nonumber\\
+                                         &\qquad \boldsymbol{P}'_m(t_0,t)\left(\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}(t)\right)+\nonumber\\
+                                         &\qquad \boldsymbol{P}(t_0,t)\left(\boldsymbol{Q}'_m(t)\circ \boldsymbol{\mathcal{C}}(t)\right)+\nonumber\\
+                                         &\qquad\boldsymbol{P}(t_0,t)\left(\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}'_m(t)\right)
+                                         \Big)e^{-\lambda t} \label{eq:dCudt}
 \end{align}
+Note that Equations~(\ref{eq:dLudt}) and (\ref{eq:dCudt}) may require the evaluation of the gradients for the utility and cost functions, respectively. These equations simplify when the utilities $\boldsymbol{u}(t)$ and cost functions $\boldsymbol{c}(t)$ and $\boldsymbol{\mathcal{C}}(t)$ are fixed and have zero gradients.
 
-The initial values for Equations~(\ref{eq:dPudt})--(\ref{eq:dCudt})
-are
+The initial values for Equations~(\ref{eq:dPudt})--(\ref{eq:dCudt}) are
 $\boldsymbol{P}'_m(t_0,t_0)=\boldsymbol{L}'_m(t_0,t_0)=\boldsymbol{C}'_m(t_0,t_0)=\boldsymbol{0}$.
-Note that Equations~(\ref{eq:dPudt})--(\ref{eq:dCudt}) only account
-for uncertainty in the transition intensities. These equations can be
-extended to include the uncertainty in the utility functions
-$\boldsymbol{u}(t)$ and the cost functions $\boldsymbol{c}(t)$ and
-$\boldsymbol{\mathcal{C}}(t)$.
 
 
 \subsection{Algorithm}
@@ -106,9 +108,9 @@ The algorithm is defined by the following:
 
 \begin{algorithm}[H]
   \SetKwInOut{Input}{input}\SetKwInOut{Output}{output}
-  \Input{$\boldsymbol{Q}(t), \boldsymbol{Q}'_m(t)\,\forall m, \boldsymbol{u}(t), \lambda, \boldsymbol{c}(t), \boldsymbol{\mathcal{C}}(t), t_0, t_\text{max}$} \Output{$\boldsymbol{P}(t_0,t),\boldsymbol{L}(t_0,t),\boldsymbol{C}(t_0,t),\boldsymbol{P}'_m(t_0,t),\boldsymbol{L}'_m(t_0,t),\boldsymbol{C}'_m(t_0,t)\,\forall m\ \text{for}\ t\in\left[t_0,t_\text{max}\right)$}
+  \Input{$\boldsymbol{P}(t_0,t_0),\boldsymbol{Q}(t), \boldsymbol{u}(t), \boldsymbol{c}(t), \boldsymbol{\mathcal{C}}(t), \left\{\boldsymbol{Q}'_m(t),\boldsymbol{u}'_m(t),\boldsymbol{c}'_m(t), \boldsymbol{\mathcal{C}}'_m(t)\right\}\forall m, \lambda, t_0, t_\text{max}$} \Output{$\boldsymbol{P}(t_0,t),\boldsymbol{L}(t_0,t),\boldsymbol{C}(t_0,t),\left\{\boldsymbol{P}'_m(t_0,t),\boldsymbol{L}'_m(t_0,t),\boldsymbol{C}'_m(t_0,t)\right\}\forall m\ \text{for}\ t\in\left[t_0,t_\text{max}\right)$}
   \Begin{
-    $\boldsymbol{P}(t_0,t_0)=\boldsymbol{I}$\; $\boldsymbol{L}(t_0,t_0)=\boldsymbol{C}(t_0,t_0)=\boldsymbol{0}$\;
+
   $\boldsymbol{P}'_m(t_0,t_0)=\boldsymbol{L}'_m(t_0,t_0)=\boldsymbol{C}'_m(t_0,t_0)=\boldsymbol{0}$\;
   define the ODE based on Equations~(\ref{eq:kolmogorov})--(\ref{eq:dCudt}) and the initial values\;
   run an ODE solver from time $t_0$ to time $t_\text{max}$\;
@@ -119,12 +121,12 @@ This algorithm could be done separately for each covariate pattern or the ODEs c
 
 \subsection{Variance estimation and other predictions}
 
-For the following, let $\boldsymbol\phi(t_0,t)$ represent one of $\boldsymbol{P}(t_0,t)$, $\boldsymbol{L}(t_0,t)$ or $\boldsymbol{C}(t_0,t)$, let $\boldsymbol\phi'_m(t_0,t)$ represent the derivative with respect to $\beta_m$, and let the covariance matrix for the estimated $\boldsymbol\beta$ for the transition intensities be $\boldsymbol\Sigma$. Then, using the \emph{delta method}, the estimated covariance matrix for $\boldsymbol\phi(t_0,t)$ is
+For the following, let $\boldsymbol\phi(t_0,t)$ represent one of $\boldsymbol{P}(t_0,t)$, $\boldsymbol{L}(t_0,t)$ or $\boldsymbol{C}(t_0,t)$, let $\boldsymbol\phi'_m(t_0,t)$ represent the derivative with respect to $\beta_m$, and let the covariance matrix for the estimated $\boldsymbol\beta$ be $\boldsymbol\Sigma$. Then, using the \emph{delta method}, the estimated covariance matrix for $\boldsymbol\phi(t_0,t)$ is
 \begin{align*}
 \text{var}(\boldsymbol\phi(t_0,t)) &= \boldsymbol{\phi}'_m(t_0,t)^T\, \boldsymbol\Sigma\, \boldsymbol{\phi}'_m(t_0,t)
 \end{align*}
 
-We can standardise the estimators using weighted sums with weight vector $w_k$ and covariates $\boldsymbol{x}_k$ for $k=1,\ldots,K$, such that
+We can standardise the estimators using weighted sums with weights $w_k$ and covariates $\boldsymbol{x}_k$ for $k=1,\ldots,K$, such that
 \begin{align*}
   \bar{\boldsymbol{\phi}}(t_0,t) &= \sum_{k=1}^K w_k \boldsymbol{\phi}(t_0,t|\boldsymbol{x}_k)\\
   \bar{\boldsymbol{\phi}}'_m(t_0,t) &= \sum_{k=1}^K w_k \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_k) % \\
@@ -147,7 +149,7 @@ The gradient for the log of the ratio is
 \frac{\partial}{\partial \beta_m} \log\left(\frac{\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)}{\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)}\right) &= \frac{\boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_1)}{\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)}
 - \frac{\boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_2)}{\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)}
 \end{align*}
-where the division $\left(\frac{\boldsymbol{\phi}'_m}{\boldsymbol{\phi}}\right)_j=\phi'_{m,j}/\phi_j$m which is element-wise division. We can also consider incremental cost-effectiveness ratios, estimated by 
+where the division $\left(\frac{\boldsymbol{\phi}'_m}{\boldsymbol{\phi}}\right)_j=\phi'_{m,j}/\phi_j$, which is element-wise division. We can also consider incremental cost-effectiveness ratios, estimated by 
 \begin{align*}
 \text{ICER}(t_0,t,\boldsymbol{x}_1,\boldsymbol{x}_2) &= \frac{\text{Costs}(t_0,t|\boldsymbol{x}_1)-\text{Costs}(t_0,t|\boldsymbol{x}_2)}{\text{QALY}(t_0,t|\boldsymbol{x}_1)-\text{QALY}(t_0,t|\boldsymbol{x}_2)}
 \end{align*}
