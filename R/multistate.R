@@ -8,7 +8,8 @@ markov_msm <-
               transition.costs=lapply(1:sum(!is.na(trans)), function(i) function(t) 1000), # per transition
               state.costs=function(t) rep(0,nrow(trans)), # per unit time
               discount.rate = 0,
-              ...) 
+              block.size=500,
+              ...)
 {
     call <- match.call()
     inherits <- function(x, ...)
@@ -18,6 +19,25 @@ markov_msm <-
     stopifnot(!is.null(newdata))
     stopifnot(sum(!is.na(trans)) == length(x))
     stopifnot(length(init) == nrow(trans))
+    ## if newdata are many, then separate into blocks
+    if (nrow(newdata)>block.size) {
+        lst <- tapply(1:nrow(newdata),
+                      0:(nrow(newdata)-1) %/% block.size,
+                      function(index)
+                          markov_msm(x = x, trans = trans, t = t,
+                                     newdata = newdata[index,],
+                                     init = init, tmvar = tmvar,
+                                     sing.inf = sing.inf,
+                                     method = method, rtol = rtol, atol = atol, slow = slow,
+                                     min.tm = min.tm, utility = utility, use.costs = use.costs,
+                                     transition.costs = transition.costs,
+                                     state.costs = state.costs,
+                                     discount.rate = discount.rate,
+                                     block.size = block.size,
+                                     ...),
+                      simplify=FALSE)
+        return(do.call(rbind.markov_msm,lst))
+    }
     if (use.costs)
         slow <- TRUE
     x <- lapply(x, function(object)
