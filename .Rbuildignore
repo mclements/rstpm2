@@ -5,3 +5,7 @@ Makefile
 NEWS.html
 log$
 [~]$
+^.*\.bbl$
+^.*\.blg$
+^.*\.tex$
+jss\.bst
