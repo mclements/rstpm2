@@ -585,3 +585,98 @@ reorder <- function(x,order) {
 }
 nrow.markov_msm <- function(x, ...) nrow(as.data.frame(x, ...)) 
 vcov.markov_msm <- function(object, ...) object$vcov
+
+collapse.states <- function(object, which=NULL, sep="; ") {
+    ## example: which=c(1,2) => combine states 1 and 2
+    stopifnot(inherits(object, "markov_msm"))
+    stopifnot(!is.null(which))
+    if(is.character(which))
+        which <- pmatch(which, rownames(object$trans))
+    stopifnot(all(which %in% 1:nrow(object$trans)))
+    stopifnot(nrow(object$trans)>=2)
+    call <- match.call()
+    which <- sort(unique(which)) # in case of duplicates
+    if(length(which)==1) return(object) # no change
+    ## algorithm:
+    n.newstates <- nrow(object$trans) - length(which) + 1
+    ## initalise
+    newstates <- vector("list", n.newstates)
+    j <- 0
+    base <- NULL
+    for (i in 1:nrow(object$trans)) {
+        if (i %in% which) {
+            if (is.null(base)) {
+                j <- j + 1
+                base <- j
+            }
+            newstates[[base]] <- c(newstates[[base]],i)
+        }
+        else {
+            j <- j + 1
+            newstates[[j]] <- i
+        }
+    }
+    index <- vector('numeric',nrow(object$trans))
+    for (j in 1:length(newstates))
+        for (k in newstates[[j]])
+            index[k] <- j
+    state.names <- rownames(object$trans)
+    if (is.null(state.names)) state.names <- 1:nrow(object$trans)
+    new.state.names <- tapply(state.names, index, paste0, collapse=sep)
+    trans <- object$trans
+    for (i in rev(which[-1])) {
+        trans <- trans[-i,,drop=FALSE]
+        trans <- trans[,-i,drop=FALSE]
+    }
+    ## sum <- function(x) tapply(x, index, base::sum)
+    sum3 <- function(x,index,DIM=2) {
+        dims <- dim(x)
+        dims[DIM] <- length(unique(index))
+        y <- array(0,dims)
+        dimnames <- dimnames(x)
+        dimnames[[DIM]] <- new.state.names
+        for (i in 1:length(index)) {
+            if (DIM==1)
+                y[index[i],,] <- y[index[i],,] + x[i,,]
+            else if (DIM==2)
+                y[,index[i],] <- y[,index[i],] + x[,i,]
+        }
+        dimnames(y) <- dimnames
+        y
+    }
+    sum4 <- function(x,index) {
+        ## assumes DIM=2
+        dims <- dim(x)
+        dims[2] <- length(unique(index))
+        dimnames <- dimnames(x)
+        dimnames[[2]] <- new.state.names
+        y <- array(0,dims)
+        for (i in 1:length(index))
+            y[,index[i],,] <- y[,index[i],,] + x[,i,,]
+        dimnames(y) <- dimnames
+        y
+    }
+    P <- sum3(object$P,index)
+    L <- sum3(object$L,index)
+    Pu <- sum4(object$Pu,index)
+    Lu <- sum4(object$Lu,index)
+    if ("C" %in% names(object)) {
+        C <- sum3(object$C,index)
+        Cu <- sum4(object$Cu,index)
+    }
+    index <- 1
+    for (i in 1:nrow(object$trans)) {
+        if (any(i==trans,na.rm=TRUE)) {
+            trans[which(i==trans)] <- index
+            index <- index + 1
+        }
+    }
+    colnames(trans) <- rownames(trans) <- new.state.names
+    newobject <- structure(list(time = object$time,
+                                P=P, L=L, Pu=Pu, Lu=Lu,
+                                res=NULL, vcov=object$vcov,
+                                newdata=object$newdata,
+                                trans=trans, call=call),
+                           class=class(object))
+    newobject
+}
