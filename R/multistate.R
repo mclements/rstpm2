@@ -212,7 +212,7 @@ standardise <- function(x, ...)
     UseMethod("standardise")
 standardise.markov_msm <- function(x,
                                    weights = rep(1,nrow(x$newdata)),
-                                   normalise = TRUE) {
+                                   normalise = TRUE, ...) {
     call <- match.call
     state.names <- rownames(x$trans)
     add.dim <- function(x) array(x,dim=c(dim(x),1))
@@ -545,12 +545,12 @@ bindlast <- function(...) { # bind on last slice for a bag of arrays
     dimnames. <- dimnames(x[[1]])
     dims[length(dims)] <- sum(sapply(x,function(xi) dim(xi)[length(dims)]))
     if (!is.null(dimnames.[[length(dims)]]))
-        dimnames.[[length(dims)]] <- sapply(x,function(xi) dimnames(xi)[length(dims)])
+        dimnames.[[length(dims)]] <- unlist(sapply(x,function(xi) dimnames(xi)[length(dims)]))
     dim(y) <- dims
     dimnames(y) <- dimnames.
     y
 }
-cbind.markov_msm <- function(..., deparse.level = 1) {
+rbind.markov_msm <- function(..., deparse.level = 1) {
     x <- list(...)
     stopifnot(all(sapply(x,inherits,"markov_msm")))
     ## class, vcov, time and trans should all be the same
