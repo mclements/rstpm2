@@ -138,8 +138,10 @@ exp(minexp)     # typically denormalized
 f1 <- function(x) (121 - x^2)/(x^2+1)
 f2 <- function(x) exp(-x)*(x - 12)
 
-try(vuniroot(f1, cbind(0,10)))
-try(vuniroot(f2, cbind(0, 2)))
+tools::assertCondition(vuniroot(f1, cbind(0,10)),
+                       "error", verbose=TRUE)
+tools::assertCondition(vuniroot(f2, cbind(0, 2)),
+                       "error", verbose=TRUE)
 ##--> error: f() .. end points not of opposite sign
 
 ## where as  'extendInt="yes"'  simply first enlarges the search interval:
@@ -151,7 +153,8 @@ stopifnot(all.equal(u1$root, 11, tolerance = 1e-5),
 ## The *danger* of interval extension:
 ## No way to find a zero of a positive function, but
 ## numerically, f(-|M|) becomes zero :
-u3 <- vuniroot(exp, cbind(0,2), extendInt="yes", trace=TRUE)
+tools::assertCondition(u3 <- vuniroot(exp, cbind(0,2), extendInt="yes", trace=TRUE),
+                       "error", verbose=TRUE)
 
 ## Nonsense example (must give an error):
 tools::assertCondition( vuniroot(function(x) 1, cbind(0,1), extendInt="yes"),
