@@ -323,30 +323,6 @@ zeroRateS3 <- function(object) {
 }
 predict.zeroRateS3 <- function(object, ...)
     0.0*NextMethod("predict",object)
-plot.markov_msm <- function(x, y, type="stacked",
-                            xlab="Time", ylab="Probability", col=2:6, border=col,
-                            ...) {
-    type <- match.arg(type)
-    stopifnot(inherits(x,"markov_msm"))
-    if (nrow(x$newdata)>1) x <- standardise(x)
-    if (!missing(y)) warning("y argument is ignored")
-    df <- as.data.frame(x)
-    states <- unique(df$state)
-    if (type=="stacked") {
-        out <- plot(range(x$time),0:1, type="n", xlab=xlab, ylab=ylab, ...)
-        lower <- 0
-        for (i in length(states):1) { # put the last state at the bottom
-            df2 <- df[df$state==states[i],]
-            if (length(lower)==1) lower <- rep(0,nrow(df2))
-            upper <- lower+df2$P
-            polygon(c(df2$time,rev(df2$time)), c(lower,rev(upper)),
-                    border=border[i], col=col[i])
-            lower <- upper
-        }
-        box()
-        invisible(out)
-    }
-}
 subset.markov_msm <- function(x, subset, ...) {
     e <- substitute(subset)
     r <- eval(e, x$newdata, parent.frame())
@@ -390,39 +366,137 @@ as.data.frame.markov_msm_diff <- function(x, ...)
     as.data.frame.markov_msm(x, ...,
                              P.conf.type="plain", L.conf.type="plain",
                              P.range=c(-Inf, Inf), L.range=c(-Inf, Inf))
-head.markov_msm <- function(x, ...) head(as.data.frame(x), ...)
-tail.markov_msm <- function(x, ...) tail(as.data.frame(x), ...)
+
+
+plot.markov_msm <- function(x, y, stacked=TRUE, which=c("P","L"),
+                            xlab="Time", ylab=NULL, col=2:6, border=col,
+                            ggplot2=FALSE, lattice=FALSE, alpha=0.2,
+                            strata=NULL,
+                            ...) {
+    stopifnot(inherits(x,"markov_msm"))
+    which <- match.arg(which)
+    ## ylab defaults
+    if(is.null(ylab)) {
+        ylab <- if(which=='P') "Probability" else "Length of stay"
+        if(inherits(x,"markov_msm_diff"))
+            ylab <- if(which=='P') "Difference in probabilities"
+                    else "Difference in lengths of stay"
+        if(inherits(x,"markov_msm_ratio"))
+            ylab <- if(which=='P') "Ratio of probabilities"
+                    else "Ratio of lengths of stay"
+    }
+    if (ggplot2)
+        ggplot.markov_msm(x, which=which, stacked=stacked, xlab=xlab, ylab=ylab,
+                          alpha=alpha, ...)
+    else if (lattice)
+        xyplot.markov_msm(x, which=which, stacked=stacked, xlab=xlab, ylab=ylab,
+                          col=col, border=border, strata=strata, ...)
+    else {
+        if (nrow(x$newdata)>1) {
+            warning("More than one set of covariates; covariates have been standardised")
+            x <- standardise(x)
+        }
+        if (!missing(y)) warning("y argument is ignored")
+        df <- as.data.frame(x)
+        states <- unique(df$state)
+        if (stacked) {
+            out <- graphics::plot(range(x$time),0:1, type="n", xlab=xlab, ylab=ylab, ...)
+            lower <- 0
+            for (i in length(states):1) { # put the last state at the bottom
+                df2 <- df[df$state==states[i],]
+                if (length(lower)==1) lower <- rep(0,nrow(df2))
+                upper <- lower+df2$P
+                graphics::polygon(c(df2$time,rev(df2$time)), c(lower,rev(upper)),
+                                  border=border[i], col=col[i])
+                lower <- upper
+            }
+            graphics::box()
+            invisible(out)
+        }
+        else stop('Unstacked plot not implemented in base graphics; use ggplot2=TRUE or lattice=TRUE')
+    }
+}
+
 ggplot.markov_msm <- function(data, mapping=NULL,
                               which=c("P","L"), 
                               stacked = TRUE, alpha=0.2,
+                              xlab=NULL, ylab=NULL,
                               ..., environment=parent.frame()) {
-    which <- match.arg(which)
-    df <- as.data.frame(data, ci=!stacked)
-    if (which=="P") {
+    if (requireNamespace("ggplot2", quietly=TRUE)) {
+        which <- match.arg(which)
+        df <- as.data.frame(data, ci=!stacked)
         if (stacked)
-            ggplot(df, if(is.null(mapping)) aes(x=time, y=P, fill=state) else mapping) +
-                geom_area() + 
-                xlab("Time") + ylab("Probability")
-        else ggplot(df, if (is.null(mapping)) aes(x=time, y=P, ymin=P.lower, ymax=P.upper) else mapping) +
-                 geom_line() + geom_ribbon(alpha=alpha) + facet_grid(. ~ state) +
-                 xlab("Time") + ylab("Probability")
+            ggplot2::ggplot(df, if(is.null(mapping))
+                                    ggplot2::aes_string(x='time', y=which, fill='state')
+                                else mapping) +
+                ggplot2::geom_area() + 
+                ggplot2::xlab(xlab) + ggplot2::ylab(ylab)
+        else {
+            lower <- paste0(which,'.lower')
+            upper <- paste0(which,'.upper')
+            ggplot2::ggplot(df, if (is.null(mapping))
+                                     ggplot2::aes_string(x='time', y=which, ymin=lower,
+                                                         ymax=upper)
+                                 else mapping) +
+                 ggplot2::geom_line() + ggplot2::geom_ribbon(alpha=alpha) +
+                 ggplot2::facet_grid(stats::reformulate(".","state")) +
+                ggplot2::xlab(xlab) + ggplot2::ylab(ylab)
+        }
     }
-    else {
-        if (stacked)
-            ggplot(df, if(is.null(mapping)) aes(x=time, y=L, fill=state) else mapping) + geom_area() + 
-                xlab("Time") + ylab("Length of stay")
-        else ggplot(df, if (is.null(mapping)) aes(x=time, y=L, ymin=L.lower, ymax=L.upper) else mapping) +
-                 geom_line() + geom_ribbon(alpha=alpha) +  facet_grid(. ~ state) +
-                 xlab("Time") + ylab("Length of stay")
+    else stop("Suggested package 'ggplot2' is not available")
+}
+
+xyplot.markov_msm <- function(x, data, strata=NULL,
+                              which=c("P","L"), 
+                              stacked = TRUE, 
+                              col=2:6, border=col,
+                              ..., environment=parent.frame()) {
+    if (requireNamespace("lattice", quietly=TRUE)) {
+        which <- match.arg(which)
+        ## if (!missing(data) && is.null(strata)) strata <- data # copy from data to strata
+        df <- as.data.frame(x, ci=!stacked)
+        if (!is.factor(df$state)) df$state <- as.factor(df$state)
+        states <- levels(df$state)
+        if (stacked) {
+            rhs_string <- if (!is.null(strata)) paste('time',deparse(rhs(strata)),sep='|')
+                          else 'time'
+            lattice::xyplot(stats::reformulate(rhs_string,which), data=df,
+                            panel = function(x, y, subscripts, group, ...) {
+                                df2 <- df[subscripts,]
+                                lattice::panel.xyplot(x,y, type="n")
+                                lower <- 0
+                                for (i in length(states):1) {
+                                    df3 <- df2[df2$state==states[i], , drop=FALSE]
+                                    if (length(lower)==1) lower <- rep(0,nrow(df3))
+                                    upper <- lower+df3[[which]]
+                                    lattice::panel.polygon(c(df3$time,rev(df3$time)),
+                                                           c(lower,rev(upper)),
+                                                  border=border[i], col=col[i])
+                                    lower <- upper
+                                }
+                            },
+                            subscripts=TRUE, ...)
+        }
+        else {
+            lower <- paste0(which,'.lower')
+            upper <- paste0(which,'.upper')
+            rhs_string <- if (!is.null(strata)) paste('time|state',deparse(rhs(strata)),sep='+')
+                          else 'time|state'
+            lattice::xyplot(stats::reformulate(rhs_string,which), data=df,
+                            panel = function(x, y, subscripts, group, ...) {
+                                lattice::panel.xyplot(x,y, type="n")
+                                lattice::panel.polygon(c(x,rev(x)),
+                                                       c(df[[lower]][subscripts],
+                                                         rev(df[[upper]][subscripts])),
+                                                       border=NULL, col="grey")
+                                lattice::panel.lines(x,y)
+                            },
+                            subscripts=TRUE, ...)
+        }
     }
+    else stop("Suggested package 'lattice' is not available")
 }
-ggplot.markov_msm_ratio <- function(data, mapping=NULL, which=c("P","L"), ...) {
-    which <- match.arg(which)
-    if (which=="P")
-        ggplot.markov_msm(data, mapping, which, ...) + ylab("Ratio of probabilities")
-    else
-        ggplot.markov_msm(data, mapping, which, ...) + ylab("Ratio of lengths of stay")
-}
+
 ## g(beta) = log(losA) - log(losB)
 ## g'(beta) = losA'/losA - losB'/losB # which is not defined when los=0
 ## NB: data are on a log scale!
@@ -494,17 +568,12 @@ cbind.markov_msm <- function(..., deparse.level = 1) {
                  newdata=do.call(rbind,lapply(x,"[[", "newdata")),
                  trans=x[[1]]$trans)
     newx$call <- match.call()
-    newx$newdata$.index <- sapply(1:length(x), function(i) rep(i,nrow(x[[i]]$newdata))) # is this a good idea? It will be lost if done more than once...
+    ## is this a good idea? It will be lost if done more than once...
+    newx$newdata$.index <- unlist(sapply(1:length(x),
+                                         function(i) rep(i,nrow(x[[i]]$newdata))))
     state.names <- rownames(newx$trans)
     class(newx) <- class(x[[1]])
     newx
-}
-ggplot.markov_msm_diff <- function(data, mapping=NULL, which=c("P","L"), ...) {
-    which <- match.arg(which)
-    if (which=="P")
-        ggplot.markov_msm(data, mapping, which, ...) + ylab("Difference in probabilities")
-    else
-        ggplot.markov_msm(data, mapping, which, ...) + ylab("Difference in lengths of stay")
 }
 transform.markov_msm <- function(`_data`, ...) {
     `_data`$newdata <- transform(`_data`$newdata, ...)
