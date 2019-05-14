@@ -5,15 +5,16 @@
 \alias{as.data.frame.markov_msm}
 \alias{as.data.frame.markov_msm_diff}
 \alias{as.data.frame.markov_msm_ratio}
+\alias{standardise}
 \alias{standardise.markov_msm}
 \alias{plot.markov_msm}
 \alias{subset.markov_msm}
+\alias{diff}
 \alias{diff.markov_msm}
-\alias{ggplot.markov_msm}
-\alias{ggplot.markov_msm_diff}
-\alias{ggplot.markov_msm_ratio}
 \alias{ratio_markov_msm}
-\alias{cbind.markov_msm}
+\alias{rbind.markov_msm}
+\alias{transform.markov_msm}
+\alias{collapse.states}
 \alias{zeroRate}
 \title{
 Predictions for continuous time, nonhomogeneous Markov multi-state
@@ -25,41 +26,46 @@ continuous time, nonhomogeneous Markov multi-state model. The main
 inputs are the models for the transition intensities, the initial values,
 the transition matrix and the covariate patterns. The predictions
 include state occupancy probabilities (possibly with discounting and
-utilities), length of stay and costs. 
+utilities), length of stay and costs. Standard errors are calculated
+using the delta method. Includes, differences, ratios and standardisation.
 }
 \usage{
-markov_msm(x, trans, t = c(0, 1), newdata = NULL, init = `[<-`(rep(0,
-nrow(trans)), 1, 1), tmvar = NULL, sing.inf = 1e+10, method = "adams",
-rtol = 1e-10, atol = 1e-10, slow = FALSE, min.tm = 1e-08, utility =
-function(t) rep(1, nrow(trans)), use.costs = FALSE, transition.costs =
-lapply(1:sum(!is.na(trans)), function(i) function(t) 1000), state.costs
-= function(t) rep(0, nrow(trans)), discount.rate = 0, ...)
-\method{vcov}{markov_msm}(object, ...)
-\method{coef}{markov_msm}(object, ...)
+markov <- msm(x, trans, t = c(0,1), newdata = NULL, init="[<-"(rep(0,nrow(trans)),1,1),
+              tmvar = NULL, 
+              sing.inf = 1e+10, method="adams", rtol=1e-10, atol=1e-10, slow=FALSE,
+              min.tm=1e-8,
+              utility=function(t) rep(1, nrow(trans)),
+              use.costs=FALSE,
+              transition.costs=lapply(1:sum(!is.na(trans)), function(i) function(t) 1000), # per transition
+              state.costs=function(t) rep(0,nrow(trans)), # per unit time
+              discount.rate = 0,
+              block.size=500,
+              \dots)
+\method{vcov}{markov_msm}(object, \dots)
+\method{coef}{markov_msm}(object, \dots)
 \method{as.data.frame}{markov_msm}(x, row.names=NULL, optional=FALSE,
-                                     ci=TRUE,
-                                     P.conf.type="log-log", L.conf.type="log",
-                                     P.range=c(0,1), L.range=c(0,Inf),
-                                     ...)
-\method{as.data.frame}{markov_msm_diff}(x, ...)
-\method{as.data.frame}{markov_msm_ratio}(x, ...)
+                                   ci=TRUE,
+                                   P.conf.type="log-log", L.conf.type="log",
+                                   P.range=c(0,1), L.range=c(0,Inf),
+                                   \dots)
+\method{as.data.frame}{markov_msm_diff}(x, \dots)
+\method{as.data.frame}{markov_msm_ratio}(x, \dots)
+standardise(x, \dots)
 \method{standardise}{markov_msm}(x,
-                                   weights = rep(1,nrow(x$newdata)),
-                                   normalise = TRUE)
-\method{plot}{markov_msm}(x, y, type="stacked",
-                            xlab="Time", ylab="Probability", col=2:6, border=col,
-                            ...)
-\method{subset}{markov_msm}(x, subset, ...)
-\method{diff}{markov_msm}(x, y, ...)
-\method{gglot}{markov_msm}(data, mapping=NULL,
-                              which=c("P","L"), 
-                              stacked = TRUE, alpha=0.2,
-                              ..., environment=parent.frame())
-\method{gglot}{markov_msm_diff}(data, mapping=NULL, which=c("P","L"), ...)
-\method{gglot}{markov_msm_ratio}(data, mapping=NULL, which=c("P","L"), ...)
-ratio_markov_msm(x, y, ...)
-\method{cbind}{markov_msm}(..., deparse.level=1)
-\method{transform}{markov_msm}(`_data`, ...)
+                                 weights = rep(1,nrow(x$newdata)),
+                                 normalise = TRUE, \dots)
+\method{plot}{markov_msm}(x, y, stacked=TRUE, which=c('P','L'),
+                          xlab="Time", ylab=NULL, col=2:6, border=col,
+                          ggplot2=FALSE, lattice=FALSE, alpha=0.2,
+                          strata=NULL,
+                          \dots)
+\method{subset}{markov_msm}(x, subset, \dots)
+diff(x, \dots)
+\method{diff}{markov_msm}(x, y, \dots)
+ratio_markov_msm(x, y, \dots)
+\method{rbind}{markov_msm}(\dots, deparse.level=1)
+\method{transform}{markov_msm}(`_data`, \dots)
+collapse.states(object, which=NULL, sep="; ")
 zeroRate(object)
 }
 %- maybe also 'usage' for other objects documented here.
@@ -68,8 +74,8 @@ For \code{markov_msm}:
 
   \item{x}{
 list of parametric or penalised survival models. Currently this includes
-combinations of \code{\link{stpm2}}, \code{\link{pstpm2}}, \code{\link{glm}},
-\code{\link{survPen}} or an object of class \code{"zeroRate"} from
+combinations of \code{\link{stpm2}}, \code{\link{pstpm2}}, \code{\link[stats]{glm}},
+\code{\link[survPen]{survPen}} or an object of class \code{"zeroRate"} from
 \code{\link{zeroRate}} based on one of the other classes. The order in
 the list matches the indexing in the \code{trans} argument
 }
@@ -80,14 +86,14 @@ the list matches the indexing in the \code{trans} argument
   is possible in the multi-state model, \code{NA} otherwise. In particular,
   all diagonal elements should be \code{NA}. The
   integers indicating the possible transitions in the multi-state
-  model should be sequentially numbered, 1,...,K, with K the number
-  of transitions. See \code{\link{msprep}}}
+  model should be sequentially numbered, 1,\ldots,K, with K the number
+  of transitions. See \code{\link[mstate]{msprep}}}
   \item{t}{
 numerical vector for the times to evaluation the predictions. Includes
 the start time
 }
   \item{newdata}{
-\code{\link{data-frame}} of the covariates to use in the predictions
+\code{\link{data.frame}} of the covariates to use in the predictions
 }
   \item{init}{
 vector of the initial values with the same length as the number of states. Defaults to the first state having an
@@ -140,6 +146,9 @@ time for each state
   numerical value for the proportional reduction (per unit time) in the length of stay
 and costs
 }
+  \item{block.size}{
+  divide \code{newdata} into blocks. Uses less memory but is slower. Reduce this number if the function call runs out of memory. 
+}
   \item{\dots}{
 other arguments. For \code{markov_msm}, these are passed to the \code{\link{ode}} solver from the
 \code{deSolve} package. For \code{plot.markov_msm}, these arguments are passed to \code{\link{plot.default}}
@@ -171,24 +180,31 @@ occupancy probabilities, length of stay and costs. Default: 1 for each observati
 
 For \code{plot.markov_msm}:
 
-\item{x}{object of class \code{"markov_msm"}}
 \item{y}{(currently ignored)}
-\item{type}{type of plot. Currently only \code{"stacked"}. See
-\code{ggplot.markov_msm} for a richer set of plots}
+\item{stacked}{logical for whether to stack the plots. Default: TRUE}
 \item{xlab}{x-axis label}
 \item{ylab}{x-axis label}
-\item{col}{colours}
-\item{border}{border colours for the \code{\link{polygon}}}
+\item{col}{colours (ignored if \code{ggplot2=TRUE})}
+\item{border}{border colours for the \code{\link{polygon}} (ignored if \code{ggplot=TRUE})}
+\item{ggplot2}{use \code{ggplot2}}
+\item{alpha}{alpha value for confidence bands (ggplot)}
+\item{lattice}{use \code{lattice}}
+\item{strata}{formula for the stratification factors for the plot}
 
 For \code{subset.markov_msm}:
-\item{x}{object of class \code{"markov_msm"}}
 \item{subset}{expression that is evaluated on the \code{newdata}
 component of the object to filter (or restrict) for the covariates used
 for predictions}
 
-For \code{diff.markov_msm}:
-\item{x}{object of class \code{"markov_msm"}}
-\item{y}{object of class \code{"markov_msm"}}
+For \code{transform.markov_msm}:
+\item{_data}{an object of class \code{"markov_msm"}}
+
+For \code{rbind.markov_msm}:
+\item{deparse.level}{not currently used}
+
+For \code{collapse.states}:
+\item{which}{either an index of the states to collapse or a character vector of the state names to collapse}
+\item{sep}{separator to use for the collapsed state names}
 
 For \code{zeroRate}:
 \item{object}{survival regression object to be wrapped to give predict
@@ -246,9 +262,9 @@ different vectors of initial values.
  \item{res}{data returned from the ordinary differential equation
  solver. This may include more information on the predictions}
 }
-\references{
-%% ~put references to the literature/web site here ~
-}
+%% \references{
+%% %% ~put references to the literature/web site here ~
+%% }
 \author{
 Mark Clements
 }
@@ -256,10 +272,10 @@ Mark Clements
 %% }
 
 \seealso{
-\code{\link{pmatrix.fs}}, \code{\link{probtrans}}
+\code{\link[flexsurv]{pmatrix.fs}}, \code{\link[mstate]{probtrans}}
 }
-\examples{
+%% \examples{
 
-}
+%% }
 \keyword{ survival }
 
