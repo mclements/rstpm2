@@ -550,7 +550,7 @@ bindlast <- function(...) { # bind on last slice for a bag of arrays
     dimnames. <- dimnames(x[[1]])
     dims[length(dims)] <- sum(sapply(x,function(xi) dim(xi)[length(dims)]))
     if (!is.null(dimnames.[[length(dims)]]))
-        dimnames.[[length(dims)]] <- unlist(sapply(x,function(xi) dimnames(xi)[length(dims)]))
+        dimnames.[[length(dims)]] <- unlist(lapply(x,function(xi) dimnames(xi)[length(dims)]))
     dim(y) <- dims
     dimnames(y) <- dimnames.
     y
