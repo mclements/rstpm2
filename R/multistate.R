@@ -9,6 +9,7 @@ markov_msm <-
               state.costs=function(t) rep(0,nrow(trans)), # per unit time
               discount.rate = 0,
               block.size=500,
+              debug = FALSE,
               ...)
 {
     call <- match.call()
@@ -168,7 +169,7 @@ markov_msm <-
              coef=coef.names,
              obs=rownames(newdata))
     structure(list(time = t, P=P, Pu=Pu, L=L, Lu=Lu, 
-                   res=res, # for debugging only
+                   res=if (debug) res else NULL, # for debugging only
                    vcov=Sigma, newdata=newdata, trans=trans,
                    call=call),
               class="markov_msm")
@@ -521,7 +522,8 @@ ratio_markov_msm <- function(x, y, ...) {
     dimnames(z$Lu) <- dimnames(x$Lu)
     z <- c(list(time=x$time,
                 vcov=x$vcov,
-                trans=x$trans),
+                trans=x$trans,
+                res=NULL),
            z)
     z$call <- match.call()
     z$newdata <- x$newdata
@@ -569,10 +571,11 @@ rbind.markov_msm <- function(..., deparse.level = 1) {
                  Lu=bind("Lu"),
                  vcov=x[[1]]$vcov,
                  newdata=do.call(rbind,lapply(x,"[[", "newdata")),
-                 trans=x[[1]]$trans)
+                 trans=x[[1]]$trans,
+                 res=NULL)
     newx$call <- match.call()
     ## is this a good idea? It will be lost if done more than once...
-    newx$newdata$.index <- unlist(sapply(1:length(x),
+    newx$newdata$.index <- unlist(lapply(1:length(x),
                                          function(i) rep(i,nrow(x[[i]]$newdata))))
     state.names <- rownames(newx$trans)
     class(newx) <- class(x[[1]])
