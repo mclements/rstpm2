@@ -40,6 +40,7 @@ markov <- msm(x, trans, t = c(0,1), newdata = NULL, init="[<-"(rep(0,nrow(trans)
               state.costs=function(t) rep(0,nrow(trans)), # per unit time
               discount.rate = 0,
               block.size=500,
+              debug=FALSE,
               \dots)
 \method{vcov}{markov_msm}(object, \dots)
 \method{coef}{markov_msm}(object, \dots)
@@ -148,6 +149,9 @@ and costs
 }
   \item{block.size}{
   divide \code{newdata} into blocks. Uses less memory but is slower. Reduce this number if the function call runs out of memory. 
+}
+  \item{debug}{
+  logical flag for whether to keep the full output from the ordinary differential equation in the \code{res} component (default=\code{FALSE}). 
 }
   \item{\dots}{
 other arguments. For \code{markov_msm}, these are passed to the \code{\link{ode}} solver from the
