@@ -73,9 +73,9 @@ markov_msm <-
         c(wind %% nr + 1, wind %/% nr + 1)
     }
     coef.surv_list <- function(objects)
-        sapply(objects,coef)
+        sapply(objects,function(x) coef(x)) # sapply(objects, coef) FAILS
     vcov.surv_list <- function(objects) {
-        vcovs <- lapply(objects, vcov)
+        vcovs <- lapply(objects, function(x) vcov(x))
         lengths <- sapply(vcovs,nrow)
         index <- cumsum(c(0,lengths))
         m <- matrix(0,sum(lengths),sum(lengths))
