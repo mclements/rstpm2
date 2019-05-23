@@ -1,3 +1,4 @@
+% -*- mode: noweb; ess-noweb-default-code-mode: R-mode; -*-
 %\VignetteIndexEntry{Predictions for Markov multi-state models}
 %\VignetteDepends{rstpm2}
 %\VignetteKeyword{survival, spline}
@@ -14,7 +15,9 @@
 \usepackage{tablefootnote}
 \usepackage{algorithm2e}
 
-\title{Predictions for Markov multi-state models}
+\title{Predictions for parametric and penalised multi-state Markov models}
+
+% Transforming parametric and penalized hazard estimates
 
 \author{Mark~Clements\\Karolinska Institutet}
 
@@ -25,13 +28,14 @@
 \Abstract{
   
   We describe an efficient algorithm and implementation for
-  predictions for Markov multi-state models, including state occupancy
-  probabilities, length of stay and costs. The algorithm uses a system
-  of ordinary differential equations to calculate the predictions and
-  their gradients, with standard errors calculated using the delta
-  method. The implementation is 50 times faster than the MULTISTATE
-  package in Stata. These methods have applications to a range of
-  disciplines, including descriptive epidemiology, causal inference and economics.
+  predictions for parametic and penalized Markov multi-state
+  models. Predictions include state occupancy probabilities,
+  transition probabilities, prevalence, length of stay, relative
+  survival, screening sensitivity, and costs. The algorithm uses a system of ordinary differential
+  equations to calculate the predictions and their gradients, with
+  standard errors calculated using the delta method. These methods
+  have applications to a range of disciplines, including descriptive
+  epidemiology, causal inference and economics.
   
 }
 
@@ -49,128 +53,224 @@
 
 \section{Introduction}
 
-\emph{Multi-state models} form a very broad class of models that includes standard survival models with an initial and final state, competing risks with multiple final states, and illness-death models, with an initial healthy state, an illness state and a death state. This model class is useful for representing movement through a discrete set of states. As examples, we may be interested in representing cancer screening, diagnosis and treatment pathways. 
+% Model fitting is challenging for interval-censored, where the likelihood requires integration of the hazards.
 
-This short note describes an efficient algorithm for calculating a range of parameters from a multi-state model. The focus here is on \emph{non-homogeneous Markov} multi-state models, with one time scale (e.g. calendar period or attained age) without any time resetting. The implementation also assumes that the transition intensities for moving from one state to another state are \emph{continuous}. Importantly, the restriction to Markov models is not a heavy constraint: \cite{Datta_Satten_2001} have shown that the state occupancy probabilities are consistently estimated under moderate conditions even when the time scale is mis-specified. Length of stay and costs, which are integrated functions of the stage occupancy probabilities, are also expected to be consistent under similar conditions.
+\emph{Multi-state models} form a very broad class of models that includes standard survival models with an initial and final state, competing risks with multiple final states, and illness-death models, with an initial healthy state, an illness state and a death state. This model class is useful for representing movement through a discrete set of states. As a motivating example, we are interested in the clinical pathways for cancer screening, diagnosis and treatment, taking account of utilities and costs. Using observational data, screening or treatment assignment may be confounded with patient characteristics, so we are also interested in using standardisation or the parametric g-formula to adjust for differences between groups.
+% Should we use the negative biopsies as an example?
 
-In outline, we provide a theoretical development of a set of ordinary differential equations, outline an algorithm, describe the implementation and provide some simple examples.
+Predictions from multi-state models could include: transition hazards between states; transition probabilities for being in a particular state conditional on an initial state; state occupation probabilities for being in a particular state given an observed distribution of initial states; length of stay in a given state; contrasts of these predictions; and ratios of these predictions \citep{Touraine_Helmer_Joly_2016,Crowther_Lambert_2017}.
+
+Much of the literature on multi-state models has focused on counting processes  \citep[e.g.][]{Andersen_Borgan_Gill_Keiding_1993,Andersen_Keiding_2002,Putter_Fiocco_Geskus_2007}. For implementations, \cite{Allignol_Schumacher_Beyersmann_2011} use the Aalen-Johansen estimator to estimate transition probabilities, and \cite{deWreede_Fiocco_Putter_2011} predict transition probabilities and their standard errors for transitions modelled using Cox regression. These implementations can also estimate length of stay and contrasts, however variance estimates would then require the non-parametric bootstrap. \cite{Ryalen_Stensrud_Roysland_2018} use stochastic differential equations to transform non-parametric cumulative hazard estimates into a variety of predictions. This approach is shown to work for Aalen's additive hazard model, but it is unclear whether the approach extend to Cox regression models. Their methods are a non-parametric analogue to our development.
+
+Parametric and penalised survival models have potential advantages for multi-state models, including the ready incorporation of time-varying effects and for predictions outside of observed data \citep{Touraine_Helmer_Joly_2016,Crowther_Lambert_2017}. 
+\cite{Iacobelli_Carstensen_2013} simulate from Poisson regression models on different time scales to predict for multi-state models. \cite{Blaser_Vizcaya_Estill_Zahnd_Kalesan_Egger_Gsponer_Keiser_2015} provide a simulation framework for multi-state models with random times based on piece-wise constant hazards. \cite{Crowther_Lambert_2017} combine parametric time-to-event models to predict transition probabilities and length of stay. The authors use simulations for semi-Markov models and either simulations or the Aalen-Johansen estimator for Markov models, with variance estimation using the parametric bootstrap. None of these approaches scales well to allow for standardisation across moderate sized datasets.
+% heemod - discrete time Markov models
+% hesim
+
+Recently, it has been recognised that smooth survival models can be used with ordinary differential equations to predict from multi-state models: \cite{Titman_2011} showed that gradients for transition probabilities can be estimated by augmenting the system of differential equations; and \cite{Jackson_2016} predicted length of stay using differential equations. 
+
+We have two objectives: first, to develop efficient methods for predictions for \emph{smooth, non-homogeneous multi-state Markov models} with variance estimation using the \emph{multivariate delta method}; and, second, to demonstrate that these methods support the use of multi-state models across descriptive statistics, causal inference, and economics.
+Importantly, our restriction to Markov models is not a severe constraint: \cite{Datta_Satten_2001} have shown that the state occupation probabilities are consistently estimated under moderate conditions even when the time scale is mis-specified. Length of stay and costs, which are integrated functions of the state occupation probabilities, are also expected to be consistent under similar conditions.
+
+In outline, we provide a theoretical development of a set of ordinary differential equations, simulate to assess the small sample properties, provide some examples and conclude with a brief discussion.
 
 \section{Methods}
 
-Let the set of states be indexed by $i$ and $j$. We define the row vector of state occupancy probabilities $\boldsymbol{P}(t_0,t)=(P_{0j}(t_0,t))$ as the probabilities of being in state $j$ at time $t$ given being in an initial state $0$ at entry time $t_0$. For smooth hazards, the Markov property is expressed through Kolmogorov's forward differential equation, such that 
+% Structure?
+
+\subsection*{Assumptions}
+
+For the predictions, the main inputs are (i) a multi-state model specification, (ii) the models for the transition intensities, and (iii) and the initial values for the states. We assume that the transition intensities are estimated using maximum (penalised) likelihood estimation, with stacked estimated parameters $\hat{\boldsymbol{\beta}}$ and stacked estimated variance-covariance matrix $\hat{\boldsymbol\Sigma}$. The estimated parameters could be from either model fit for all transitions, one model for each transition or a combination of models for different transitions.
+
+We assume suitable regularity conditions for the maximum likelihood estimators $\hat{\boldsymbol{\beta}}$ to ensure consistency and asymptotic normality. The regularity conditions follow from the smoothness and boundedness of the parametric or penalised functions. We can then estimate the asymptotic variance using the multivariate delta method. We will assess the asymptotic properties using simulations.
+
+\subsection*{Notation}
+
+For vectors $\boldsymbol{v}, \boldsymbol{v}_1$ and $\boldsymbol{v}_2$ and matrices $\boldsymbol{M}, \boldsymbol{M}_1$ and $\boldsymbol{M}_2$, let $\boldsymbol{v}_1\circ\boldsymbol{v}_2$ and $\boldsymbol{M}_1\circ\boldsymbol{M}_2$ be the Hadamard element-wise products, let $\boldsymbol{M}\circ\boldsymbol{v}$ be the column-wise product $(M_{ij}v_i)$ and let $\boldsymbol{v}\circ\boldsymbol{M}$ be the row-wise product $(M_{ij}v_j)$. Similarly, let $\boldsymbol{v}_1\oslash\boldsymbol{v}_2$ and $\boldsymbol{M}_1\oslash\boldsymbol{M}_2$ be Hadamard element-wise division, and let $\boldsymbol{M}\oslash\boldsymbol{v}$ be the element-wise division $(M_{ij}/v_i)$. We assume that $\circ$  and $\oslash$ have higher operator precedence than addition and subtraction. For a square matrix $\boldsymbol{M}$, let $\text{diag}(\boldsymbol{M})=(M_{ii})$, which is a vector of the matrix diagonal, and let $\text{diag}(\boldsymbol{v})$ represent a square matrix with zeros in the off-diagonal and $\boldsymbol{v}$ on the diagonal. 
+
+We define the gradient for a prediction $\boldsymbol\phi(t_0,t)$ with respect to an estimated model parameter $\hat\beta_m$  by $\boldsymbol\phi'_m(t_0,t)\equiv\left.\frac{\displaystyle\partial\boldsymbol\phi(t_0,t)}{\displaystyle\partial\beta_m}\right|_{\beta_m=\hat\beta_m}$.
+
+\subsection*{General approach applied to state occupancy probabilities}
+
+Let the set of states be indexed by $i$ and $j$. We define the matrix of transition probabilities $\boldsymbol{P}(t_0,t)=(P_{ij}(t_0,t))$ as the probabilities of being in state $j$ at time $t$ given being in an initial state $i$ at entry time $t_0$. For smooth hazards, the Markov property is expressed through Kolmogorov's forward differential equation, such that 
 \begin{align}
-  \frac{d\boldsymbol{P}(t_0,t)}{dt} &= \boldsymbol{P}(t_0,t) \boldsymbol{Q}(t) \label{eq:kolmogorov}
+  \frac{d\boldsymbol{P}(t_0,t)}{dt} &= \boldsymbol{P}(t_0,t) \boldsymbol{Q}(t) \label{eq:kolmogorov} \\
+  \boldsymbol{P}(t_0,t_0) &= \boldsymbol{I} \label{eq:Pinit}
 \end{align}
 where $\boldsymbol{Q}(t)=(Q_{ij}(t))$ is a matrix of transition intensities at time $t$\footnote{Technically, this is $t-$.} from state $i$ to state $j$ when $i\neq j$ (conceptualised as the rates from state $i$ to state $j$), and where $Q_{ii}(t)=-\sum_{j\neq i}Q_{ij}(t)$ (conceptualised as the rates out of state $i$). % The Markov property is based on a single clock $t$ (e.g. age of a subject or calendar time), whereas semi-Markov models are based on a reset clock (e.g. time in state for each new state).
+Let the vector $\boldsymbol{\pi}(t_0,t_0)=(\pi_j(t_0,t_0))$ represent the initial \emph{state occupation probabilities} of being in state $j$ at time $t_0$. The state occupation probabilities of being in state $j$ at time $t>t_0$ can be calculated by $\boldsymbol{\pi}(t_0,t)^T=(\pi_j(t=,t))=\boldsymbol{\pi}(t_0,t_0)^T\boldsymbol{P}(t_0,t)$.
 
-This system of ordinary differential equations in Equation~\ref{eq:kolmogorov} can be augmented to calculate the integral $L_{0j}(t_0,t)=\int_{t_0}^t P_{0j}(t_0,v)u_j(u)e^{-\lambda t}dv$, where 0 is again the index for the initial state, $u_j(v)$ is the utility for state $j$ at time $v$ and $\lambda=\log(1+\delta)$ is the rate of decline for a discount rate $\delta$. The augmented differential equations are then
+% (toggle-debug-on-quit)
+
+Following \cite{Titman_2011}, Kolmogorov's forward differential equation can be augmented to calculate the gradient for $\boldsymbol{P}(t_0,t)$ with respect to the model coefficients. Titman showed that
 \begin{align}
-\frac{d\boldsymbol{L}(t_0,t)}{dt} &= \left(\boldsymbol{P}(t_0,t)\circ\boldsymbol{u}(t)\right)e^{-\lambda t} \label{eq:los}
+  \frac{d\boldsymbol{P}'_m(t_0,t)}{dt} &=\boldsymbol{P}'_m(t_0,t)\boldsymbol{Q}(t) + \boldsymbol{P}(t_0,t)\boldsymbol{Q}'_m(t) \label{eq:dPudt} \\
+\boldsymbol{P}'_m(t_0,t_0) &= \boldsymbol{0} \label{eq:Puinit}  
 \end{align}
-where $\boldsymbol{P}(t_0,t)\circ\boldsymbol{u}(t)$ is the Hadamard (element-wise) product between row vector $\boldsymbol{P}(t_0,t)$ and row vector $\boldsymbol{u}(t)$.
-In health economics, the sum across the states gives the discounted, quality-adjusted life-years $\text{QALY}(t_0,t)=\boldsymbol{L}(t_0,t)\boldsymbol{1}$. If $u_j(v)=1$ and $\lambda=0$ then $L_{0j}(t_0,t)$ is the the \emph{length of stay} or sojourn time for state $j$; see \cite{Jackson_2016} for an implementation to predict the length of stay using ordinary differential equations. We can also augment the system to model for costs per unit time for being in state $i$ at time $t$, represented by the row vector function $\boldsymbol{c}(t)=(c_{i}(t))$ and model for costs for transitions from state $i$ to state $j$ at time $t$, represented by the matrix $\boldsymbol{\mathcal{C}}(t)=(\mathcal{C}_{i,j}(t))$. Then the cumulative costs $\boldsymbol{C}(t_0,t)$ can be represented by the equations
-\begin{align}
-\frac{d\boldsymbol{C}(t_0,t)}{dt} &= \left(\left(\boldsymbol{P}(t_0,t)\circ\boldsymbol{c}(t)\right)+
-                                    \boldsymbol{P}(t_0,t)(\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}(t))\right)e^{-\lambda t} \label{eq:costs}
-\end{align}
-where $\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}(t)$ is the Hadamard product between matrix $\boldsymbol{Q}(t)$ and matrix $\boldsymbol{\mathcal{C}}(t)$. The total costs are summed across the health states, such that $\text{Costs}(t_0,t)=\boldsymbol{C}(t_0,t)\boldsymbol{1}$.
-
-The initial values for Equations~(\ref{eq:kolmogorov})--(\ref{eq:costs}) are     $\boldsymbol{P}(t_0,t_0)=\boldsymbol{I}$ and $\boldsymbol{L}(t_0,t_0)=\boldsymbol{C}(t_0,t_0)=\boldsymbol{0}$.
-
-
-\subsection{ODE augmentation to calculate gradients}
-
-Following \cite{Titman_2011}, this system of equations can be further augmented to calculate the gradient for $\boldsymbol{P}(t_0,t)$ with respect to model coefficients $\boldsymbol\beta=(\beta_m)$; for $\beta_m$, we represent this value by $\boldsymbol{P}'_m(t_0,t)$. Titman showed that
-\begin{align}
-  \frac{d\boldsymbol{P}'_m(t_0,t)}{dt} &=\boldsymbol{P}'_m(t_0,t)\boldsymbol{Q}(t) + \boldsymbol{P}(t_0,t)\boldsymbol{Q}'_m(t) \label{eq:dPudt}
-\end{align}
-Note that this requires the evaluation of the gradients for the transition intensities. As extensions, we can also calculate the gradient for $\boldsymbol{L}(t_0,t)$ with respect to $\beta_m$, such that
-\begin{align}
-  \frac{d\boldsymbol{L}'_m(t_0,t)}{dt} &= \left(\left(\boldsymbol{P}'_m(t_0,t)\circ\boldsymbol{u}(t)\right)+\left(\boldsymbol{P}(t_0,t)\circ\boldsymbol{u}'_m(t)\right)\right)e^{-\lambda t} \label{eq:dLudt}
-\end{align}
-and the gradients for the cumulative costs, such that
-\begin{align}
-  \frac{d\boldsymbol{C}'_m(t_0,t)}{dt} &= \Big(\left(\boldsymbol{P}'_m(t_0,t)\circ\boldsymbol{c}(t)\right)+ \left(\boldsymbol{P}(t_0,t)\circ\boldsymbol{c}'_m(t)\right)+\nonumber\\
-                                         &\qquad \boldsymbol{P}'_m(t_0,t)\left(\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}(t)\right)+\nonumber\\
-                                         &\qquad \boldsymbol{P}(t_0,t)\left(\boldsymbol{Q}'_m(t)\circ \boldsymbol{\mathcal{C}}(t)\right)+\nonumber\\
-                                         &\qquad\boldsymbol{P}(t_0,t)\left(\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}'_m(t)\right)
-                                         \Big)e^{-\lambda t} \label{eq:dCudt}
-\end{align}
-Note that Equations~(\ref{eq:dLudt}) and (\ref{eq:dCudt}) may require the evaluation of the gradients for the utility and cost functions, respectively. These equations simplify when the utilities $\boldsymbol{u}(t)$ and cost functions $\boldsymbol{c}(t)$ and $\boldsymbol{\mathcal{C}}(t)$ are fixed and have zero gradients.
-
-The initial values for Equations~(\ref{eq:dPudt})--(\ref{eq:dCudt}) are
-$\boldsymbol{P}'_m(t_0,t_0)=\boldsymbol{L}'_m(t_0,t_0)=\boldsymbol{C}'_m(t_0,t_0)=\boldsymbol{0}$.
-
-
-\subsection{Algorithm}
-
-The algorithm is defined by the following:
+Note that this requires the evaluation of the gradients for the transition intensities with respect to $\hat\beta_m$. \emph{Algorithm 1} is defined as:
 
 \begin{algorithm}[H]
   \SetKwInOut{Input}{input}\SetKwInOut{Output}{output}
-  \Input{$\boldsymbol{P}(t_0,t_0),\boldsymbol{Q}(t), \boldsymbol{u}(t), \boldsymbol{c}(t), \boldsymbol{\mathcal{C}}(t), \left\{\boldsymbol{Q}'_m(t),\boldsymbol{u}'_m(t),\boldsymbol{c}'_m(t), \boldsymbol{\mathcal{C}}'_m(t)\right\}\forall m, \lambda, t_0, t_\text{max}$} \Output{$\boldsymbol{P}(t_0,t),\boldsymbol{L}(t_0,t),\boldsymbol{C}(t_0,t),\left\{\boldsymbol{P}'_m(t_0,t),\boldsymbol{L}'_m(t_0,t),\boldsymbol{C}'_m(t_0,t)\right\}\forall m\ \text{for}\ t\in\left[t_0,t_\text{max}\right)$}
+  \Input{$\boldsymbol{P}(t_0,t_0),\boldsymbol{Q}(t), \left\{\boldsymbol{Q}'_m(t)\right\}\forall m, t_0, t_\text{max}$} \Output{$\boldsymbol{P}(t_0,t),\left\{\boldsymbol{P}'_m(t_0,t)\right\}\forall m\ \text{for}\ t\in\left[t_0,t_\text{max}\right)$}
   \Begin{
-
-  $\boldsymbol{P}'_m(t_0,t_0)=\boldsymbol{L}'_m(t_0,t_0)=\boldsymbol{C}'_m(t_0,t_0)=\boldsymbol{0}$\;
-  define the ODE based on Equations~(\ref{eq:kolmogorov})--(\ref{eq:dCudt}) and the initial values\;
+  define the ODE based on Equations~(\ref{eq:kolmogorov})--(\ref{eq:Puinit})\;
   run an ODE solver from time $t_0$ to time $t_\text{max}$\;
   }
 \end{algorithm}
 
 This algorithm could be done separately for each covariate pattern or the ODEs can be extended to multiple covariates by stacking the equations.
-
-\subsection{Variance estimation and other predictions}
-
-For the following, let $\boldsymbol\phi(t_0,t)$ represent one of $\boldsymbol{P}(t_0,t)$, $\boldsymbol{L}(t_0,t)$ or $\boldsymbol{C}(t_0,t)$, let $\boldsymbol\phi'_m(t_0,t)$ represent the derivative with respect to $\beta_m$, and let the covariance matrix for the estimated $\boldsymbol\beta$ be $\boldsymbol\Sigma$. Then, using the \emph{delta method}, the estimated covariance matrix for $\boldsymbol\phi(t_0,t)$ is
+Using the multivariate delta method, the estimated covariance matrix for $\boldsymbol{P}(t_0,t)$ is
 \begin{align*}
-\text{var}(\boldsymbol\phi(t_0,t)) &= \boldsymbol{\phi}'_m(t_0,t)^T\, \boldsymbol\Sigma\, \boldsymbol{\phi}'_m(t_0,t)
+\text{var}(\boldsymbol{P}(t_0,t)) &= \boldsymbol{P}'_m(t_0,t)^T\, \hat{\boldsymbol\Sigma}\, \boldsymbol{P}'_m(t_0,t)
 \end{align*}
 
-We can standardise the estimators using weighted sums with weights $w_k$ and covariates $\boldsymbol{x}_k$ for $k=1,\ldots,K$, such that
+This general approach can be applied to a variety of predictions. The other predictions may require that a set of differential equations be defined for several related predictions, including their gradients, in combination with the delta method for variance estimation.
+
+\subsection*{Example 1: Length of stay}
+
+The ordinary differential equations in Equations~(\ref{eq:kolmogorov})--(\ref{eq:Puinit}) can be further augmented to calculate the integral $L_{ij}(t_0,t)=\int_{t_0}^t P_{ij}(t_0,v)dv$. The additional differential equations are then
+\begin{align}
+  \frac{d\boldsymbol{L}(t_0,t)}{dt} &= \boldsymbol{P}(t_0,t) \label{eq:los} \\
+  \frac{d\boldsymbol{L}'_m(t_0,t)}{dt} &= \boldsymbol{P}'_m(t_0,t) \label{eq:dLudt} \\
+  \boldsymbol{L}(t_0,t_0) &= \boldsymbol{L}'_m(t_0,t_0) = \boldsymbol{0} \label{eq:Linit}
+\end{align}
+where the matrix $\boldsymbol{L}(t_0,t)$ is the the \emph{length of stay} or sojourn time for state $j$ given an initial state $i$ at time $t_0$. For an irreversible two-state system, the length of stay for the initial state would estimate the restricted mean survival time (or, for $t\rightarrow\infty$, life expectancy). Algorithm 1 would be augmented to include Equations~(\ref{eq:los})--(\ref{eq:Linit}) to calculate transition and state occupation probabilities and the lengths of stay.
+
+\subsection*{Example 2: Prevalence}
+
+Let the prevalence for the live states be defined by 
+\begin{align*}
+  \tilde{\boldsymbol\pi}(t_0,t) &= \left(\boldsymbol{P}(t_0,t)\text{diag}(\boldsymbol{w})\right)\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right)
+\end{align*}
+for a weight vector $\boldsymbol{w}=(w_j)$, where $w_j=1$ for the live states, otherwise $w_j=0$. Generalising a result for illness-death models by \cite{Brinks_Hoyer_2018} to multi-state models, we have that
+\begin{align*}
+  \frac{d\tilde{\boldsymbol\pi}(t_0,t)}{dt} &= \left(\frac{d\boldsymbol{P}(t_0,t)}{dt}\text{diag}(\boldsymbol{w})\circ\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right) - \left(\boldsymbol{P}(t_0,t)\text{diag}(\boldsymbol{w})\right)\circ\frac{d\boldsymbol{P}(t_0,t)}{dt}\boldsymbol{w}\right)\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right)\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right) \\
+&=\left(\left(\boldsymbol{P}(t_0,t)\boldsymbol{Q}(t)\text{diag}(\boldsymbol{w})\right)\circ\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right) - \left(\boldsymbol{P}(t_0,t)\text{diag}(\boldsymbol{w})\right)\circ\left(\boldsymbol{P}(t_0,t)\boldsymbol{Q}(t)\boldsymbol{w}\right)\right)\\ &\quad\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right)\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right) 
+\end{align*}
+with an initial value that $\tilde{\boldsymbol\pi}(t_0,t_0)=\text{diag}(\boldsymbol{w})$. 
+
+% Note that the notation would be simplified if we restricted the rows and columns of $\boldsymbol{P}(t_0,t)$ to the live states and let $\boldsymbol{w}=\boldsymbol{1}$, so that $\tilde{\boldsymbol\pi}(t_0,t)=\boldsymbol{P}(t_0,t)\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{1}\right)$.
+
+\subsection*{Example 3: Standardisation and differences}
+
+Linearity combinations of these estimators are straightforward to calculate, as the gradients are then also linear. Let $\boldsymbol\phi(t_0,t|\boldsymbol{x}_k)$ represent an estimator, such as transition probabilities, state occupation probabilities or length of stay, conditional on covariate vector $\boldsymbol{x}_k$. We can standardise the estimator for covariates  $\boldsymbol{x}_k$  and weights $w_k$ for $k=1,\ldots,K$, such that
 \begin{align*}
   \bar{\boldsymbol{\phi}}(t_0,t) &= \sum_{k=1}^K w_k \boldsymbol{\phi}(t_0,t|\boldsymbol{x}_k)\\
-  \bar{\boldsymbol{\phi}}'_m(t_0,t) &= \sum_{k=1}^K w_k \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_k) % \\
-%  \text{var}(\bar{\boldsymbol{\phi}}(t_0,t)) &= \bar{\boldsymbol{\phi}}'_m(t_0,t)^T\, \boldsymbol\Sigma\, \bar{\boldsymbol{\phi}}'_m(t_0,t)
+  \bar{\boldsymbol{\phi}}'_m(t_0,t) &= \sum_{k=1}^K w_k \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_k) 
 \end{align*}
 
-Similarly, we have that the partial derivatives with respect to the regression parameters for QALYs and total costs are
+The standardisation can be defined in terms of counterfactual exposures, where the estimates are standardised for a population had everyone been exposed and then compared with a population had no-one been exposed. These marginal estimators can be interpreted as applications of the parametric g-formula which has been popularised in causal inference. 
+
+% Do notation
+
+For simple differences, we can define $K=2$, $w_1=1$ and $w_2=-1$.
+
+\subsection*{Example 4: Ratios}
+
+% We can also consider differences and ratios. Let $\boldsymbol\phi(t_0,t|\boldsymbol{x})$ represent one of the estimators from the previous sections.
+% The gradient for the difference $\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)-\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)$ is
+% \begin{align*}
+% \left.\frac{\partial}{\partial \beta_m} \left(\boldsymbol\phi(t_0,t|\boldsymbol{x}_1) - \boldsymbol\phi(t_0,t|\boldsymbol{x}_2)\right)\right|_{\beta_m=\hat\beta_m} &= \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_1) - \boldsymbol\phi'_m(t_0,t|\boldsymbol{x}_2)
+% \end{align*}
+% Again, the linearity of the gradients leads to straightforward calculations.
+
+The gradient for $\log(\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_2))$ (that is, the log ratio), is
 \begin{align*}
- \text{QALY}'_m(t_0,t) &\equiv \frac{\partial}{\partial \beta_m} \text{QALY}(t_0,t) = \boldsymbol{L}'_m(t_0,t)\boldsymbol{1} \\
-   \text{Costs}'_m(t_0,t) &\equiv \frac{\partial}{\partial \beta_m} \text{Costs}(t_0,t)
-  = \boldsymbol{C}'_m(t_0,t)\boldsymbol{1}
+\left.\frac{\partial}{\partial \beta_m} \log\left(\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)\right)\right|_{\beta_m=\hat\beta_m} &= \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)
+- \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_2)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)
+\end{align*}
+This evaluation depends on $\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)$ being non-zero.
+Alternatively, we can augment the system of differential equations to calculate the ratios for specific estimators \citep{Ryalen_Stensrud_Roysland_2018}. Let a matrix of ratios of state occupation probabilities be $\text{\bf R}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2)=\boldsymbol{\pi}(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol{\pi}(t_0,t|\boldsymbol{x}_2)$. Then 
+\begin{align*}
+  \frac{d\text{\bf R}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2)}{dt}^T &= \left(\left(\boldsymbol{\pi}(t_0,t|\boldsymbol{x}_1)^T\boldsymbol{P}(t_0,t|\boldsymbol{x}_1)\boldsymbol{Q}(t|\boldsymbol{x}_1)\right) - \left(\boldsymbol{\pi}(t_0,t|\boldsymbol{x}_2)^T\boldsymbol{P}(t_0,t|\boldsymbol{x}_2)\boldsymbol{Q}(t|\boldsymbol{x}_2)\right) \circ \text{\bf R}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2)\right) \\
+  &\quad\oslash\boldsymbol{P}(t_0,t|\boldsymbol{x}_2) \\
+  \text{\bf R}(t_0,t_0) &= \boldsymbol{1}
+\end{align*}
+where $\boldsymbol{P}(t_0,t|\boldsymbol{x}_2)>0$. This approach generalises the concept of relative survival. 
+
+% Similarly, we can model for ratios of lengths of stay. Let a vector of ratios of the length of stay be $\text{\bf RL}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2)=\boldsymbol{L}(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol{L}(t_0,t|\boldsymbol{x}_2)$. Then 
+% \begin{align*}
+%   \frac{d\text{\bf RL}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2)}{dt} &= \left(\boldsymbol{P}(t_0,t|\boldsymbol{x}_1) - \boldsymbol{P}(t_0,t|\boldsymbol{x}_2) \circ \text{\bf RL}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2)\right) \oslash \boldsymbol{L}(t_0,t|\boldsymbol{x}_2) \\
+%   \text{\bf RL}(t_0,t_0|\boldsymbol{x}_1,\boldsymbol{x}_2) &= \boldsymbol{I}
+% \end{align*}
+
+% Open question: how does this compare with log(ratio)?
+
+
+% Representation of different interventions - how?
+
+\subsection*{Example 5: Utilities and costs}
+
+The approach readily incorporates utilities and costs. For utilities, we have the cumulative discounted utilities $U_{ij}(t_0,t)=\int_{t_0}^t P_{ij}(t_0,v)u_j(u)e^{-\lambda t}dv$, where $u_j(v)$ is the utility for state $j$ at time $v$ and $\lambda=\log(1+\delta)$ is the rate of decline for a discount rate $\delta$. The augmented differential equations are then
+\begin{align}
+\frac{d\boldsymbol{U}(t_0,t)}{dt} &= \left(\boldsymbol{P}(t_0,t)\circ\boldsymbol{u}(t)\right)e^{-\lambda t} \label{eq:utilities} \\
+  \frac{d\boldsymbol{U}'_m(t_0,t)}{dt} &= \left(\boldsymbol{P}'_m(t_0,t)\circ\boldsymbol{u}(t)+\boldsymbol{P}(t_0,t)\circ\boldsymbol{u}'_m(t)\right)e^{-\lambda t} \label{eq:dUudt} \\
+\boldsymbol{U}(t_0,t) &= \boldsymbol{U}'_m(t_0,t) = \boldsymbol{0}
+\end{align}
+In health economics, the sum across the states gives the discounted, quality-adjusted life-years $\text{QALY}(t_0,t)=\boldsymbol{\pi}(t_0,t)^T\boldsymbol{L}(t_0,t)\boldsymbol{1}$. 
+
+Costs may be represented as accumulated costs or costs at a point in time. Let costs per unit time for being in state $i$ at time $t$ be represented by the vector function $\boldsymbol{c}(t)=(c_{i}(t))$ and model for point costs for transitions from state $i$ to state $j$ at time $t$, represented by the matrix $\boldsymbol{\mathcal{C}}(t)=(\mathcal{C}_{ij}(t))$. Then the cumulative discounted costs $\boldsymbol{C}(t_0,t)$ can be represented by the equations
+\begin{align*}
+\frac{d\boldsymbol{C}(t_0,t)}{dt} &= \left(\boldsymbol{P}(t_0,t)\circ\boldsymbol{c}(t)+
+                                    \boldsymbol{P}(t_0,t)(\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}(t))\right)e^{-\lambda t} \\
+    \frac{d\boldsymbol{C}'_m(t_0,t)}{dt} &= \Big(\boldsymbol{P}'_m(t_0,t)\circ\boldsymbol{c}(t)+ \boldsymbol{P}(t_0,t)\circ\boldsymbol{c}'_m(t)+\\
+                                         &\qquad \boldsymbol{P}'_m(t_0,t)\left(\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}(t)\right)+\\
+                                         &\qquad \boldsymbol{P}(t_0,t)\left(\boldsymbol{Q}'_m(t)\circ \boldsymbol{\mathcal{C}}(t)\right)+\nonumber\\
+                                         &\qquad\boldsymbol{P}(t_0,t)\left(\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}'_m(t)\right)
+                                         \Big)e^{-\lambda t}  \\
+  \boldsymbol{C}(t_0,t) &= \boldsymbol{C}'_m(t_0,t) = \boldsymbol{0}
+\end{align*}
+
+Note that these may require the evaluation of the gradients for the utility and cost functions, respectively. These equations simplify when the utilities $\boldsymbol{u}(t)$ and cost functions $\boldsymbol{c}(t)$ and $\boldsymbol{\mathcal{C}}(t)$ are fixed and have zero gradients.
+The total costs are summed across the health states, such that
+$\text{Costs}(t_0,t)=\boldsymbol{\pi}(t_0,t)^T\boldsymbol{C}(t_0,t)\boldsymbol{1}$. The partial
+derivatives with respect to the regression parameters for QALYs and
+total costs are
+\begin{align*}
+ \text{QALY}'_m(t_0,t) &= \boldsymbol{\pi}(t_0,t)^T\boldsymbol{L}'_m(t_0,t)\boldsymbol{1} + \boldsymbol{\pi}'_m(t_0,t)^T\boldsymbol{L}(t_0,t)\boldsymbol{1} \\
+   \text{Costs}'_m(t_0,t) & = \boldsymbol{\pi}(t_0,t)^T\boldsymbol{C}'_m(t_0,t)\boldsymbol{1} +
+                            \boldsymbol{\pi}'_m(t_0,t)^T\boldsymbol{C}(t_0,t)\boldsymbol{1}
 \end{align*} 
-
-We can also consider differences and ratios. The gradient for the difference is
+where $\boldsymbol{\pi}'_m(t_0,t)^T=\boldsymbol{\pi}(t_0,t_0)^T\boldsymbol{P}'_m(t_0,t)^T$.
+We can also consider incremental cost-effectiveness ratios, estimated by 
 \begin{align*}
-\frac{\partial}{\partial \beta_m} \left(\boldsymbol\phi(t_0,t|\boldsymbol{x}_1) - \boldsymbol\phi(t_0,t|\boldsymbol{x}_2)\right) &= \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_1) - \boldsymbol\phi'_m(t_0,t|\boldsymbol{x}_2)
-\end{align*}
-The gradient for the log of the ratio is 
-\begin{align*}
-\frac{\partial}{\partial \beta_m} \log\left(\frac{\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)}{\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)}\right) &= \frac{\boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_1)}{\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)}
-- \frac{\boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_2)}{\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)}
-\end{align*}
-where the division $\left(\frac{\boldsymbol{\phi}'_m}{\boldsymbol{\phi}}\right)_j=\phi'_{m,j}/\phi_j$, which is element-wise division. We can also consider incremental cost-effectiveness ratios, estimated by 
-\begin{align*}
-\text{ICER}(t_0,t,\boldsymbol{x}_1,\boldsymbol{x}_2) &= \frac{\text{Costs}(t_0,t|\boldsymbol{x}_1)-\text{Costs}(t_0,t|\boldsymbol{x}_2)}{\text{QALY}(t_0,t|\boldsymbol{x}_1)-\text{QALY}(t_0,t|\boldsymbol{x}_2)}
+\text{ICER}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2) &= \frac{\text{Costs}(t_0,t|\boldsymbol{x}_1)-\text{Costs}(t_0,t|\boldsymbol{x}_2)}{\text{QALY}(t_0,t|\boldsymbol{x}_1)-\text{QALY}(t_0,t|\boldsymbol{x}_2)}
 \end{align*}
 The gradient of the log of the ICER is 
 \begin{align*}
-\frac{\partial}{\partial\beta_m}\log(\text{ICER}(t_0,t,\boldsymbol{x}_1,\boldsymbol{x}_2)) 
+\left.\frac{\partial}{\partial\beta_m}\log(\text{ICER}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2))\right|_{\beta_m=\hat\beta_m}
   &= \frac{\text{Costs}'_m(t_0,t|\boldsymbol{x}_1)-\text{Costs}'_m(t_0,t|\boldsymbol{x}_2)}{\text{Costs}(t_0,t|\boldsymbol{x}_2)-\text{Costs}(t_0,t|\boldsymbol{x}_1)} - \\
-&\qquad \frac{\text{QALY}'_m(t_0,t|\boldsymbol{x}_1)-\text{QALY}'_m(t_0,t|\boldsymbol{x}_2)}{\text{QALY}(t_0,t|\boldsymbol{x}_1)-\text{QALY}(t_0,t|\boldsymbol{x}_2)} \\
-  &= \frac{\left(\boldsymbol{C}'_m(t_0,t|\boldsymbol{x}_1) - \boldsymbol{C}'_m(t_0,t|\boldsymbol{x}_2)\right)\boldsymbol{1}}{\left(\boldsymbol{C}(t_0,t|\boldsymbol{x}_1) - \boldsymbol{C}(t_0,t|\boldsymbol{x}_2)\right)\boldsymbol{1}} - 
-    \frac{\left(\boldsymbol{L}'_m(t_0,t|\boldsymbol{x}_1) - \boldsymbol{L}'_m(t_0,t|\boldsymbol{x}_2)\right)\boldsymbol{1}}{\left(\boldsymbol{L}(t_0,t|\boldsymbol{x}_1) - \boldsymbol{L}(t_0,t|\boldsymbol{x}_2)\right)\boldsymbol{1}}
+&\qquad \frac{\text{QALY}'_m(t_0,t|\boldsymbol{x}_1)-\text{QALY}'_m(t_0,t|\boldsymbol{x}_2)}{\text{QALY}(t_0,t|\boldsymbol{x}_1)-\text{QALY}(t_0,t|\boldsymbol{x}_2)}
 \end{align*}
-Given the gradients and $\boldsymbol\Sigma$, the covariance matrices
-for $\bar{\boldsymbol{\phi}}(t_0,t)$, QALYs, total tosts,
-differences, ratios and ICERs can be calculated using the delta
-method. Confidence intervals can be calculated using the delta method
-and assuming asymptotic normality. For estimators that are bounded
-between 0 and 1, one can use a $\log(-\log(\cdot))$ transformation,
-while estimators bounded between 0 and $\infty$ can use a log
-transformation.
 
-% Representation of different interventions - how?
+% \begin{algorithm}[H]
+%   \SetKwInOut{Input}{input}\SetKwInOut{Output}{output}
+%   \Input{$\boldsymbol{P}(t_0,t_0),\boldsymbol{Q}(t), \boldsymbol{u}(t), \boldsymbol{c}(t), \boldsymbol{\mathcal{C}}(t), \left\{\boldsymbol{Q}'_m(t),\boldsymbol{u}'_m(t),\boldsymbol{c}'_m(t), \boldsymbol{\mathcal{C}}'_m(t)\right\}\forall m, \lambda, t_0, t_\text{max}$} \Output{$\boldsymbol{P}(t_0,t),\boldsymbol{U}(t_0,t),\boldsymbol{C}(t_0,t),\left\{\boldsymbol{P}'_m(t_0,t),\boldsymbol{U}'_m(t_0,t),\boldsymbol{C}'_m(t_0,t)\right\}\forall m\ \text{for}\ t\in\left[t_0,t_\text{max}\right)$}
+%   \Begin{
+
+%   $\boldsymbol{P}'_m(t_0,t_0)=\boldsymbol{U}'_m(t_0,t_0)=\boldsymbol{C}'_m(t_0,t_0)=\boldsymbol{0}$\;
+%   define the ODE based on Equations~(\ref{eq:kolmogorov})--(\ref{eq:dCudt}) and the initial values\;
+%   run an ODE solver from time $t_0$ to time $t_\text{max}$\;
+%   }
+% \end{algorithm}
+
+
+\subsection*{Interval estimation}
+
+For an estimator $\boldsymbol\phi(t_0,t)$ with support on the real line, a confidence interval can be calculated from the variance-covariance matrix $\boldsymbol{V} = \boldsymbol{\phi}'_m(t_0,t)\, \hat{\boldsymbol\Sigma}\, \boldsymbol{\phi}'_m(t_0,t)$ and normal quantiles $z$ at the $\alpha$ level with bounds $\boldsymbol\phi(t_0,t)\pm z_{(1-\frac{\alpha}{2})}\sqrt{\text{diag}(\boldsymbol{V})}$.
+For estimators that are on the open interval $(0,1)$, the gradient can be calculated using a log-log transformation. Similarly, for estimators that are on the open interval $(0,\infty)$, the gradient can be calculated using a log transformation.
+% \begin{align*}
+%   \frac{\partial \log(-\log(\boldsymbol\phi(t_0,t)))}{\partial\hat\beta_m}  &= \frac{\partial\boldsymbol\phi(t_0,t)}{\partial\hat\beta_m}\circ\frac{\boldsymbol{1}}{\log(\boldsymbol\phi(t_0,t))\circ\boldsymbol\phi(t_0,t)} \\
+%   \boldsymbol{V} &=\text{var}(\log(-\log(\boldsymbol{\phi}(t_0,t)))) \\ &= \log(-\log(\boldsymbol{\phi}'_m(t_0,t)))\, \hat{\boldsymbol\Sigma}\, \log(-\log(\boldsymbol{\phi}'_m(t_0,t)))  
+% \end{align*}
+% with bounds $\exp\left(-\exp(\log(-\log(\boldsymbol\phi(t_0,t)))\pm z_{(1-\frac{\alpha}{2})}\text{diag}(\boldsymbol{V}))\right)$.
+
+% \begin{align*}
+%   \frac{\partial \log(\boldsymbol\phi(t_0,t))}{\partial\hat\beta_m}  &= \frac{\partial\boldsymbol\phi(t_0,t)}{\partial\hat\beta_m}\circ\frac{\boldsymbol{1}}{\boldsymbol\phi(t_0,t)} \\
+%   \boldsymbol{V} &=\text{var}(\log(\boldsymbol{\phi}(t_0,t))) \\ &= \log(\boldsymbol{\phi}'_m(t_0,t))\, \hat{\boldsymbol\Sigma}\, \log(\boldsymbol{\phi}'_m(t_0,t))
+% \end{align*}
+% with bounds $\exp\left(\log(\boldsymbol\phi(t_0,t))\pm z_{(1-\frac{\alpha}{2})}\text{diag}(\boldsymbol{V})\right)$.
+
 
 \section{Implementation}
 
@@ -192,6 +292,8 @@ We follow the example by \cite{Crowther_Lambert_2017}.
 
 
 (We could extend the example used by Jackson to include standardisation.)
+
+
 
 
 
