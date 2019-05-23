@@ -16,7 +16,7 @@ markov_msm <-
     inherits <- function(x, ...)
         base::inherits(x, ...) || (base::inherits(x, "zeroRate") && base::inherits(x$base, ...))
     base.classes <- c("stpm2","pstpm2","glm","survPen")
-    stopifnot(all(sapply(x, inherits, base.classes)))
+    stopifnot(all(sapply(x, function(xi) inherits(xi,base.classes) | is.function(xi))))
     stopifnot(!is.null(newdata))
     stopifnot(sum(!is.na(trans)) == length(x))
     stopifnot(length(init) == nrow(trans))
@@ -44,19 +44,22 @@ markov_msm <-
     }
     if (use.costs)
         slow <- TRUE
-    x <- lapply(x, function(object)
-        if(inherits(object,"survPen") && !inherits(object,"survPenWrap")) survPenWrap(object) else object)
     nt <- length(t)
     if (nt < 2) 
         stop("number of times should be at least two")
     stopifnot(length(utility(t[2])) %in% c(1,nrow(trans)))
     if (is.null(tmvar) && all(sapply(x,inherits,c("stpm2","pstpm2","survPen"))))
-        tmvar <- if(inherits(x[[1]],c("stpm2","pstpm2"))) x[[1]]@timeVar else x[[1]]$t1.name
-        ## tmvar <- sapply(x,function(object) if(inherits(object,c("stpm2","pstpm2"))) object@timeVar
-        ##                                    else object$t1.name)
+        tmvar <- sapply(x,function(object) if(inherits(object,c("stpm2","pstpm2"))) object@timeVar
+                                           else object$t1.name)
     stopifnot(!is.null(tmvar))
     stopifnot(length(tmvar) %in% c(1,length(x)))
     if (length(tmvar)==1) tmvar <- rep(tmvar, length(x))
+    for(i in 1:length(x)) {
+        if(inherits(x[[i]],"survPen") && !inherits(x[[i]],"survPenWrap"))
+            x[[i]] <- survPenWrap(x[[i]])
+        else if(is.function(x[[i]]))
+            x[[i]] <- hazFun(x[[i]], tmvar[i])
+    }
     ntr <- sum(!is.na(trans))
     nobs <- nrow(newdata)
     nstates <- nrow(trans)
@@ -174,6 +177,30 @@ markov_msm <-
                    call=call),
               class="markov_msm")
 }
+
+hazFun <- function(f, tmvar="t", ...) {
+    if(all(c("newdata","t") %in% names(formals(f))))
+        newf <- function(newdata) f(t=newdata[[tmvar]],newdata=newdata,...)
+    else if("t" %in% names(formals(f)))
+        newf <- function(newdata) f(t=newdata[[tmvar]], ...)
+    else if("newdata" %in% names(formals(f)))
+        newf <- function(newdata) f(newdata=newdata, ...)
+    else 
+        newf <- function(newdata) f(...)
+    out <- list(haz=newf)
+    class(out) <- "hazFun"
+    out
+}
+predict.hazFun <- function(object, newdata, type=c("haz","gradh")) {
+    type <- match.arg(type)
+    val <- if (type=="haz") object$haz(newdata) else 0
+    if (length(val)==1 && length(val)<nrow(newdata))
+        val <- rep(val,nrow(newdata))
+    val
+}
+coef.hazFun <- function(object, ...) c(hazFun=0)
+vcov.hazFun <- function(object, ...) matrix(0,1,1,FALSE,list("hazFun","hazFun"))
+
 as.data.frame.markov_msm <- function(x, row.names=NULL, optional=FALSE,
                                      ci=TRUE,
                                      P.conf.type="log-log", L.conf.type="log",

@@ -74,11 +74,15 @@ zeroRate(object)
 For \code{markov_msm}:
 
   \item{x}{
-list of parametric or penalised survival models. Currently this includes
+list of functions or parametric or penalised survival models. Currently
+the models include
 combinations of \code{\link{stpm2}}, \code{\link{pstpm2}}, \code{\link[stats]{glm}},
 \code{\link[survPen]{survPen}} or an object of class \code{"zeroRate"} from
 \code{\link{zeroRate}} based on one of the other classes. The order in
-the list matches the indexing in the \code{trans} argument
+the list matches the indexing in the \code{trans} argument. The
+functions can optionally use a \code{t} argument for time and/or a
+\code{newdata} argument. Uncertainty in the models are incorporated into
+the gradients, while uncertainty in the functions are currently not modelled.
 }
   \item{trans}{Transition matrix describing the states and transitions
   in the multi-state model. If S is the number of states in the
