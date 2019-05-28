@@ -282,8 +282,90 @@ Mark Clements
 \seealso{
 \code{\link[flexsurv]{pmatrix.fs}}, \code{\link[mstate]{probtrans}}
 }
-%% \examples{
-
-%% }
+\examples{
+\dontrun{
+## Crowther and Lambert (2019)
+library(readstata13)
+library(mstate)
+library(ggplot2)
+mex.1 <- read.dta13("http://fmwww.bc.edu/repec/bocode/m/multistate_example.dta")
+transmat <- rbind("Post-surgery"=c(NA,1,2), 
+                  "Relapsed"=c(NA,NA,3),
+                  "Died"=c(NA,NA,NA))
+colnames(transmat) <- rownames(transmat)
+mex.2 <- transform(mex.1,osi=(osi=="deceased")+0)
+levels(mex.2$size)[2] <- ">20-50 mm" # fix typo
+mex <- mstate::msprep(time=c(NA,"rf","os"),status=c(NA,"rfi","osi"),
+                      data=mex.2,trans=transmat,id="pid",
+                      keep=c("age","size","nodes","pr_1","hormon"))
+mex <- transform(mex,
+                 size2=(unclass(size)==2)+0, # avoids issues with TRUE/FALSE
+                 size3=(unclass(size)==3)+0,
+                 hormon=(hormon=="yes")+0,
+                 Tstart=Tstart/12,
+                 Tstop=Tstop/12)
+##
+c.ar <- stpm2(Surv(Tstart,Tstop,status) ~ age + size2 + size3 + nodes + pr_1 + hormon,
+              data = mex, subset=trans==1, df=3, tvc=list(size2=1,size3=1,pr_1=1))
+c.ad <- stpm2(Surv(Tstart, Tstop, status) ~ age + size + nodes + pr_1 + hormon,
+              data = mex, subset=trans==2, df=1)
+c.rd <- stpm2( Surv(Tstart,Tstop,status) ~ age + size + nodes + pr_1 + hormon,
+              data=mex, subset=trans==3, df=3, tvc=list(pr_1=1))
+##
+nd <- expand.grid(nodes=seq(0,20,10), size=levels(mex$size))
+nd <- transform(nd, age=54, pr_1=3, hormon=0,
+                size2=(unclass(size)==2)+0,
+                size3=(unclass(size)==3)+0)
+## Predictions
+system.time(pred1 <- rstpm2::markov_msm(list(c.ar,c.ad,c.rd), t = seq(0,15,length=301),
+                                        newdata=nd, trans = transmat)) # ~15 seconds
+pred1 <- transform(pred1, Nodes=paste("Nodes =",nodes), Size=paste("Size",size))
+## Figure 3
+plot(pred1, ggplot=TRUE) + facet_grid(Nodes ~ Size) + xlab("Years since surgery")
+plot(pred1, strata=~nodes+size, xlab="Years since surgery", lattice=TRUE)
+## Figure 4
+plot(subset(pred1, nodes==0 & size=="<=20 mm"), stacked=FALSE, ggplot=TRUE) +
+    facet_grid(. ~ state) +
+    xlab("Years since surgery")
+## Figure 5
+a <- diff(subset(pred1,nodes==0 & size=="<=20 mm"),
+          subset(pred1,nodes==0 & size==">20-50 mm"))
+a <- transform(a, label = "Prob(Size<=20 mm)-Prob(20mm<Size<50mm)")
+b <- ratio_markov_msm(subset(pred1,nodes==0 & size=="<=20 mm"),
+                      subset(pred1,nodes==0 & size==">20-50 mm"))
+b <- transform(b,label="Prob(Size<=20 mm)-Prob(20mm<Size<50mm)")
+##
+c <- diff(subset(pred1,nodes==0 & size=="<=20 mm"),
+          subset(pred1,nodes==0 & size==">50 mm"))
+c <- transform(c, label = "Prob(Size<=20 mm)-Prob(Size>=50mm)")
+d <- ratio_markov_msm(subset(pred1,nodes==0 & size=="<=20 mm"),
+                      subset(pred1,nodes==0 & size==">50 mm"))
+d <- transform(d,label= "Prob(Size<=20 mm)-Prob(Size>=50mm)")
+##
+e <- diff(subset(pred1,nodes==0 & size==">20-50 mm"),
+          subset(pred1,nodes==0 & size==">50 mm"))
+e <- transform(e,label="Prob(20mm<Size<50 mm)-Prob(Size>=50mm)")
+f <- ratio_markov_msm(subset(pred1,nodes==0 & size==">20-50 mm"),
+                      subset(pred1,nodes==0 & size==">50 mm"))
+f <- transform(f, label = "Prob(20mm<Size<50 mm)-Prob(Size>=50mm)")
+## combine
+diffs <- rbind(a,c,e)
+ratios <- rbind(b,d,f)
+## Figure 5
+plot(diffs, stacked=FALSE, ggplot2=TRUE) + xlab("Years since surgery") +
+    ylim(c(-0.4, 0.4)) + facet_grid(label ~ state)
+##
+plot(ratios, stacked=FALSE, ggplot2=TRUE) + xlab("Years since surgery") +
+    ylim(c(0, 3)) + facet_grid(label ~ state)
+## Figure 6
+plot(subset(pred1, nodes==0 & size=="<=20 mm"), stacked=FALSE, which="L", ggplot2=TRUE) +
+    facet_grid(. ~ state) + xlab("Years since surgery")
+## Figure 7
+plot(diffs, stacked=FALSE, which="L", ggplot2=TRUE) + xlab("Years since surgery") +
+    ylim(c(-4, 4)) + facet_grid(label ~ state)
+plot(ratios, stacked=FALSE, which="L", ggplot2=TRUE) + xlab("Years since surgery") +
+    ylim(c(0.1, 10)) + coord_trans(y="log10") + facet_grid(label ~ state)
+}
+}
 \keyword{ survival }
 
