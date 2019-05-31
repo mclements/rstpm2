@@ -563,6 +563,54 @@ as.data.frame.markov_msm_ratio <- function(x, ...) {
         z[[name]] <- exp(z[[name]])
     z
 }
+
+prev_markov_msm <- function(x, w, ...) {
+    stopifnot(inherits(x,"markov_msm"))
+    stopifnot(nrow(x$trans) == length(w))
+    stopifnot(all(w %in% 0:1))
+    x <- msm2
+    w <- c(1,1,0)
+    pi <- piL <- P <- L <- array(0,dim(x$P))
+    sumP <- sumL <- array(0,dim(x$P)[-2])
+    for (i in 1:length(w)) {
+        P[,i,] <- x$P[,i,]*w[i]
+        L[,i,] <- x$L[,i,]*w[i]
+        sumP <- sumP + P[,i,]
+        sumL <- sumL + L[,i,]
+    }
+    for (i in 1:length(w)) {
+        pi[,i,] <- P[,i,]/sumP
+        piL[,i,] <- P[,i,]/sumL
+    }
+    dw <- diag(w)
+    logit <- stats::poisson()$linkinv
+    z <- list(P=logit(P), L=log(L)) # logit and log
+    z$Pu <- apply(x$Pu, 3, function(slice) slice/x$P) - apply(y$Pu, 3, function(slice) slice/y$P)
+    dim(z$Pu) <- dim(x$Pu)
+    dimnames(z$Pu) <- dimnames(x$Pu)
+    z$Lu <- apply(x$Lu, 3, function(slice) slice/x$L) - apply(y$Lu, 3, function(slice) slice/y$L)
+    dim(z$Lu) <- dim(x$Lu)
+    dimnames(z$Lu) <- dimnames(x$Lu)
+    z <- c(list(time=x$time,
+                vcov=x$vcov,
+                trans=x$trans,
+                res=NULL),
+           z)
+    z$call <- match.call()
+    z$newdata <- x$newdata
+    z$newdata[x$newdata != y$newdata] <-  NA
+    class(z) <- c("markov_msm_prev","markov_msm") # not strictly "markov_msm"...
+    z
+}
+as.data.frame.markov_msm_prev <- function(x, ...) {
+    ## data are on a log scale!!
+    z <- as.data.frame.markov_msm_diff(x, ...)
+    for (name in c("P","L","P.lower","P.upper","L.lower","L.upper"))
+        z[[name]] <- exp(z[[name]])
+    z
+}
+
+
 bindlast <- function(...) { # bind on last slice for a bag of arrays
     x <- list(...)
     stopifnot(all(sapply(x,is.array)))
