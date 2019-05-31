@@ -2,10 +2,10 @@ useDynLib(rstpm2, .registration=TRUE)
 
 exportClasses(stpm2,pstpm2,tvcCoxph,aft)
 
-export(stpm2, pstpm2, aft,
+export(stpm2, pstpm2, aft, gsm,
        cox.tvc, # experimental --- don't export?
        markov_msm, ratio_markov_msm, zeroRate, 
-       diff, standardise,
+       standardise,
        incrVar, nsx, nsxD, "coef<-",
        eform, predictnl, coef, confint, 
        predictnl.default, confint.predictnl,
