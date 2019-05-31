@@ -1463,7 +1463,7 @@ stpm2.old <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                            "robust_initial","bhazinit", "use.gr"),
                          deprecated.arg)
     ## read from control list
-    control <- do.call("stpm2.control", control)
+    control <- do.call(stpm2.control, control)
     ##
     ## use.gr <- TRUE # old code
     ## logH.formula and logH.args are deprecated
@@ -1574,24 +1574,46 @@ stpm2.old <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ## if all the events are the same, we assume that they are all events, else events are those greater than min(event)
     if (!interval)
         event <- if (length(unique(event))==1) rep(TRUE, length(event)) else event <- event > min(event)
+    ## Different models:
+    ## lm (full.formula - cluster), survreg (formula - cluster), coxph (formula - cluster), full
+    lm.formula <- formula(full.formula)
+    base.formula <- formula
+    ## Specials
+    cluster.index <- attr(terms.formula(formula, "cluster"), "specials")$cluster
+    if (length(cluster.index)>0) {
+        spcall <- mf
+        spcall[[1]] <- quote(stats::model.frame)
+        spcall$formula <- terms(formula, "cluster", data = data)
+        mf2 <- eval(spcall, parent.frame())
+        cluster <- mf2[, cluster.index]
+        frailty = !is.null(cluster) & !robust
+        base.formula <- formula(drop.terms(terms(mf2), cluster.index - 1, keep.response=TRUE))
+        cluster.index2 <- attr(terms.formula(full.formula, "cluster"), "specials")$cluster
+        lm.formula <- formula(drop.terms(terms(full.formula), cluster.index2 - 1))
+        ## rm(mf2,spcall)
+    }
+    ## deprecated code for cluster
+    if (is.character(cluster) && length(cluster)==1) cluster <- data[[cluster]]
+    if (length(cluster)>nrow(data) && length(cluster)==length(.include))
+        cluster <- cluster[.include]
     ## setup for initial values
     if (!interval) {
         ## Cox regression
         coxph.call <- mf
-        coxph.call[[1L]] <- as.name("coxph")
-        ## coxph.call$subset <- .include
+        coxph.call[[1L]] <- quote(survival::coxph)
         coxph.strata <- substitute(coxph.strata)
         coxph.call$data <- quote(coxph.data)
-        coxph.data <- data
+        coxph.data <- data # ?
+        coxph.call$formula <- base.formula
         if (!is.null(coxph.formula)) {
-            coxph.formula2 <- coxph.call$formula
-            rhs(coxph.formula2) <- rhs(formula) %call+% rhs(coxph.formula)
-            coxph.call$formula <- coxph.formula2
+            temp <- coxph.call$formula
+            rhs(temp) <- rhs(temp) %call+% rhs(coxph.formula)
+            coxph.call$formula <- temp
         }
         if (!is.null(coxph.strata)) {
-            coxph.formula2 <- coxph.call$formula
-            rhs(coxph.formula2) <- rhs(formula) %call+% call("strata",coxph.strata)
-            coxph.call$formula <- coxph.formula2
+            temp <- coxph.call$formula
+            rhs(temp) <- rhs(temp) %call+% call("strata",coxph.strata)
+            coxph.call$formula <- temp
         }
         coxph.call$model <- TRUE
         coxph.obj <- eval(coxph.call, coxph.data)
@@ -1600,7 +1622,7 @@ stpm2.old <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                             pmax(-18,link$link(Shat(coxph.obj)))
                         } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-control$bhazinit*bhazard*time)))
         if (frailty && is.null(logtheta)) {
-            coxph.data$.cluster <- as.vector(unclass(factor(cluster)))[.include]
+            coxph.data$.cluster <- as.vector(unclass(factor(cluster)))
             coxph.formula <- coxph.call$formula
             rhs(coxph.formula) <- rhs(coxph.formula) %call+%
                 call("frailty",as.name(".cluster"),
@@ -1614,6 +1636,7 @@ stpm2.old <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         ## survref regression
         survreg.call <- mf
         survreg.call[[1L]] <- as.name("survreg")
+        survreg.call$formula <- base.formula
         survreg.obj <- eval(survreg.call, envir=parent.frame())
         weibullShape <- 1/survreg.obj$scale
         weibullScale <- predict(survreg.obj)
@@ -1624,11 +1647,9 @@ stpm2.old <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             logtheta <- -1
         }
     }
-    ##
     ## initial values and object for lpmatrix predictions
     lm.call <- mf
-    lm.call[[1L]] <- as.name("lm")
-    lm.formula <- full.formula
+    lm.call[[1L]] <- quote(stats::lm)
     lhs(lm.formula) <- quote(logHhat) # new response
     lm.call$formula <- lm.formula
     dataEvents <- data[event,]
@@ -1735,7 +1756,7 @@ stpm2.old <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  parscale=control$mle2.control$parscale, reltol=control$reltol,
                  kappa=control$kappa.init, trace = control$trace,
                  oldcluster=cluster, frailty=frailty,
-                 cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster)))[.include] else NULL,
+                 cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL,
                  map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
                  RandDist=RandDist, optimiser=control$optimiser, log.time.transform=log.time.transform,
                  type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2",
@@ -2949,7 +2970,7 @@ pstpm2.control <- function(parscale=1,
          reltol.outer=reltol.outer)
 }
 
-pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
+pstpm2.old <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                    logH.args = NULL, 
                    tvc = NULL, 
                    control = list(), init = NULL,
@@ -3263,9 +3284,17 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     }
     if (link.type=="AH") {
         init <- init[index0]
-        }
+    }
     if (frailty) {
-        init <- c(init,logtheta=logtheta)
+        Z.formula <- Z
+        Z <- model.matrix(Z, data)
+        if (ncol(Z)>2) stop("Current implementation only allows for one or two random effects")
+        if (ncol(Z)==2) {
+            init <- c(init,logtheta1=logtheta,corrtrans=0,logtheta2=logtheta)
+        } else init <- c(init, logtheta=logtheta)
+    } else {
+        Z.formula <- NULL
+        Z <- matrix(1,1,1)
     }
     ## smoothing parameters
     ## cases: 
@@ -3282,7 +3311,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         names(control$mle2.control$parscale) <- names(init)
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1,
-                 parscale=control$mle2.control$parscale,
+                 parscale=control$mle2.control$parscale, 
                  smooth=if(control$penalty == "logH") smooth else design,
                  sp=sp, reltol_search=control$reltol.search, reltol=control$reltol.final,
                  reltol_outer=control$reltol.outer, trace=control$trace,
@@ -3293,17 +3322,16 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  penalty = control$penalty, ttype=ttype, RandDist=RandDist, optimiser=control$optimiser,
                  log.time.transform=log.time.transform,
                  type=if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty" else "pstpm2", recurrent = recurrent, maxkappa=control$maxkappa,
-                 transX=transX, transXD=transXD, Z.formula = Z, thetaAO = theta.AO, excess=excess,
+                 transX=transX, transXD=transXD, thetaAO = theta.AO, excess=excess,
+                 Z.formula=Z.formula, Z=Z,
                  return_type="optim", data=data, robust_initial=control$robust_initial, .include=.include,
                  offset=rep(0,nrow(X)))
     if (frailty) {
         rule <- fastGHQuad::gaussHermiteData(control$nodes)
+        args$Z.formula <- Z
         args$gauss_x <- rule$x
         args$gauss_w <- rule$w
         args$adaptive <- control$adaptive
-        args$Z <- model.matrix(Z, data)
-        if (ncol(args$Z)>1) stop("Current implementation only allows for a single random effect")
-        args$Z <- as.vector(args$Z)
     }
     ## penalty function
     pfun <- function(beta,sp) {
@@ -3479,8 +3507,10 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     gradnegll <- function(beta) gradnegllsp(beta,sp)
     parnames(negll) <- parnames(gradnegll) <- names(init)
     mle2 <- if (control$use.gr) {
-            mle2(negll,init,vecpar=TRUE, control=control$mle2.control, gr=gradnegll, eval.only=TRUE, ...)
-        } else mle2(negll,init,vecpar=TRUE, control=control$mle2.control, eval.only=TRUE, ...)
+                mle2(negll,init,vecpar=TRUE, control=control$mle2.control, gr=gradnegll,
+                     eval.only=TRUE, ...)
+            }
+            else mle2(negll,init,vecpar=TRUE, control=control$mle2.control, eval.only=TRUE, ...)
     hessian <- mle2@details$hessian <- fit$hessian
     ## mle2@vcov <- solve(optimHess(coef(mle2),negll,gradnegll))
     mle2@details$convergence <- 0
@@ -3568,6 +3598,7 @@ pstpm2 <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     }
     return(out)
 }
+
 ## Could this inherit from summary.stpm2?
 setClass("summary.pstpm2", representation(pstpm2="pstpm2",frailty="logical",theta="list",wald="matrix"), contains="summary.mle2")
 setMethod("summary", "pstpm2",
