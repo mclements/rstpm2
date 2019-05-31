@@ -257,7 +257,7 @@ namespace rstpm2 {
     List args;
     vec init;
     mat X, X0;
-    mat XD;
+    mat XD, XD0;
     vec event;
     vec time, time0;
     vec boundaryKnots;
@@ -269,6 +269,7 @@ namespace rstpm2 {
       init = as<vec>(args["init"]);
       X = as<mat>(args["X"]);
       XD = as<mat>(args["XD"]);
+      XD0 = as<mat>(args["XD0"]);
       event = as<vec>(args["event"]);
       time = as<vec>(args["time"]);
       boundaryKnots = as<vec>(args["boundaryKnots"]);
@@ -316,8 +317,8 @@ namespace rstpm2 {
 	vec etas0 = s.basis(logtstar0) * betas;
 	vec etaDs0 = s.basis(logtstar0,1) * betas;
 	vec H0 = exp(etas0);
-	vec eps0 = etaDs0*0. + 1e-8;
-	pen += dot(min(etaDs0,eps0), min(etaDs0,eps0));
+	vec eps0 = etaDs0*0. + 1e-16;
+	f += dot(min(etaDs0,eps0), min(etaDs0,eps0));
 	f -= sum(H0);
       }
       return f;
@@ -357,6 +358,7 @@ namespace rstpm2 {
       vec out = sum(gradi,0).t();
       if (delayed) {
 	vec eta0 = X0 * beta;
+	vec etaD0 = XD0 * beta;
 	vec logtstar0 = log(time0) - eta0;
 	mat Xs0 = s.basis(logtstar0);
 	mat XDs0 = s.basis(logtstar0,1);
@@ -368,10 +370,13 @@ namespace rstpm2 {
 	mat dHdbetas0 = rmult(Xs0,H0);
 	mat dHdbeta0 = -rmult(X0,H0 % etaDs0);
 	vec eps0 = etaDs0*0. + 1e-8;
+	uvec pindex0 = ((1.0/time0 - etaD0) < eps0);
 	uvec pindexs0 = (etaDs0 < eps0);
 	etaDs0 = max(etaDs0, eps0);
+	mat pgrad0 = join_rows(-2*rmult(XD0,1/time0-etaD0),XDs0*0.0);
 	mat pgrads0 = join_rows(-2*rmult(X0,etaDs0 % etaDDs0),2*rmult(XDs0,etaDs0));
-	out += sum(join_rows(-dHdbeta0, -dHdbetas0) + rmult(pgrads0,pindexs0), 0).t();
+	out += sum(join_rows(-dHdbeta0, -dHdbetas0) + rmult(pgrads0,pindexs0) +
+		   rmult(pgrad0,pindex0), 0).t();
       }
       return out;
     }
@@ -390,6 +395,35 @@ namespace rstpm2 {
       vec etas = s.basis(logtstar) * betas;
       vec S = exp(-exp(etas));
       return S;
+    }
+
+    mat gradh(vec time, mat X, mat XD)
+    {
+      vec beta = init.subvec(0,X.n_cols-1);
+      vec betas = init.subvec(X.n_cols,init.size()-1);
+      vec eta = X * beta;
+      vec etaD = XD * beta;
+      vec logtstar = log(time) - eta;
+      mat Xs = s.basis(logtstar);
+      mat XDs = s.basis(logtstar,1);
+      mat XDDs = s.basis(logtstar,2);
+      vec etas = Xs * betas;
+      vec etaDs = XDs * betas;
+      vec etaDDs = XDDs * betas;
+      // penalties
+      vec eps = etaDs*0. + 1e-8;
+      uvec pindexs = (etaDs < eps);
+      uvec pindex = ((1.0/time - etaD) < eps);
+      // fix bounds on etaDs
+      etaDs = max(etaDs, eps);
+      // fix bounds on etaD
+      etaD = 1/time - max(1/time-etaD, eps);
+      vec logh = etas + log(etaDs) + log(1/time -etaD);
+      vec h = exp(logh);
+      mat dloghdbetas = Xs+rmult(XDs,1/etaDs % (1-pindexs));
+      mat dloghdbeta = -rmult(X,etaDs % (1-pindexs) % (1-pindex)) - rmult(X,etaDDs/etaDs % (1-pindexs) % (1-pindex)) - rmult(XD, (1-pindexs) % (1-pindex)/(1/time-etaD));
+      mat gradh = join_rows(rmult(dloghdbeta,h), rmult(dloghdbetas,h));
+      return gradh;
     }
   };
   
@@ -427,6 +461,8 @@ namespace rstpm2 {
       return wrap(model.gradient(model.init));
     else if (return_type == "survival")
       return wrap(model.survival(as<vec>(list["time"]),as<mat>(list["X"])));
+    else if (return_type == "gradh")
+      return wrap(model.gradh(as<vec>(list["time"]),as<mat>(list["X"]),as<mat>(list["XD"])));
     else {
       REprintf("Unknown return_type.\n");
       return wrap(-1);

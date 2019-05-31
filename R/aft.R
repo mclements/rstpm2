@@ -366,7 +366,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     X <- lpmatrix.lm(lm.obj,data)
     XD <- grad1(lpfunc,data[[timeVar]],lm.obj,data,timeVar,log.transform=log.time.transform)
     XD <- matrix(XD,nrow=nrow(X))
-    X0 <- matrix(0,1,ncol(X))
+    XD0 <- X0 <- matrix(0,1,ncol(X))
     if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
     if (delayed) {
         ind0 <- time0>0
@@ -380,6 +380,8 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         data0[[timeVar]] <- data0[[time0Var]]
         X0 <- lpmatrix.lm(lm.obj, data0)
         wt0 <- wt[ind0]
+        XD0 <- grad1(lpfunc,data0[[timeVar]],lm.obj,data0,timeVar,log.transform=log.time.transform)
+        XD0 <- matrix(XD0,nrow=nrow(X0))
         rm(data0)
     }
     if (ncol(X)>length(coef1)) {
@@ -415,7 +417,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         localargs <- args
         localargs$return_type <- "gradient"
         localargs$init <- beta
-        return(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
+        return(as.vector(.Call("aft_model_output", localargs, PACKAGE="rstpm2")))
     }
     negll.slow <- function(betafull) {
         beta <- betafull[1:ncol(args$X)]
@@ -436,6 +438,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         logh <- etas + log(etaDs) + log(1/time -etaD)
         H <- exp(etas)
         pen - (sum(logh*event) - sum(H))
+        ## TODO: left truncation
     }
     neglli <- function(betafull) {
         beta <- betafull[1:ncol(args$X)]
@@ -456,6 +459,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         logh <- etas + log(etaDs) + log(1/time -etaD)
         H <- exp(etas)
         pen - (logh*event - H)
+        ## TODO: left truncation
     }
     gradi <- function(betafull) {
         beta <- betafull[1:ncol(args$X)]
@@ -491,19 +495,58 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         dloghdbeta <- -etaDs*X*(!pindexs & !pindex) - etaDDs*X/etaDs*(!pindexs & !pindex) - XD/(1/time-etaD)*(!pindex & !pindexs)
         dhdbetas <- h*dloghdbetas
         dhdbeta <- h*dloghdbeta
-        cbind(-dloghdbeta*event+dHdbeta, -dloghdbetas*event+dHdbetas) + pindex*pgrad + pindexs*pgrads
+        out <- cbind(-dloghdbeta*event+dHdbeta, -dloghdbetas*event+dHdbetas) + pindex*pgrad + pindexs*pgrads
+        if (delayed) {
+            ## betafull <- coef(aft1)
+            eta0 <- as.vector(X0 %*% beta)
+            logtstar0 <- log(args$time0) - eta0
+            Xs0 <- predict(args$design,logtstar0)
+            XDs0 <- predict(args$designD,logtstar0)
+            XDDs0 <- predict(args$designDD,logtstar0)
+            etas0 <- as.vector(Xs0 %*% betas)
+            etaDs0 <- as.vector(XDs0 %*% betas)
+            etaDDs0 <- as.vector(XDDs0 %*% betas)
+            H0 <- exp(etas0)
+            dHdbetas0 <- H0*Xs0
+            dHdbeta0 <- -H0*etaDs0*X0
+            ## penalties
+            eps0 <- etaDs0*0. + 1e-8;
+            pindexs0 <- etaDs0 < eps0
+            ## fix bounds on etaDs
+            pgrads0 <- cbind(-2*etaDs0*etaDDs0*X0,2*etaDs0*XDs0)
+            etaDs0 <- pmax(etaDs0, eps0)
+            which0 <- !is.na(which0)
+            out[which0,] <- out[which0,] + cbind(-dHdbeta0, -dHdbetas0) + pindexs0*pgrads0
+        }
+        out
     }
     gradient2 <- function(betafull)
         colSums(gradi(betafull))
     ## browser()
     if (FALSE) {
-
+        ##
         library(rstpm2)
-        ##debug(aft)
+        ## debug(aft)
         brcancer2 <- transform(brcancer, entry=ifelse(hormon==0, rectime/2, 0))
         system.time(aft1 <- aft(Surv(entry,rectime,censrec==1)~hormon,data=brcancer2,df=4,use.gr=FALSE))
-        system.time(aft0 <- aft(Surv(entry,rectime,censrec==1)~hormon,data=brcancer2,df=4))
-        
+        system.time(aft0 <- aft(Surv(entry,rectime,censrec==1)~hormon,data=brcancer2,df=4)) # FAILS
+        ##
+        negll(coef)
+        fd <- function(f,x,eps=1e-5)
+            t(sapply(1:length(x),
+                     function(i) {
+                         upper <- lower <- x
+                         upper[i]=x[i]+eps
+                         lower[i]=x[i]-eps
+                         (f(upper)-f(lower))/2/eps
+                     }))
+        fd(negll,coef(aft1))
+        gradient(coef(aft1))
+        gradient2(coef(aft1))
+        fd(negll,coef)
+        gradient(coef)
+        gradient2(coef)
+        ##
         library(rstpm2)
         system.time(aft0 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4))
         system.time(aft1 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4,use.gr=FALSE))
@@ -542,9 +585,17 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         head(tmp[event,])
         head(gradi(scale*init)[event,])
         range(tmp - gradi(scale*init))
+        ##
     }
     parnames(negll) <- names(init)
     ## MLE
+    ## if (delayed && use.gr) { # initial search using nmmin
+    ##     args$return_type <- "nmmin"
+    ##     args$maxit <- 200
+    ##     fit <- .Call("aft_model_output", args, PACKAGE="rstpm2")
+    ##     print(args$init <- fit$coef)
+    ##     args$maxit <- control$maxit
+    ## }
     args$return_type <- if (use.gr) "vmmin" else "nmmin"
     fit <- .Call("aft_model_output", args, PACKAGE="rstpm2")
     args$init <- coef <- as.vector(fit$coef)
@@ -819,13 +870,19 @@ setMethod("plot", signature(x="aft", y="missing"),
                               ylab=ylab, line.col=line.col, lty=lty, add=add,
                               ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
           )
-predictSurvival.aft <- function(obj, time=obj@args$time, X=obj@args$X) {
+predict.aft.ext <- function(obj, type=c("survival","gradh"),
+                            time=obj@args$time, X=obj@args$X, XD=obj@args$XD) {
+    type <- match.arg(type)
     localargs <- obj@args
-    localargs$return_type <- "survival"
+    localargs$return_type <- type
     localargs$X <- X
+    localargs$XD <- XD
     localargs$time <- time
-    as.vector(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
-    }
+    if (type=="survival")
+        as.vector(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
+    else
+        as.matrix(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
+}
 
 ## simulate from Weibull with one binary covariate
 if (FALSE) {
@@ -865,7 +922,7 @@ if (FALSE) {
     plot(aft1,newdata=data.frame(x=0), add=TRUE, line.col="green", ci=FALSE)
     plot(aft1,newdata=data.frame(x=1), add=TRUE, line.col="blue", ci=FALSE)
     
-    head(rstpm2:::predictSurvival.aft(aft1)) - head(predict(aft1))
+    head(rstpm2:::predict.aft.ext(aft1)) - head(predict(aft1))
 
     plot(aft1,newdata=data.frame(x=0), type="hazard", line.col="green", rug=FALSE)
     plot(aft1,newdata=data.frame(x=1), type="hazard", add=TRUE, line.col="blue", ci=TRUE)
