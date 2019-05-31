@@ -14,6 +14,8 @@
 \usepackage{wasysym}
 \usepackage{tablefootnote}
 \usepackage{algorithm2e}
+\usepackage{graphicx, tikz}
+\usetikzlibrary{arrows,decorations.pathmorphing,backgrounds,positioning,fit,petri,matrix}
 
 \title{Predictions for parametric and penalised multi-state Markov models}
 
@@ -58,19 +60,19 @@
 \emph{Multi-state models} form a very broad class of models that includes standard survival models with an initial and final state, competing risks with multiple final states, and illness-death models, with an initial healthy state, an illness state and a death state. This model class is useful for representing movement through a discrete set of states. As a motivating example, we are interested in the clinical pathways for cancer screening, diagnosis and treatment, taking account of utilities and costs. Using observational data, screening or treatment assignment may be confounded with patient characteristics, so we are also interested in using standardisation or the parametric g-formula to adjust for differences between groups.
 % Should we use the negative biopsies as an example?
 
-Predictions from multi-state models could include: transition hazards between states; transition probabilities for being in a particular state conditional on an initial state; state occupation probabilities for being in a particular state given an observed distribution of initial states; length of stay in a given state; contrasts of these predictions; and ratios of these predictions \citep{Touraine_Helmer_Joly_2016,Crowther_Lambert_2017}.
+Predictions from multi-state models could include: transition hazards between states; transition probabilities for being in a particular state conditional on an initial state; state occupation probabilities for being in a particular state given an observed distribution of initial states; length of stay in a given state; prevalence for the live health states; contrasts of these predictions, including standardisation; and ratios of these predictions \citep{Touraine_Helmer_Joly_2016,Crowther_Lambert_2017}.
 
 Much of the literature on multi-state models has focused on counting processes  \citep[e.g.][]{Andersen_Borgan_Gill_Keiding_1993,Andersen_Keiding_2002,Putter_Fiocco_Geskus_2007}. For implementations, \cite{Allignol_Schumacher_Beyersmann_2011} use the Aalen-Johansen estimator to estimate transition probabilities, and \cite{deWreede_Fiocco_Putter_2011} predict transition probabilities and their standard errors for transitions modelled using Cox regression. These implementations can also estimate length of stay and contrasts, however variance estimates would then require the non-parametric bootstrap. \cite{Ryalen_Stensrud_Roysland_2018} use stochastic differential equations to transform non-parametric cumulative hazard estimates into a variety of predictions. This approach is shown to work for Aalen's additive hazard model, but it is unclear whether the approach extend to Cox regression models. Their methods are a non-parametric analogue to our development.
 
 Parametric and penalised survival models have potential advantages for multi-state models, including the ready incorporation of time-varying effects and for predictions outside of observed data \citep{Touraine_Helmer_Joly_2016,Crowther_Lambert_2017}. 
-\cite{Iacobelli_Carstensen_2013} simulate from Poisson regression models on different time scales to predict for multi-state models. \cite{Blaser_Vizcaya_Estill_Zahnd_Kalesan_Egger_Gsponer_Keiser_2015} provide a simulation framework for multi-state models with random times based on piece-wise constant hazards. \cite{Crowther_Lambert_2017} combine parametric time-to-event models to predict transition probabilities and length of stay. The authors use simulations for semi-Markov models and either simulations or the Aalen-Johansen estimator for Markov models, with variance estimation using the parametric bootstrap. None of these approaches scales well to allow for standardisation across moderate sized datasets.
+\cite{Iacobelli_Carstensen_2013} simulate from Poisson regression models on different time scales to predict for multi-state models. \cite{Blaser_Vizcaya_Estill_Zahnd_Kalesan_Egger_Gsponer_Keiser_2015} provide a simulation framework for multi-state models with random times based on piece-wise constant hazards. \cite{Crowther_Lambert_2017} combine parametric time-to-event models to predict transition probabilities and length of stay. The authors use simulations, with variance estimation using the parametric bootstrap. None of these approaches scales well to allow for standardisation across moderate sized datasets.
 % heemod - discrete time Markov models
 % hesim
 
 Recently, it has been recognised that smooth survival models can be used with ordinary differential equations to predict from multi-state models: \cite{Titman_2011} showed that gradients for transition probabilities can be estimated by augmenting the system of differential equations; and \cite{Jackson_2016} predicted length of stay using differential equations. 
 
 We have two objectives: first, to develop efficient methods for predictions for \emph{smooth, non-homogeneous multi-state Markov models} with variance estimation using the \emph{multivariate delta method}; and, second, to demonstrate that these methods support the use of multi-state models across descriptive statistics, causal inference, and economics.
-Importantly, our restriction to Markov models is not a severe constraint: \cite{Datta_Satten_2001} have shown that the state occupation probabilities are consistently estimated under moderate conditions even when the time scale is mis-specified. Length of stay and costs, which are integrated functions of the state occupation probabilities, are also expected to be consistent under similar conditions.
+Importantly, our restriction to Markov models is not a heavy constraint: \cite{Datta_Satten_2001} have shown that the state occupation probabilities are consistently estimated under moderate conditions even when the time scale is mis-specified. Length of stay, prevalence, utilities and costs, when they are integrated functions of the state occupation probabilities, are also expected to be consistent under similar conditions.
 
 In outline, we provide a theoretical development of a set of ordinary differential equations, simulate to assess the small sample properties, provide some examples and conclude with a brief discussion.
 
@@ -82,23 +84,23 @@ In outline, we provide a theoretical development of a set of ordinary differenti
 
 For the predictions, the main inputs are (i) a multi-state model specification, (ii) the models for the transition intensities, and (iii) and the initial values for the states. We assume that the transition intensities are estimated using maximum (penalised) likelihood estimation, with stacked estimated parameters $\hat{\boldsymbol{\beta}}$ and stacked estimated variance-covariance matrix $\hat{\boldsymbol\Sigma}$. The estimated parameters could be from either model fit for all transitions, one model for each transition or a combination of models for different transitions.
 
-We assume suitable regularity conditions for the maximum likelihood estimators $\hat{\boldsymbol{\beta}}$ to ensure consistency and asymptotic normality. The regularity conditions follow from the smoothness and boundedness of the parametric or penalised functions. We can then estimate the asymptotic variance using the multivariate delta method. We will assess the asymptotic properties using simulations.
+For a formal development, the asymptotic properties for parametric models were developed by \cite{Andersen_Borgan_Gill_Keiding_1993} under Cramér-like conditions. Under those conditions, the authors show that that the maximum likelihood parameters $\hat{\boldsymbol{\beta}}$ are asymptotically normal. Sufficient conditions would include smoothness (thrice differentiable for the log-likelihood) and boundedness of the hazard function. We can then estimate the asymptotic variance for the predictions using the multivariate delta method, which is expected to be asymptotically normal under moderate conditions. \cite{Ryalen_Stensrud_Roysland_2018} developed asymptotic properties for non-parametric stochastic differential equations under Hadamard continuity. In outline, Hadamard continuity is satisfied under the Cramér-like conditions, so that the results from Ryalen and colleagues can be adapted for parametric models. We will assess these asymptotic properties using simulations.
+
 
 \subsection*{Notation}
 
-For vectors $\boldsymbol{v}, \boldsymbol{v}_1$ and $\boldsymbol{v}_2$ and matrices $\boldsymbol{M}, \boldsymbol{M}_1$ and $\boldsymbol{M}_2$, let $\boldsymbol{v}_1\circ\boldsymbol{v}_2$ and $\boldsymbol{M}_1\circ\boldsymbol{M}_2$ be the Hadamard element-wise products, let $\boldsymbol{M}\circ\boldsymbol{v}$ be the column-wise product $(M_{ij}v_i)$ and let $\boldsymbol{v}\circ\boldsymbol{M}$ be the row-wise product $(M_{ij}v_j)$. Similarly, let $\boldsymbol{v}_1\oslash\boldsymbol{v}_2$ and $\boldsymbol{M}_1\oslash\boldsymbol{M}_2$ be Hadamard element-wise division, and let $\boldsymbol{M}\oslash\boldsymbol{v}$ be the element-wise division $(M_{ij}/v_i)$. We assume that $\circ$  and $\oslash$ have higher operator precedence than addition and subtraction. For a square matrix $\boldsymbol{M}$, let $\text{diag}(\boldsymbol{M})=(M_{ii})$, which is a vector of the matrix diagonal, and let $\text{diag}(\boldsymbol{v})$ represent a square matrix with zeros in the off-diagonal and $\boldsymbol{v}$ on the diagonal. 
+For vectors $\boldsymbol{v}, \boldsymbol{v}_1$ and $\boldsymbol{v}_2$ and matrices $\boldsymbol{M}, \boldsymbol{M}_1$ and $\boldsymbol{M}_2$, let $\boldsymbol{v}_1\circ\boldsymbol{v}_2$ and $\boldsymbol{M}_1\circ\boldsymbol{M}_2$ be the Hadamard element-wise products, and let $\boldsymbol{v}_1\oslash\boldsymbol{v}_2$ and $\boldsymbol{M}_1\oslash\boldsymbol{M}_2$ be Hadamard element-wise division. We also define $\boldsymbol{M}\circ\boldsymbol{v}=\boldsymbol{M}\circ(\boldsymbol{v}\boldsymbol{1}^T)$ and $\boldsymbol{M}\oslash\boldsymbol{v}=\boldsymbol{M}\oslash(\boldsymbol{v}\boldsymbol{1}^T)$. We assume that $\circ$  and $\oslash$ have higher operator precedence than addition and subtraction.  Let $\text{diag}(\boldsymbol{v})$ represent a square matrix with zeros in the off-diagonal and $\boldsymbol{v}$ on the diagonal. We represent a vector of ones using $\boldsymbol{1}$ and an identity matrix by $\boldsymbol{I}$.
 
 We define the gradient for a prediction $\boldsymbol\phi(t_0,t)$ with respect to an estimated model parameter $\hat\beta_m$  by $\boldsymbol\phi'_m(t_0,t)\equiv\left.\frac{\displaystyle\partial\boldsymbol\phi(t_0,t)}{\displaystyle\partial\beta_m}\right|_{\beta_m=\hat\beta_m}$.
 
-\subsection*{General approach applied to state occupancy probabilities}
+\subsection*{General approach applied to transition and state occupancy probabilities}
 
-Let the set of states be indexed by $i$ and $j$. We define the matrix of transition probabilities $\boldsymbol{P}(t_0,t)=(P_{ij}(t_0,t))$ as the probabilities of being in state $j$ at time $t$ given being in an initial state $i$ at entry time $t_0$. For smooth hazards, the Markov property is expressed through Kolmogorov's forward differential equation, such that 
+Let the set of states be indexed by $i$ and $j$. We define the matrix of \emph{transition probabilities} $\boldsymbol{P}(t_0,t)=(P_{ij}(t_0,t))$ as the probabilities of being in state $j$ at time $t$ given being in an initial state $i$ at entry time $t_0$. For smooth hazards, the Markov property is expressed through Kolmogorov's forward differential equation, such that 
 \begin{align}
   \frac{d\boldsymbol{P}(t_0,t)}{dt} &= \boldsymbol{P}(t_0,t) \boldsymbol{Q}(t) \label{eq:kolmogorov} \\
   \boldsymbol{P}(t_0,t_0) &= \boldsymbol{I} \label{eq:Pinit}
 \end{align}
 where $\boldsymbol{Q}(t)=(Q_{ij}(t))$ is a matrix of transition intensities at time $t$\footnote{Technically, this is $t-$.} from state $i$ to state $j$ when $i\neq j$ (conceptualised as the rates from state $i$ to state $j$), and where $Q_{ii}(t)=-\sum_{j\neq i}Q_{ij}(t)$ (conceptualised as the rates out of state $i$). % The Markov property is based on a single clock $t$ (e.g. age of a subject or calendar time), whereas semi-Markov models are based on a reset clock (e.g. time in state for each new state).
-Let the vector $\boldsymbol{\pi}(t_0,t_0)=(\pi_j(t_0,t_0))$ represent the initial \emph{state occupation probabilities} of being in state $j$ at time $t_0$. The state occupation probabilities of being in state $j$ at time $t>t_0$ can be calculated by $\boldsymbol{\pi}(t_0,t)^T=(\pi_j(t=,t))=\boldsymbol{\pi}(t_0,t_0)^T\boldsymbol{P}(t_0,t)$.
 
 % (toggle-debug-on-quit)
 
@@ -124,6 +126,8 @@ Using the multivariate delta method, the estimated covariance matrix for $\bolds
 \text{var}(\boldsymbol{P}(t_0,t)) &= \boldsymbol{P}'_m(t_0,t)^T\, \hat{\boldsymbol\Sigma}\, \boldsymbol{P}'_m(t_0,t)
 \end{align*}
 
+Let the vector $\boldsymbol{\pi}(t_0,t_0)=(\pi_j(t_0,t_0))$ represent the initial \emph{state occupation probabilities} of being in state $j$ at time $t_0$. The state occupation probabilities of being in state $j$ at time $t>t_0$ can be calculated by $\boldsymbol{\pi}(t_0,t)^T=(\pi_j(t_0,t))=\boldsymbol{\pi}(t_0,t_0)^T\boldsymbol{P}(t_0,t)$. Differential equations can be readily calculated for the state occupation probabilities.
+
 This general approach can be applied to a variety of predictions. The other predictions may require that a set of differential equations be defined for several related predictions, including their gradients, in combination with the delta method for variance estimation.
 
 \subsection*{Example 1: Length of stay}
@@ -140,30 +144,67 @@ where the matrix $\boldsymbol{L}(t_0,t)$ is the the \emph{length of stay} or soj
 
 Let the prevalence for the live states be defined by 
 \begin{align*}
-  \tilde{\boldsymbol\pi}(t_0,t) &= \left(\boldsymbol{P}(t_0,t)\text{diag}(\boldsymbol{w})\right)\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right)
+  \tilde{\boldsymbol{P}}(t_0,t) &= \left(\boldsymbol{P}(t_0,t)\text{diag}(\boldsymbol{w})\right)\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right)
 \end{align*}
 for a weight vector $\boldsymbol{w}=(w_j)$, where $w_j=1$ for the live states, otherwise $w_j=0$. Generalising a result for illness-death models by \cite{Brinks_Hoyer_2018} to multi-state models, we have that
 \begin{align*}
-  \frac{d\tilde{\boldsymbol\pi}(t_0,t)}{dt} &= \left(\frac{d\boldsymbol{P}(t_0,t)}{dt}\text{diag}(\boldsymbol{w})\circ\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right) - \left(\boldsymbol{P}(t_0,t)\text{diag}(\boldsymbol{w})\right)\circ\frac{d\boldsymbol{P}(t_0,t)}{dt}\boldsymbol{w}\right)\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right)\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right) \\
-&=\left(\left(\boldsymbol{P}(t_0,t)\boldsymbol{Q}(t)\text{diag}(\boldsymbol{w})\right)\circ\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right) - \left(\boldsymbol{P}(t_0,t)\text{diag}(\boldsymbol{w})\right)\circ\left(\boldsymbol{P}(t_0,t)\boldsymbol{Q}(t)\boldsymbol{w}\right)\right)\\ &\quad\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right)\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right) 
+  \frac{d\tilde{\boldsymbol{P}}(t_0,t)}{dt} 
+  &= \left(\left(\frac{d\boldsymbol{P}(t_0,t)}{dt}\text{diag}(\boldsymbol{w})\right)
+    \circ \left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right) - \left(\boldsymbol{P}(t_0,t)\text{diag}(\boldsymbol{w})\right) \circ \left(\frac{d\boldsymbol{P}(t_0,t)}{dt}\boldsymbol{w}\right)\right)\\
+  &\quad\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right)\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right)
 \end{align*}
-with an initial value that $\tilde{\boldsymbol\pi}(t_0,t_0)=\text{diag}(\boldsymbol{w})$. 
+with an initial value that $\tilde{\boldsymbol{P}}(t_0,t_0)=\text{diag}(\boldsymbol{w})$. Alternatively, we can calculate $\text{logit}(\tilde{\boldsymbol{P}}(t_0,t))=\log(\tilde{\boldsymbol{P}}(t_0,t)) - \log(\boldsymbol{1}\boldsymbol{1}^T-\tilde{\boldsymbol{P}}(t_0,t))$, which has a gradient of
+\begin{align*}
+  \left.\frac{\partial}{\partial\beta_m} \text{logit}(\tilde{\boldsymbol{P}}(t_0,t))\right|_{\beta_m=\hat\beta_m}
+  &= \left(
+    \left(\boldsymbol{P}'_m(t_0,t)\text{diag}(\boldsymbol{w})\right)\circ \left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right) - \left(\boldsymbol{P}(t_0,t)\text{diag}(\boldsymbol{w})\right)\circ \left(\boldsymbol{P}'_m(t_0,t)\boldsymbol{w}\right)
+    \right) \\ 
+  &\quad \oslash \tilde{\boldsymbol{P}}(t_0,t) \oslash     
+    \left(\boldsymbol{1}\boldsymbol{1}^T - \tilde{\boldsymbol{P}}(t_0,t)\right) \oslash
+    \left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right)  \oslash
+    \left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right) 
+\end{align*}
 
-% Note that the notation would be simplified if we restricted the rows and columns of $\boldsymbol{P}(t_0,t)$ to the live states and let $\boldsymbol{w}=\boldsymbol{1}$, so that $\tilde{\boldsymbol\pi}(t_0,t)=\boldsymbol{P}(t_0,t)\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{1}\right)$.
+Similarly, we could calculate the proportion of person-time in the live health states, which is calculated by $\tilde{\boldsymbol{L}}(t_0,t)=\left(\boldsymbol{L}(t_0,t)\text{diag}(\boldsymbol{w})\right)\oslash\left(\boldsymbol{L}(t_0,t)\boldsymbol{w}\right)$. The development for these predictions follows closely that for prevalence.
 
-\subsection*{Example 3: Standardisation and differences}
 
-Linearity combinations of these estimators are straightforward to calculate, as the gradients are then also linear. Let $\boldsymbol\phi(t_0,t|\boldsymbol{x}_k)$ represent an estimator, such as transition probabilities, state occupation probabilities or length of stay, conditional on covariate vector $\boldsymbol{x}_k$. We can standardise the estimator for covariates  $\boldsymbol{x}_k$  and weights $w_k$ for $k=1,\ldots,K$, such that
+\subsection*{Example 3: Linear combinations, differences and standardisation}
+
+Linearity combinations of these estimators are straightforward to calculate, as the gradients are then also linear. Let $\boldsymbol\phi(t_0,t|\boldsymbol{x}_k)$ represent an estimator, such as transition probabilities, state occupation probabilities or length of stay, conditional on covariate vector $\boldsymbol{x}_k$. Given weights $w_k$ for $k=1,\ldots,K$, we can calculate the weighted sums
 \begin{align*}
   \bar{\boldsymbol{\phi}}(t_0,t) &= \sum_{k=1}^K w_k \boldsymbol{\phi}(t_0,t|\boldsymbol{x}_k)\\
   \bar{\boldsymbol{\phi}}'_m(t_0,t) &= \sum_{k=1}^K w_k \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_k) 
 \end{align*}
+For differences, we can define $K=2$, $w_1=1$ and $w_2=-1$.
 
-The standardisation can be defined in terms of counterfactual exposures, where the estimates are standardised for a population had everyone been exposed and then compared with a population had no-one been exposed. These marginal estimators can be interpreted as applications of the parametric g-formula which has been popularised in causal inference. 
+\emph{Standardisation} can be defined in terms of the mean prediction under a counterfactual exposure. For example, consider a binary exposure $X$ with confounders $\boldsymbol{Z}_i$ across a sample or population indexed by $i$. The standardised estimator for everyone been unexposed or exposed to $X$ is then
+\begin{align*}
+\bar{\boldsymbol\phi}_0(t_0,t) &= E_{\boldsymbol{Z}}(\boldsymbol\phi(t_0,t|X=0,\boldsymbol{Z})) =
+  \frac{1}{n}\sum_{i=1}^n \boldsymbol\phi(t_0,t|X=0,\boldsymbol{Z}_i)\\
+\bar{\boldsymbol\phi}_1(t_0,t) &= E_{\boldsymbol{Z}}(\boldsymbol\phi(t_0,t|X=1,\boldsymbol{Z}))  
+\end{align*}
+Under no unmeasured confounding and positivity, we could give a causal interpretation to  contrasts such as $\bar{\boldsymbol\phi}_1(t_0,t)-\bar{\boldsymbol\phi}_0(t_0,t)$, $\bar{\boldsymbol\phi}_1(t_0,t)\oslash\bar{\boldsymbol\phi}_1(t_0,t)$ or $\boldsymbol{1}\boldsymbol{1}^T-\bar{\boldsymbol\phi}_1(t_0,t)\oslash E_{\boldsymbol{Z},X}(\boldsymbol\phi(t_0,t|X\boldsymbol{Z}))$. 
+These marginal estimators can be interpreted as applications of the parametric g-formula .
 
+\begin{figure}
+  \begin{center}
+\begin{tikzpicture}[->,bend angle=20,semithick,>=stealth']
+    \matrix [matrix of nodes,row sep=6mm,column sep=7mm,nodes={align=center},
+    ampersand replacement=\&]
+{
+\& |(Z)| $\boldsymbol{Z}$  \\
+|(X)| $X$ \& \& |(Y)| $\boldsymbol{\phi}(t_0,t|X,\boldsymbol{Z})$ \\
+};
+\begin{scope}[every node/.style={midway,auto}]
+ \draw (X) to node {} (Y);
+ \draw (Z) to node {} (X);
+ \draw (Z) to node {} (Y);
+\end{scope}
+\end{tikzpicture}
+\caption{Directed acyclic graph showing predictions $\boldsymbol{\phi}(t_0,t|X,\boldsymbol{Z})$ as a function of the target exposure $X$ and confounders $\boldsymbol{Z}$.}
+\end{center}
+\end{figure}
 % Do notation
-
-For simple differences, we can define $K=2$, $w_1=1$ and $w_2=-1$.
 
 \subsection*{Example 4: Ratios}
 
@@ -174,25 +215,18 @@ For simple differences, we can define $K=2$, $w_1=1$ and $w_2=-1$.
 % \end{align*}
 % Again, the linearity of the gradients leads to straightforward calculations.
 
-The gradient for $\log(\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_2))$ (that is, the log ratio), is
-\begin{align*}
-\left.\frac{\partial}{\partial \beta_m} \log\left(\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)\right)\right|_{\beta_m=\hat\beta_m} &= \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)
-- \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_2)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)
-\end{align*}
-This evaluation depends on $\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)$ being non-zero.
-Alternatively, we can augment the system of differential equations to calculate the ratios for specific estimators \citep{Ryalen_Stensrud_Roysland_2018}. Let a matrix of ratios of state occupation probabilities be $\text{\bf R}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2)=\boldsymbol{\pi}(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol{\pi}(t_0,t|\boldsymbol{x}_2)$. Then 
+We can augment the system of differential equations to calculate the ratios for specific estimators \citep{Ryalen_Stensrud_Roysland_2018}. Let a matrix of ratios of state occupation probabilities be $\text{\bf R}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2)=\boldsymbol{\pi}(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol{\pi}(t_0,t|\boldsymbol{x}_2)$. Then 
 \begin{align*}
   \frac{d\text{\bf R}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2)}{dt}^T &= \left(\left(\boldsymbol{\pi}(t_0,t|\boldsymbol{x}_1)^T\boldsymbol{P}(t_0,t|\boldsymbol{x}_1)\boldsymbol{Q}(t|\boldsymbol{x}_1)\right) - \left(\boldsymbol{\pi}(t_0,t|\boldsymbol{x}_2)^T\boldsymbol{P}(t_0,t|\boldsymbol{x}_2)\boldsymbol{Q}(t|\boldsymbol{x}_2)\right) \circ \text{\bf R}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2)\right) \\
   &\quad\oslash\boldsymbol{P}(t_0,t|\boldsymbol{x}_2) \\
   \text{\bf R}(t_0,t_0) &= \boldsymbol{1}
 \end{align*}
-where $\boldsymbol{P}(t_0,t|\boldsymbol{x}_2)>0$. This approach generalises the concept of relative survival. 
-
-% Similarly, we can model for ratios of lengths of stay. Let a vector of ratios of the length of stay be $\text{\bf RL}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2)=\boldsymbol{L}(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol{L}(t_0,t|\boldsymbol{x}_2)$. Then 
-% \begin{align*}
-%   \frac{d\text{\bf RL}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2)}{dt} &= \left(\boldsymbol{P}(t_0,t|\boldsymbol{x}_1) - \boldsymbol{P}(t_0,t|\boldsymbol{x}_2) \circ \text{\bf RL}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2)\right) \oslash \boldsymbol{L}(t_0,t|\boldsymbol{x}_2) \\
-%   \text{\bf RL}(t_0,t_0|\boldsymbol{x}_1,\boldsymbol{x}_2) &= \boldsymbol{I}
-% \end{align*}
+where $\boldsymbol{P}(t_0,t|\boldsymbol{x}_2)>0$. This approach generalises the concept of relative survival. Alternatively, we can calculate the gradient for $\log(\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_2))$ (that is, the log ratio), which is
+\begin{align*}
+\left.\frac{\partial}{\partial \beta_m} \log\left(\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)\right)\right|_{\beta_m=\hat\beta_m} &= \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)
+- \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_2)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)
+\end{align*}
+This evaluation depends on $\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)$ being non-zero.
 
 % Open question: how does this compare with log(ratio)?
 
@@ -243,22 +277,12 @@ The gradient of the log of the ICER is
 &\qquad \frac{\text{QALY}'_m(t_0,t|\boldsymbol{x}_1)-\text{QALY}'_m(t_0,t|\boldsymbol{x}_2)}{\text{QALY}(t_0,t|\boldsymbol{x}_1)-\text{QALY}(t_0,t|\boldsymbol{x}_2)}
 \end{align*}
 
-% \begin{algorithm}[H]
-%   \SetKwInOut{Input}{input}\SetKwInOut{Output}{output}
-%   \Input{$\boldsymbol{P}(t_0,t_0),\boldsymbol{Q}(t), \boldsymbol{u}(t), \boldsymbol{c}(t), \boldsymbol{\mathcal{C}}(t), \left\{\boldsymbol{Q}'_m(t),\boldsymbol{u}'_m(t),\boldsymbol{c}'_m(t), \boldsymbol{\mathcal{C}}'_m(t)\right\}\forall m, \lambda, t_0, t_\text{max}$} \Output{$\boldsymbol{P}(t_0,t),\boldsymbol{U}(t_0,t),\boldsymbol{C}(t_0,t),\left\{\boldsymbol{P}'_m(t_0,t),\boldsymbol{U}'_m(t_0,t),\boldsymbol{C}'_m(t_0,t)\right\}\forall m\ \text{for}\ t\in\left[t_0,t_\text{max}\right)$}
-%   \Begin{
-
-%   $\boldsymbol{P}'_m(t_0,t_0)=\boldsymbol{U}'_m(t_0,t_0)=\boldsymbol{C}'_m(t_0,t_0)=\boldsymbol{0}$\;
-%   define the ODE based on Equations~(\ref{eq:kolmogorov})--(\ref{eq:dCudt}) and the initial values\;
-%   run an ODE solver from time $t_0$ to time $t_\text{max}$\;
-%   }
-% \end{algorithm}
-
-
 \subsection*{Interval estimation}
 
 For an estimator $\boldsymbol\phi(t_0,t)$ with support on the real line, a confidence interval can be calculated from the variance-covariance matrix $\boldsymbol{V} = \boldsymbol{\phi}'_m(t_0,t)\, \hat{\boldsymbol\Sigma}\, \boldsymbol{\phi}'_m(t_0,t)$ and normal quantiles $z$ at the $\alpha$ level with bounds $\boldsymbol\phi(t_0,t)\pm z_{(1-\frac{\alpha}{2})}\sqrt{\text{diag}(\boldsymbol{V})}$.
-For estimators that are on the open interval $(0,1)$, the gradient can be calculated using a log-log transformation. Similarly, for estimators that are on the open interval $(0,\infty)$, the gradient can be calculated using a log transformation.
+For estimators that are on the open interval $(0,1)$, the gradient can be calculated using an identity or logit transformations. Similarly, for estimators that are on the open interval $(0,\infty)$, the gradient can be calculated using an identity of log transformations.
+% We could present results for the different transformations...
+
 % \begin{align*}
 %   \frac{\partial \log(-\log(\boldsymbol\phi(t_0,t)))}{\partial\hat\beta_m}  &= \frac{\partial\boldsymbol\phi(t_0,t)}{\partial\hat\beta_m}\circ\frac{\boldsymbol{1}}{\log(\boldsymbol\phi(t_0,t))\circ\boldsymbol\phi(t_0,t)} \\
 %   \boldsymbol{V} &=\text{var}(\log(-\log(\boldsymbol{\phi}(t_0,t)))) \\ &= \log(-\log(\boldsymbol{\phi}'_m(t_0,t)))\, \hat{\boldsymbol\Sigma}\, \log(-\log(\boldsymbol{\phi}'_m(t_0,t)))  
@@ -272,16 +296,26 @@ For estimators that are on the open interval $(0,1)$, the gradient can be calcul
 % with bounds $\exp\left(\log(\boldsymbol\phi(t_0,t))\pm z_{(1-\frac{\alpha}{2})}\text{diag}(\boldsymbol{V})\right)$.
 
 
+\section{Simulations}
+
+To assess the small sample properties compared with the asymptotics properties, we undertook several simulations.
+
+
+
 \section{Implementation}
 
-We have implemented the algorithm in \code{R} within the \code{rstpm2} package using the function \code{markov_msm}. The ODE solver uses the \code{ode} function from the \code{deSolve} package with the Adams method for non-stiff ODEs. The \code{markov_msm} scales reasonably well with multiple covariates within the same system of ODEs.
+We have implemented the algorithm in \code{R} within the \code{rstpm2}. The ODE solver uses the Adams method for non-stiff ODEs. 
 
-A basic call to \code{markov_msm()} to estimate the state occupancy probabilities and length of stay would be \code{markov_msm(x, trans, t, newdata)}, where \code{x} is a list of regression models for the transition intensities, \code{trans} is a matrix that defines the multistate transitions as per the \code{mstate} package, \code{t} is a vector of times to report (including the initial time), and \code{newdata} is a data-frame with the covariates for predictions.
+The current implementation allows for independent models for the estimated transition intensities, including Poisson regression using \code{stats::glm}, flexible parametric survival models (\code{rstpm2::stpm2}), and penalised survival models (\code{rstpm2::pstpm2} and \code{survPen::survPen}). The implementation also allows for a transition being set to zero and for functions to represent the transitions. The function scales reasonably well with multiple covariates within the same system of ODEs. 
 
-The current implementation assumes independently estimated transition intensities. The models for the transition intensities need to provide methods for: (i) the covariance matrix (\code{vcov}); (ii) predictions for hazards (\code{predict(object, newdata, type="haz", ...)}); and (iii) predictions for gradients of the hazards (\code{predict(object, newdata, type="gradh", ...)}). These methods have been provided for \code{rstpm2::stpm2}, \code{rtspm2::pstpm2}, \code{stats::glm} for a log link, and \code{survPen::survPen}. Use of \code{stats::glm} will also require that the argument \code{tvar} to specify a character for the name (or vector of names) of the time variables in the regression models for predictions. A transition can be turned off by wrapping a regression object in \code{zeroRate()}.
-% Should I use a common S3 or S4 class?
+For post-processing, the predictions and gradients can be calculated for combinations and subsets of covariates, and for collapsed states, and standardised across covariates. The delta method is available for differences and ratios. 
 
-The object returned from \code{markov_msm()} is of class \code{"markov_msm"}. The object includes predictions and gradients for the times specified for the covariates in the input \code{newdata} data-frame. Methods are provided for: \code{print}; \code{as.data.frame}; \code{subset(x, subset, ...)} based on a restriction of \code{newdata}; \code{standardise}, which averages across covariate patterns and returns another \code{markov_msm} object. Other functions include \code{diff(x,y)} which takes a difference between two \code{markov_msm} objects, and \code{ratio_markov_msm}, which gives the ratio of two \code{markov_msm} objects; both of these functions return objects that inherit from \code{"markov_msm"}.
+% A basic call to \code{markov_msm()} to estimate the state occupancy probabilities and length of stay would be \code{markov_msm(x, trans, t, newdata)}, where \code{x} is a list of regression models for the transition intensities, \code{trans} is a matrix that defines the multistate transitions as per the \code{mstate} package, \code{t} is a vector of times to report (including the initial time), and \code{newdata} is a data-frame with the covariates for predictions.
+
+% The current implementation assumes independently estimated transition intensities. The models for the transition intensities need to provide methods for: (i) the covariance matrix (\code{vcov}); (ii) predictions for hazards (\code{predict(object, newdata, type="haz", ...)}); and (iii) predictions for gradients of the hazards (\code{predict(object, newdata, type="gradh", ...)}). These methods have been provided for \code{rstpm2::stpm2}, \code{rtspm2::pstpm2}, \code{stats::glm} for a log link, and \code{survPen::survPen}. Use of \code{stats::glm} will also require that the argument \code{tvar} to specify a character for the name (or vector of names) of the time variables in the regression models for predictions. A transition can be turned off by wrapping a regression object in \code{zeroRate()}.
+% % Should I use a common S3 or S4 class?
+
+% The object returned from \code{markov_msm()} is of class \code{"markov_msm"}. The object includes predictions and gradients for the times specified for the covariates in the input \code{newdata} data-frame. Methods are provided for: \code{print}; \code{as.data.frame}; \code{subset(x, subset, ...)} based on a restriction of \code{newdata}; \code{standardise}, which averages across covariate patterns and returns another \code{markov_msm} object. Other functions include \code{diff(x,y)} which takes a difference between two \code{markov_msm} objects, and \code{ratio_markov_msm}, which gives the ratio of two \code{markov_msm} objects; both of these functions return objects that inherit from \code{"markov_msm"}.
 
 % Differences from the same models are just different weights...
 
