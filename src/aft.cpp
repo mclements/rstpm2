@@ -401,6 +401,7 @@ namespace rstpm2 {
       // model.pre_process();
       NelderMead nm;
       nm.trace = as<int>(list["trace"]);
+      nm.maxit = as<int>(list["maxit"]);
       NumericVector betafull = as<NumericVector>(wrap(model.init));
       nm.optim<aft>(betafull,model);
       // model.post_process();
@@ -412,6 +413,7 @@ namespace rstpm2 {
       // model.pre_process();
       BFGS bfgs;
       bfgs.trace = as<int>(list["trace"]);
+      bfgs.maxit = as<int>(list["maxit"]);
       NumericVector betafull = as<NumericVector>(wrap(model.init));
       bfgs.optim<aft>(betafull,model);
       // model.post_process();
