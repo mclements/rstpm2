@@ -534,12 +534,10 @@ xyplot.markov_msm <- function(x, data, strata=NULL,
 ratio_markov_msm <- function(x, y, ...) {
     stopifnot(inherits(x,"markov_msm"))
     stopifnot(inherits(y,"markov_msm"))
-    ## vcov, time, trans, stand.wt and stand.normalise should all be the same
+    ## vcov, time and trans should all be the same
     stopifnot(all(x$vcov == y$vcov))
     stopifnot(all(x$time == y$time))
     stopifnot(all(x$trans == y$trans, na.rm=TRUE))
-    stopifnot(all(x$stand.wt == y$stand.wt))
-    stopifnot(x$stand.normalise == y$stand.normalise)
     z <- list(P=log(x$P/y$P), L=log(x$L/y$L)) # logs of the ratios
     z$Pu <- apply(x$Pu, 3, function(slice) slice/x$P) - apply(y$Pu, 3, function(slice) slice/y$P)
     dim(z$Pu) <- dim(x$Pu)
@@ -619,7 +617,7 @@ reorder <- function(x,order) {
 nrow.markov_msm <- function(x, ...) nrow(as.data.frame(x, ...)) 
 vcov.markov_msm <- function(object, ...) object$vcov
 
-collapse.states <- function(object, which=NULL, sep="; ") {
+collapse_markov_msm <- function(object, which=NULL, sep="; ") {
     ## example: which=c(1,2) => combine states 1 and 2
     stopifnot(inherits(object, "markov_msm"))
     stopifnot(!is.null(which))
