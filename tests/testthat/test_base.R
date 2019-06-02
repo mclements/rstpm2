@@ -2,6 +2,7 @@ library(rstpm2)
 
 ## for coping with weird test behaviour from CRAN and R-devel
 .CRAN <- FALSE
+## pstpm2+frailty models are slow
 slow <- FALSE
 
 expect_eps <- function(expr, value, eps=1e-7)
@@ -12,9 +13,16 @@ context("stpm2")
 test_that("base", {
     fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)
     expect_eps(coef(fit)[2], -0.361403, 1e-5)
+})
+test_that("NelderMead", {
     fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
                  control=list(optimiser="NelderMead"))
     expect_eps(coef(fit)[2], -0.3608321, 1e-5)
+})
+test_that("tvc", {
+    ## main effect IS needed for the parametric case (else constrained to be 0 at first event time)
+    fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,tvc=list(hormon=2))
+    expect_eps(coef(fit)[2], -0.9930585, 1e-5)
 })
 test_that("Comparison with Stata", {
     fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
@@ -57,6 +65,21 @@ test_that("base", {
 })
 
 if (slow) {
+    test_that("tvc arg", {
+        fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer,tvc=list(hormon=-1))
+        expect_eps(coef(fit)[1], -1.456845e+00, 1e-5)
+        ## main effect is removed by the tvc call
+        fit2 <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,tvc=list(hormon=-1))
+        expect_eps(coef(fit), coef(fit2), 1e-10)
+        fit3 <- pstpm2(Surv(rectime,censrec==1)~hormon+x1,data=brcancer,tvc=list(hormon=-1))
+        expect_eps(coef(fit3)[2], -2.426229e-04, 1e-5)
+    })
+    test_that("tvc using smooth.formula", {
+        ## main effect should be EXCLUDED for the penalised case
+        fit <- pstpm2(Surv(rectime,censrec==1)~1,data=brcancer,
+                      smooth.formula=~s(log(rectime))+s(log(rectime),by=hormon))
+        expect_eps(coef(fit)[1], -1.456845e+00, 1e-5)
+    })
     context("pstpm2 + frailty")
     ##
     test_that("base", {
