@@ -1319,7 +1319,6 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                                      gr=gradnegll, ..., eval.only=TRUE)
             else mle2(negll, coef, vecpar=TRUE, control=control$mle2.control, ..., eval.only=TRUE)
     mle2@details$convergence <- if (penalised) 0 else fit$fail # fit$itrmcd
-    browser()
     if (inherits(vcov <- try(solve(hessian)), "try-error")) {
         if (control$optimiser=="NelderMead") {
             warning("Non-invertible Hessian")
@@ -1944,7 +1943,6 @@ setMethod("summary", "stpm2",
                   p.value <- pchisq(test.statistic,df=1,lower.tail=FALSE)/2
                   newobj@theta <- list(theta=theta, se.theta=se.theta, p.value=p.value)
               } else if (object@frailty && is.matrix(object@args$Z) && ncol(object@args$Z)==2) {
-                  ## browser()
                   coef <- coef(object)
                   index <- (length(coef)-2):length(coef)
                   coef <- coef[index]
@@ -2292,7 +2290,6 @@ predict.stpm2.base <-
         return(pred)
     }
     if (object@frailty && type %in% c("meanmargsurv") && args$RandDist=="Gamma" && !object@args$interval && !object@args$delayed) {
-        ## browser()
         times <- newdata[[object@timeVar]]
         utimes <- sort(unique(times))
         n <- nrow(X)/length(utimes)
@@ -2319,7 +2316,6 @@ predict.stpm2.base <-
         fit <- meanS
         se.fit <- vector("numeric",length(utimes))
         for (i in 1:length(utimes)) {
-            ## browser()
             index <- which(times==utimes[i])
             newobj <- object
             newobj@args$X <- X[index,,drop=FALSE]
@@ -3239,7 +3235,6 @@ pstpm2.old <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ttype <- 0
     transX <- function(X, data) X
     transXD <- function(XD) XD
-    ## browser()
     smooth <- gam.obj$smooth
     if (!interval) { # surv.type %in% c("right","counting")
         X <- predict(gam.obj,data,type="lpmatrix")
