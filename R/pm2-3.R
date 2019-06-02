@@ -510,6 +510,7 @@ if (FALSE) {
         print(rstpm2:::fd(function(beta) link$H(Xstar%*%beta), betastar)-t(link$gradH(etastar,obj)))
     }
 }
+bhazard <- function(x) x
 
 stpm2.control <- function(parscale=1,
                           maxit=300,
@@ -681,6 +682,11 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         warning("logH.args is deprecated - use smooth.formula")
         smooth.args <- logH.args
     }
+    ## set na.action=na.pass (and reset at end)
+    na.action.old <- options()[["na.action"]]
+    options(na.action = "na.pass")
+    on.exit(options(na.action = na.action.old))
+    ##
     ## set up the data
     ## ensure that data is a data frame
     temp.formula <- formula
@@ -709,45 +715,6 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         time2Expr <- lhs(formula)[[3]]
     if (timeVar == "")
         timeVar <- all.vars(timeExpr)
-    ## restrict to non-missing data (assumes na.action=na.omit)
-    na.action.old <- options()[["na.action"]]
-    options(na.action = "na.pass")
-    on.exit(options(na.action = na.action.old))
-    subset.expr <- substitute(subset)
-    if(class(subset.expr)=="NULL") subset.expr <- TRUE
-    .include <- complete.cases(model.matrix(formula, data)) &
-        !is.na(eval(eventExpr,data,parent.frame())) &
-        eval(subset.expr,data,parent.frame())
-    options(na.action = na.action.old)
-    if (!interval) {
-        time <- eval(timeExpr,data,parent.frame())
-        if (any(is.na(time))) warning("Some event times are NA")
-        if (any(ifelse(is.na(time),FALSE,time<=0))) warning("Some event times <= 0")
-        .include <- .include & ifelse(is.na(time), FALSE, time>0)
-    }
-    time0Expr <- NULL # initialise
-    if (delayed) {
-        time0Expr <- lhs(formula)[[2]]
-        if (time0Var == "")
-            time0Var <- all.vars(time0Expr)
-        time0 <- eval(time0Expr,data,parent.frame())
-        if (any(is.na(time0))) warning("Some entry times are NA")
-        if (any(ifelse(is.na(time0),FALSE,time0<0))) warning("Some entry times < 0")
-        .include <- .include & ifelse(is.na(time0), FALSE, time0>=0)
-    }
-    if (!is.null(substitute(weights)))
-        .include <- .include & !is.na(eval(substitute(weights),data,parent.frame()))
-    data <- data[.include, , drop=FALSE]
-    ## we can now evaluate over data
-    time <- eval(timeExpr, data, parent.frame())
-    if (delayed) {
-        time0 <- eval(time0Expr, data, parent.frame())
-    }
-    event <- eval(eventExpr,data,parent.frame())
-    if (!interval)
-        event <- if (length(unique(event))==1) rep(TRUE, length(event))
-                 else event <- event > min(event)
-    nevent <- sum(event)
     ##
     ## set up the formulae
     if (is.null(smooth.formula) && is.null(smooth.args)) {
@@ -845,28 +812,105 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     fullformula <- as.formula(paste0(left, "+", right), env = parent.frame())
     rm(left,right) # tidy up
     ##
+    ##
     ## Different models:
     ## lm (full.formula - cluster), survreg (formula - cluster), coxph (formula - cluster), full
     lm.formula <- formula(full.formula)
     base.formula <- formula
-    ## Specials
-    cluster.index <- attr(terms.formula(formula, "cluster"), "specials")$cluster
-    if (length(cluster.index)>0) {
+    ## Specials:
+    specials.names <- c("cluster","bhazard")
+    specials <- attr(terms.formula(formula, specials.names), "specials")
+    if (any(!sapply(specials,is.null))) {
+        cluster.index <- specials$cluster
+        bhazard.index <- specials$bhazard
         spcall <- mf
         spcall[[1]] <- quote(stats::model.frame)
-        spcall$formula <- terms(formula, "cluster", data = data)
+        spcall$formula <- terms(formula, specials.names, data = data)
         mf2 <- eval(spcall, parent.frame())
-        cluster <- mf2[, cluster.index]
-        frailty = !is.null(cluster) & !robust
-        base.formula <- formula(drop.terms(terms(mf2), cluster.index - 1, keep.response=TRUE))
-        cluster.index2 <- attr(terms.formula(full.formula, "cluster"), "specials")$cluster
-        lm.formula <- formula(drop.terms(terms(full.formula), cluster.index2 - 1))
+        if (length(cluster.index)>0) {
+            cluster <- mf2[, cluster.index]
+            frailty = !is.null(cluster) && !robust
+            base.formula <- formula(drop.terms(terms(mf2), cluster.index - 1, keep.response=TRUE))
+            cluster.index2 <- attr(terms.formula(full.formula, "cluster"), "specials")$cluster
+            lm.formula <- formula(drop.terms(terms(full.formula), cluster.index2 - 1))
+        }
+        if (length(bhazard.index)>0) {
+            bhazard <- mf2[, bhazard.index]
+            base.formula <- formula(drop.terms(terms(mf2), bhazard.index - 1, keep.response=TRUE))
+            bhazard.index2 <- attr(terms.formula(full.formula, "bhazard"), "specials")$bhazard
+            lm.formula <- formula(drop.terms(terms(full.formula), bhazard.index2 - 1))
+        }
+        if (length(cluster.index)>0 && length(bhazard.index)>0) {
+            base.formula <- formula(drop.terms(terms(mf2), c(cluster.index,bhazard.index) - 1,
+                                               keep.response=TRUE))
+            lm.formula <- formula(drop.terms(terms(full.formula),
+                                             c(cluster.index2,bhazard.index2) - 1))
+        }
         ## rm(mf2,spcall)
     }
     ## deprecated code for cluster
-    if (is.character(cluster) && length(cluster)==1) cluster <- data[[cluster]]
-    if (length(cluster)>nrow(data) && length(cluster)==length(.include))
+    cluster <- substitute(cluster)
+    cluster <- switch(class(cluster),
+                      integer=cluster,
+                      numeric=cluster,
+                      call=eval(cluster, data, parent.frame()),
+                      NULL=NULL,
+                      name=eval(cluster, data, parent.frame()),
+                      character=data[[cluster]])
+    ## deprecated code for bhazard
+    bhazard <- substitute(bhazard)
+    bhazard <- switch(class(bhazard),
+                      integer=bhazard,
+                      numeric=bhazard,
+                      call=bhazard,
+                      NULL=rep(0,nrow(data)),
+                      name=eval(bhazard, data, parent.frame()),
+                      character=data[[bhazard]])
+    ##
+    subset.expr <- substitute(subset)
+    if(class(subset.expr)=="NULL") subset.expr <- TRUE
+    .include <- complete.cases(model.matrix(formula, data)) &
+        !is.na(eval(eventExpr,data,parent.frame())) &
+        eval(subset.expr,data,parent.frame())
+    options(na.action = na.action.old)
+    if (!interval) {
+        time <- eval(timeExpr,data,parent.frame())
+        if (any(is.na(time))) warning("Some event times are NA")
+        if (any(ifelse(is.na(time),FALSE,time<=0))) warning("Some event times <= 0")
+        .include <- .include & ifelse(is.na(time), FALSE, time>0)
+    }
+    time0Expr <- NULL # initialise
+    if (delayed) {
+        time0Expr <- lhs(formula)[[2]]
+        if (time0Var == "")
+            time0Var <- all.vars(time0Expr)
+        time0 <- eval(time0Expr,data,parent.frame())
+        if (any(is.na(time0))) warning("Some entry times are NA")
+        if (any(ifelse(is.na(time0),FALSE,time0<0))) warning("Some entry times < 0")
+        .include <- .include & ifelse(is.na(time0), FALSE, time0>=0)
+    }
+    if (!is.null(substitute(weights)))
+        .include <- .include & !is.na(eval(substitute(weights),data,parent.frame()))
+    ##
+    if (!is.null(cluster))
+        .include <- .include & !is.na(cluster)
+    .include <- .include & !is.na(bhazard)
+    excess <- !all(bhazard==0)
+    ##
+    data <- data[.include, , drop=FALSE]
+    ## we can now evaluate over data
+    time <- eval(timeExpr, data, parent.frame())
+    if (delayed) {
+        time0 <- eval(time0Expr, data, parent.frame())
+    }
+    event <- eval(eventExpr,data,parent.frame())
+    if (!interval)
+        event <- if (length(unique(event))==1) rep(TRUE, length(event))
+                 else event <- event > min(event)
+    nevent <- sum(event)
+    if (!is.null(cluster))
         cluster <- cluster[.include]
+    bhazard <- bhazard[.include]
     ## setup for initial values
     if (!interval) {
         ## Cox regression
@@ -962,10 +1006,6 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         data[[var]] <- x
         lpmatrix.lm(fit,data)
     }
-    ##
-    bhazard <- substitute(bhazard)
-    bhazard <- if (is.null(bhazard)) rep(0,nrow(data)) else eval(bhazard,data,parent.frame())
-    excess <- !all(bhazard==0)
     ## initialise values specific to either delayed entry or interval-censored
     ind0 <- FALSE
     map0 <- 0L

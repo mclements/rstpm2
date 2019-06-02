@@ -55,10 +55,10 @@ test_that("Predictions with missing values - stpm2", {
     for(name in names(test))
         expect_eps(predict(fit1,newdata=data.frame(hormon=1,rectime=1000),type=name),
                    test[name], 1e-6)
-    test <- c(hr=0.6980334, hdiff=-0.000101238)
-    for(name in names(test))
-        expect_eps(predict(fit1,newdata=data.frame(hormon=1,rectime=1000),type=name,var="hormon"),
-                   test[name], 1e-6)
+    expect_eps(predict(fit1,newdata=data.frame(hormon=1,rectime=1000),type="hr",var="hormon"),
+               0.6980347, 1e-6)
+    expect_eps(predict(fit1,newdata=data.frame(hormon=1,rectime=1000),type="hdiff",var="hormon"),
+               -0.0001012377, 1e-6)
 })
 
 ## clustered data
@@ -137,16 +137,31 @@ test_that("Missing weight - stpm2+frailty", {
     expect_length(predict(fit2), 685)
 })
 
+test_that("Missing cluster - stpm2+frailty", {
+    brcancer2 <- rstpm2::brcancer
+    brcancer2$id[1] <- NA
+    fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
+                  cluster=brcancer2$id)
+    expect_eps(coef(fit)[2],-0.3594864, 1e-5)
+    expect_length(predict(fit), 685)
+    fit2 <- stpm2(Surv(rectime,censrec==1)~hormon+cluster(id),data=brcancer2)
+    expect_eps(coef(fit),coef(fit2), 1e-10)
+    fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,cluster=id)
+    expect_eps(coef(fit),coef(fit2), 1e-10)
+    fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,cluster="id")
+    expect_eps(coef(fit),coef(fit2), 1e-10)
+})
+
+
 test_that("Predictions with missing values - stpm2+frailty", {
     brcancer2 <- transform(rstpm2::brcancer, w=1)
     brcancer2$id <- rep(1:20,length=nrow(brcancer2))
     brcancer2$w[1] <- NA
     fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w,
                   cluster=brcancer2$id)
-    test <- c(surv=0.723019497640937, fail=0.276980502359063, haz=0.000335263734697713)
-    for(name in names(test))
-        expect_eps(predict(fit2,newdata=data.frame(hormon=1,rectime=1000),type=name),
-                   test[name], 1e-6)
+    expect_eps(predict(fit2,newdata=data.frame(hormon=1,rectime=1000),type="surv"),0.7230205,1e-6)
+    expect_eps(predict(fit2,newdata=data.frame(hormon=1,rectime=1000),type="fail"),0.2769795,1e-6)
+    expect_eps(predict(fit2,newdata=data.frame(hormon=1,rectime=1000),type="haz"),0.0003352615,1e-6)
     test <- c(hr=0.698037012518642, hdiff=-0.000101237238923479)
     for(name in names(test))
         expect_eps(predict(fit2,newdata=data.frame(hormon=1,rectime=1000),type=name,var="hormon"),
