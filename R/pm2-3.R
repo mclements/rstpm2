@@ -349,6 +349,7 @@ predict.formula <- function(object,data,newdata,na.action,type="model.matrix",
   model.matrix(mt, mfnew, contrasts=contrasts)
 }
 `%call+%` <- function(left,right) call("+",left,right)
+`%call-%` <- function(left,right) call("-",left,right)
 ##
 bread.stpm2 <- function (x, ...) {
   rval <- vcov(x) * nrow(x@y)
@@ -758,8 +759,8 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             if (cure) smooth.args$cure <- cure
         }
     }
+    smoother <- if (penalised) quote(s) else quote(nsx)
     if (is.null(smooth.formula)) {
-        smoother <- if (penalised) quote(s) else quote(nsx)
         smooth.formula <- as.formula(call("~",as.call(c(smoother,call("log",timeExpr),
                                                         vector2call(smooth.args)))))
         if (link.type=="AH") {
@@ -785,8 +786,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             }
         }
     }
-    if (is.null(tvc.formula) && !is.null(tvc)) {
-        smoother <- if (penalised) quote(s) else quote(nsx)
+    if (!penalised && is.null(tvc.formula) && !is.null(tvc)) {
         tvc.formulas <-
             lapply(names(tvc), function(name)
                 call(":",
@@ -800,17 +800,42 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
         tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
     }
+    if (penalised && is.null(tvc.formula) && !is.null(tvc)) {
+        tvc.formulas <-
+            lapply(names(tvc), function(name)
+                as.call(c(quote(s),
+                          call("log",timeExpr),
+                          vector2call(list(by=as.name(name),k=tvc[[name]])))))
+        if (length(tvc.formulas)>1)
+            tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
+        tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
+        ## remove any main effects (special case: a single term)
+        Terms <- terms(formula)
+        constantOnly <- FALSE
+        for (name in names(tvc)) {
+            .i <- match(name,attr(Terms,"term.labels"))
+            if (!is.na(.i)) {
+                if (.i==1 && length(attr(Terms,"term.labels"))==1) {
+                    constantOnly <- TRUE
+                } else Terms <- drop.terms(Terms,.i,keep=TRUE)
+            }
+        }
+        formula <- formula(Terms)
+        if (constantOnly)
+            rhs(formula) <- quote(1)
+        rm(constantOnly,Terms)
+    }
     if (!is.null(tvc.formula)) {
         rhs(smooth.formula) <- rhs(smooth.formula) %call+% rhs(tvc.formula)
     }
     if (baseoff)
         rhs(smooth.formula) <- rhs(tvc.formula)
     full.formula <- formula
-    if (link.type == "AH")
+    if (link.type == "AH") {
         rhs(full.formula) <- rhs(smooth.formula)
-    else
+    } else {
         rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
-    rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
+    }
     Z.formula <- Z
     ##
     left <- deparse(formula)
