@@ -23,6 +23,18 @@ setwd("~/src/R/rstpm2")
 library(devtools)
 devtools::test()
 
+## bug #3 on GitHub
+library(rstpm2)
+# Function with model_formula paramter **ERRORS**
+f_bad <- function(model_formula)
+  stpm2(formula = model_formula, df = 2, data=brcancer, link.type = "PH")
+# Function with formula paramter to match the name pf stpm2's formula parameter **PASSES**
+f_good <- function(formula)
+  stpm2(formula = formula, df = 2, data=brcancer, link.type = "PH")
+f_bad (model_formula = Surv(rectime,censrec==1)~hormon)
+f_good (formula = Surv(rectime,censrec==1)~hormon)
+
+
 ## random draws
 library(rstpm2)
 predict.cumhaz <-
