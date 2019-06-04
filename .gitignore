@@ -5,6 +5,7 @@
 *.fls
 *.fdb_latexmk
 *.log
+*.dvi
 auto
 *.out
 ...Rcheck
