@@ -54,24 +54,6 @@ test_that("base", {
     expect_eps(coef(fit)[6], 0.02906888, 1e-5)
 })
 
-test_that("excess", {
-    set.seed(12345)
-    x <- rnorm(1e3,0,0.2)
-    cause1 <- rexp(1e3,1e-3*exp(x))
-    other <- rexp(1e3,1e-4)
-    e <- cause1<other
-    y <- pmin(cause1,other)
-    d <- data.frame(e,y,bg=1e-6,x)
-    fit <- stpm2(Surv(y,e)~x+bhazard(bg),data=d)
-    expect_eps(coef(fit)[2], 0.9702763, 1e-5)
-    fit2 <- stpm2(Surv(y,e)~x,data=d,bhazard=bg)
-    expect_eps(coef(fit), coef(fit2), 1e-5)
-    fit2 <- stpm2(Surv(y,e)~x,data=d,bhazard="bg")
-    expect_eps(coef(fit), coef(fit2), 1e-5)
-    ## fit2 <- stpm2(Surv(y,e)~x,data=d,bhazard=d$bg)
-    ## expect_eps(coef(fit), coef(fit2), 1e-5)
-})
-
 context("pstpm2")
 ##
 test_that("base", {

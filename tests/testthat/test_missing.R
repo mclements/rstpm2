@@ -61,6 +61,25 @@ test_that("Predictions with missing values - stpm2", {
                -0.0001012377, 1e-6)
 })
 
+test_that("Missing bhazard - stpm2", {
+    set.seed(12345)
+    x <- rnorm(1e3,0,0.2)
+    cause1 <- rexp(1e3,1e-3*exp(x))
+    other <- rexp(1e3,1e-4)
+    e <- cause1<other
+    y <- pmin(cause1,other)
+    d <- data.frame(e,y,bg=1e-6,x)
+    d$bg[1] <- NA
+    fit <- stpm2(Surv(y,e)~x+bhazard(bg),data=d)
+    expect_eps(coef(fit)[2], 0.9687793, 1e-5)
+    fit2 <- stpm2(Surv(y,e)~x,data=d,bhazard=bg)
+    expect_eps(coef(fit), coef(fit2), 1e-5)
+    fit2 <- stpm2(Surv(y,e)~x,data=d,bhazard="bg")
+    expect_eps(coef(fit), coef(fit2), 1e-5)
+    fit2 <- stpm2(Surv(y,e)~x,data=d,bhazard=d$bg)
+    expect_eps(coef(fit), coef(fit2), 1e-5)
+})
+
 ## clustered data
 context("Missing data - stpm2+frailty")
 ## brcancer2 <- rstpm2::brcancer
