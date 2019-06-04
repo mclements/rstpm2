@@ -14,7 +14,7 @@
 \alias{ratio_markov_msm}
 \alias{rbind.markov_msm}
 \alias{transform.markov_msm}
-\alias{collapse.states}
+\alias{collapse_markov_msm}
 \alias{zeroRate}
 \title{
 Predictions for continuous time, nonhomogeneous Markov multi-state
@@ -30,13 +30,14 @@ utilities), length of stay and costs. Standard errors are calculated
 using the delta method. Includes, differences, ratios and standardisation.
 }
 \usage{
-markov <- msm(x, trans, t = c(0,1), newdata = NULL, init="[<-"(rep(0,nrow(trans)),1,1),
+markov <- msm(x, trans, t = c(0,1), newdata = NULL, init=NULL,
               tmvar = NULL, 
               sing.inf = 1e+10, method="adams", rtol=1e-10, atol=1e-10, slow=FALSE,
               min.tm=1e-8,
               utility=function(t) rep(1, nrow(trans)),
               use.costs=FALSE,
-              transition.costs=lapply(1:sum(!is.na(trans)), function(i) function(t) 1000), # per transition
+              transition.costs=lapply(1:sum(!is.na(trans)),
+	                              function(i) function(t) 1000), # per transition
               state.costs=function(t) rep(0,nrow(trans)), # per unit time
               discount.rate = 0,
               block.size=500,
@@ -61,12 +62,11 @@ standardise(x, \dots)
                           strata=NULL,
                           \dots)
 \method{subset}{markov_msm}(x, subset, \dots)
-diff(x, \dots)
 \method{diff}{markov_msm}(x, y, \dots)
 ratio_markov_msm(x, y, \dots)
 \method{rbind}{markov_msm}(\dots, deparse.level=1)
 \method{transform}{markov_msm}(`_data`, \dots)
-collapse.states(object, which=NULL, sep="; ")
+collapse_markov_msm(object, which=NULL, sep="; ")
 zeroRate(object)
 }
 %- maybe also 'usage' for other objects documented here.
@@ -77,6 +77,7 @@ For \code{markov_msm}:
 list of functions or parametric or penalised survival models. Currently
 the models include
 combinations of \code{\link{stpm2}}, \code{\link{pstpm2}}, \code{\link[stats]{glm}},
+\code{\link[mgcv]{gam}},
 \code{\link[survPen]{survPen}} or an object of class \code{"zeroRate"} from
 \code{\link{zeroRate}} based on one of the other classes. The order in
 the list matches the indexing in the \code{trans} argument. The
@@ -102,7 +103,7 @@ the start time
 }
   \item{init}{
 vector of the initial values with the same length as the number of states. Defaults to the first state having an
-initial value of 1. 
+initial value of 1 (i.e. \code{"[<-"(rep(0,nrow(trans)),1,1)}).
 }
   \item{tmvar}{
 specifies the name of the time variable. This should be set for

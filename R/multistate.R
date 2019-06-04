@@ -1,5 +1,5 @@
 markov_msm <- 
-    function (x, trans, t = c(0,1), newdata = NULL, init="[<-"(rep(0,nrow(trans)),1,1),
+    function (x, trans, t = c(0,1), newdata = NULL, init=NULL,
               tmvar = NULL, 
               sing.inf = 1e+10, method="adams", rtol=1e-10, atol=1e-10, slow=FALSE,
               min.tm=1e-8,
@@ -15,10 +15,11 @@ markov_msm <-
     call <- match.call()
     inherits <- function(x, ...)
         base::inherits(x, ...) || (base::inherits(x, "zeroRate") && base::inherits(x$base, ...))
-    base.classes <- c("stpm2","pstpm2","glm","survPen")
+    base.classes <- c("stpm2","pstpm2","glm","survPen","gam")
     stopifnot(all(sapply(x, function(xi) inherits(xi,base.classes) | is.function(xi))))
     stopifnot(!is.null(newdata))
     stopifnot(sum(!is.na(trans)) == length(x))
+    if (is.null(init)) init <- "[<-"(rep(0,nrow(trans)),1,1)
     stopifnot(length(init) == nrow(trans))
     ## if newdata are many, then separate into blocks
     if (nrow(newdata)>block.size) {
@@ -57,6 +58,8 @@ markov_msm <-
     for(i in 1:length(x)) {
         if(inherits(x[[i]],"survPen") && !inherits(x[[i]],"survPenWrap"))
             x[[i]] <- survPenWrap(x[[i]])
+        if(inherits(x[[i]],"gam") && !inherits(x[[i]],"gamWrap"))
+            x[[i]] <- gamWrap(x[[i]])
         else if(is.function(x[[i]]))
             x[[i]] <- hazFun(x[[i]], tmvar[i])
     }
@@ -272,7 +275,8 @@ vcov.survPen <- function(object) object$Vp
 }
 survPenWrap <- function(object) {
     stopifnot(inherits(object, "survPen"))
-    class(object) <- c("survPenWrap", class(object))
+    if (!inherits(object, "survPenWrap"))
+        class(object) <- c("survPenWrap", class(object))
     object
 }
 predict.survPenWrap <- function(object, newdata, type=NULL, ...) {
@@ -282,15 +286,35 @@ predict.survPenWrap <- function(object, newdata, type=NULL, ...) {
                                 predict(object, newdata=newdata, do.surv=FALSE)$haz
     else NextMethod("predict", object)
 }
-predict.glm <- function (object, newdata=NULL, type=c("haz","gradh"), ...) {
-    type <- match.arg(type)
-    if(object$family$link != "log")
+predict.glm <- function (object, newdata=NULL, type=NULL, ...) {
+    if (is.null(type)) NextMethod("predict", object)
+    if(type=="gradh" && object$family$link != "log")
         stop("Currently only implemented for a log link")
     ## stopifnot() # Poisson family with log link?
     ## assumes response is a rate
     if(type=="haz") stats::predict.glm(object, newdata=newdata, type="response") 
-    else stats::predict.glm(object, newdata=newdata, type="response") *
-             lpmatrix.lm(object, newdata=newdata)
+    else if (type=="gradh")
+        stats::predict.glm(object, newdata=newdata, type="response") *
+            lpmatrix.lm(object, newdata=newdata)
+    else NextMethod("predict", object)
+}
+gamWrap <-  function(object) {
+    stopifnot(inherits(object, "gam"))
+    if (!inherits(object, "gamWrap"))
+        class(object) <- c("gamWrap", class(object))
+    object
+}
+predict.gamWrap <- function (object, newdata=NULL, type=NULL, ...) {
+    if (is.null(type)) NextMethod("predict", object)
+    if(type=="gradh" && object$family$link != "log")
+        stop("Currently only implemented for a log link")
+    ## stopifnot() # Poisson family with log link?
+    ## assumes response is a rate
+    if (type=="haz") predict(object, newdata=newdata, type="response") 
+    else if (type=="gradh") {
+        as.vector(predict(object, newdata=newdata, type="response")) *
+            predict(object, newdata=newdata, type="lpmatrix")
+    } else NextMethod("predict", object)
 }
 surv.confint <- function(p, se, conf.type=c("log","log-log","plain","logit","arcsin"),
                          conf.int=0.95, min.value=0, max.value=1) {
@@ -564,51 +588,51 @@ as.data.frame.markov_msm_ratio <- function(x, ...) {
     z
 }
 
-prev_markov_msm <- function(x, w, ...) {
-    stopifnot(inherits(x,"markov_msm"))
-    stopifnot(nrow(x$trans) == length(w))
-    stopifnot(all(w %in% 0:1))
-    x <- msm2
-    w <- c(1,1,0)
-    pi <- piL <- P <- L <- array(0,dim(x$P))
-    sumP <- sumL <- array(0,dim(x$P)[-2])
-    for (i in 1:length(w)) {
-        P[,i,] <- x$P[,i,]*w[i]
-        L[,i,] <- x$L[,i,]*w[i]
-        sumP <- sumP + P[,i,]
-        sumL <- sumL + L[,i,]
-    }
-    for (i in 1:length(w)) {
-        pi[,i,] <- P[,i,]/sumP
-        piL[,i,] <- P[,i,]/sumL
-    }
-    dw <- diag(w)
-    logit <- stats::poisson()$linkinv
-    z <- list(P=logit(P), L=log(L)) # logit and log
-    z$Pu <- apply(x$Pu, 3, function(slice) slice/x$P) - apply(y$Pu, 3, function(slice) slice/y$P)
-    dim(z$Pu) <- dim(x$Pu)
-    dimnames(z$Pu) <- dimnames(x$Pu)
-    z$Lu <- apply(x$Lu, 3, function(slice) slice/x$L) - apply(y$Lu, 3, function(slice) slice/y$L)
-    dim(z$Lu) <- dim(x$Lu)
-    dimnames(z$Lu) <- dimnames(x$Lu)
-    z <- c(list(time=x$time,
-                vcov=x$vcov,
-                trans=x$trans,
-                res=NULL),
-           z)
-    z$call <- match.call()
-    z$newdata <- x$newdata
-    z$newdata[x$newdata != y$newdata] <-  NA
-    class(z) <- c("markov_msm_prev","markov_msm") # not strictly "markov_msm"...
-    z
-}
-as.data.frame.markov_msm_prev <- function(x, ...) {
-    ## data are on a log scale!!
-    z <- as.data.frame.markov_msm_diff(x, ...)
-    for (name in c("P","L","P.lower","P.upper","L.lower","L.upper"))
-        z[[name]] <- exp(z[[name]])
-    z
-}
+## prev_markov_msm <- function(x, w, ...) {
+##     stopifnot(inherits(x,"markov_msm"))
+##     stopifnot(nrow(x$trans) == length(w))
+##     stopifnot(all(w %in% 0:1))
+##     x <- msm2
+##     w <- c(1,1,0)
+##     pi <- piL <- P <- L <- array(0,dim(x$P))
+##     sumP <- sumL <- array(0,dim(x$P)[-2])
+##     for (i in 1:length(w)) {
+##         P[,i,] <- x$P[,i,]*w[i]
+##         L[,i,] <- x$L[,i,]*w[i]
+##         sumP <- sumP + P[,i,]
+##         sumL <- sumL + L[,i,]
+##     }
+##     for (i in 1:length(w)) {
+##         pi[,i,] <- P[,i,]/sumP
+##         piL[,i,] <- P[,i,]/sumL
+##     }
+##     dw <- diag(w)
+##     logit <- stats::poisson()$linkinv
+##     z <- list(P=logit(P), L=log(L)) # logit and log
+##     z$Pu <- apply(x$Pu, 3, function(slice) slice/x$P) - apply(y$Pu, 3, function(slice) slice/y$P)
+##     dim(z$Pu) <- dim(x$Pu)
+##     dimnames(z$Pu) <- dimnames(x$Pu)
+##     z$Lu <- apply(x$Lu, 3, function(slice) slice/x$L) - apply(y$Lu, 3, function(slice) slice/y$L)
+##     dim(z$Lu) <- dim(x$Lu)
+##     dimnames(z$Lu) <- dimnames(x$Lu)
+##     z <- c(list(time=x$time,
+##                 vcov=x$vcov,
+##                 trans=x$trans,
+##                 res=NULL),
+##            z)
+##     z$call <- match.call()
+##     z$newdata <- x$newdata
+##     z$newdata[x$newdata != y$newdata] <-  NA
+##     class(z) <- c("markov_msm_prev","markov_msm") # not strictly "markov_msm"...
+##     z
+## }
+## as.data.frame.markov_msm_prev <- function(x, ...) {
+##     ## data are on a log scale!!
+##     z <- as.data.frame.markov_msm_diff(x, ...)
+##     for (name in c("P","L","P.lower","P.upper","L.lower","L.upper"))
+##         z[[name]] <- exp(z[[name]])
+##     z
+## }
 
 
 bindlast <- function(...) { # bind on last slice for a bag of arrays
