@@ -643,10 +643,11 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                 nodes=NULL, RandDist=c("Gamma","LogN"), recurrent = FALSE,
                 adaptive = NULL, maxkappa = NULL,
                 ## arguments specific to the penalised models
-                penalised=FALSE,
                 sp=NULL, criterion=NULL, penalty=NULL,
                 smoother.parameters=NULL, Z=~1, outer_optim=NULL,
                 alpha=1, sp.init=1,
+                penalised=FALSE,
+                ## other arguments
                 ...) {
     link.type <- match.arg(link.type)
     link <- switch(link.type,PH=link.PH,PO=link.PO,probit=link.probit,AH=link.AH,
@@ -784,7 +785,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
             if (!is.na(.i)) {
                 if (.i==1 && length(attr(Terms,"term.labels"))==1) {
                     constantOnly <- TRUE
-                } else Terms <- drop.terms(Terms,.i,keep=TRUE)
+                } else Terms <- stats::drop.terms(Terms,.i,keep=TRUE)
             }
         }
         formula <- formula(Terms)
@@ -830,20 +831,20 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         if (length(cluster.index)>0) {
             cluster <- mf2[, cluster.index]
             frailty = !is.null(cluster) && !robust
-            base.formula <- formula(drop.terms(terms(mf2), cluster.index - 1, keep.response=TRUE))
+            base.formula <- formula(stats::drop.terms(terms(mf2), cluster.index - 1, keep.response=TRUE))
             cluster.index2 <- attr(terms.formula(full.formula, "cluster"), "specials")$cluster
-            lm.formula <- formula(drop.terms(terms(full.formula), cluster.index2 - 1))
+            lm.formula <- formula(stats::drop.terms(terms(full.formula), cluster.index2 - 1))
         }
         if (length(bhazard.index)>0) {
             bhazard <- mf2[, bhazard.index]
-            base.formula <- formula(drop.terms(terms(mf2), bhazard.index - 1, keep.response=TRUE))
+            base.formula <- formula(stats::drop.terms(terms(mf2), bhazard.index - 1, keep.response=TRUE))
             bhazard.index2 <- attr(terms.formula(full.formula, "bhazard"), "specials")$bhazard
-            lm.formula <- formula(drop.terms(terms(full.formula), bhazard.index2 - 1))
+            lm.formula <- formula(stats::drop.terms(terms(full.formula), bhazard.index2 - 1))
         }
         if (length(cluster.index)>0 && length(bhazard.index)>0) {
-            base.formula <- formula(drop.terms(terms(mf2), c(cluster.index,bhazard.index) - 1,
+            base.formula <- formula(stats::drop.terms(terms(mf2), c(cluster.index,bhazard.index) - 1,
                                                keep.response=TRUE))
-            lm.formula <- formula(drop.terms(terms(full.formula),
+            lm.formula <- formula(stats::drop.terms(terms(full.formula),
                                              c(cluster.index2,bhazard.index2) - 1))
         }
         ## rm(mf2,spcall)
@@ -862,7 +863,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     bhazard <- switch(class(bhazard),
                       integer=bhazard,
                       numeric=bhazard,
-                      call=bhazard,
+                      call=eval(bhazard,data,parent.frame()),
                       NULL=rep(0,nrow(data)),
                       name=eval(bhazard, data, parent.frame()),
                       character=data[[bhazard]])
@@ -1487,13 +1488,17 @@ stpm2 <- function(formula, data, weights=NULL, subset=NULL, coxph.strata=NULL, .
     m <- match.call()
     m[[1L]] <- quote(gsm)
     m$penalised <- FALSE
-    eval(m,data,parent.frame())
+    out <- eval(m,data,parent.frame())
+    out@Call <- match.call()
+    out
 }
 pstpm2 <- function(formula, data, weights=NULL, subset=NULL, coxph.strata=NULL, ...) {
     m <- match.call()
     m[[1L]] <- quote(gsm)
     m$penalised <- TRUE
-    eval(m,data,parent.frame())
+    out <- eval(m,data,parent.frame())
+    out@Call <- match.call()
+    out
 }
 
 ###################################
@@ -1651,9 +1656,9 @@ stpm2.old <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         mf2 <- eval(spcall, parent.frame())
         cluster <- mf2[, cluster.index]
         frailty = !is.null(cluster) & !robust
-        base.formula <- formula(drop.terms(terms(mf2), cluster.index - 1, keep.response=TRUE))
+        base.formula <- formula(stats::drop.terms(terms(mf2), cluster.index - 1, keep.response=TRUE))
         cluster.index2 <- attr(terms.formula(full.formula, "cluster"), "specials")$cluster
-        lm.formula <- formula(drop.terms(terms(full.formula), cluster.index2 - 1))
+        lm.formula <- formula(stats::drop.terms(terms(full.formula), cluster.index2 - 1))
         ## rm(mf2,spcall)
     }
     ## deprecated code for cluster
