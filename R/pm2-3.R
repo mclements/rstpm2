@@ -1131,6 +1131,13 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  excess=excess, data=data,
                  robust_initial = control$robust_initial, .include=.include,
                  offset=rep(0,nrow(X)))
+    ## checks on the parameters
+    stopifnot(all(dim(args$X) == dim(args$XD)))
+    if (!frailty) {
+        stopifnot(length(args$init) == ncol(args$X))
+    } else  {
+        stopifnot(length(args$init) == ncol(args$X)+ncol(Z))
+    }
     if (penalised) args$type <- if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty"
                                 else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty"
                                 else "pstpm2"
