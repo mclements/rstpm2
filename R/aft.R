@@ -529,7 +529,8 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         ## debug(aft)
         brcancer2 <- transform(brcancer, entry=ifelse(hormon==0, rectime/2, 0))
         system.time(aft1 <- aft(Surv(entry,rectime,censrec==1)~hormon,data=brcancer2,df=4,use.gr=FALSE))
-        system.time(aft0 <- aft(Surv(entry,rectime,censrec==1)~hormon,data=brcancer2,df=4)) # FAILS
+        system.time(aft0 <- aft(Surv(entry,rectime,censrec==1)~hormon,data=brcancer2,df=4))
+        vcov(aft0)-vcov(aft1)
         ##
         negll(coef)
         fd <- function(f,x,eps=1e-5)
@@ -589,21 +590,39 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     }
     parnames(negll) <- names(init)
     ## MLE
-    ## if (delayed && use.gr) { # initial search using nmmin
-    ##     args$return_type <- "nmmin"
-    ##     args$maxit <- 200
-    ##     fit <- .Call("aft_model_output", args, PACKAGE="rstpm2")
-    ##     print(args$init <- fit$coef)
-    ##     args$maxit <- control$maxit
-    ## }
-    args$return_type <- if (use.gr) "vmmin" else "nmmin"
-    fit <- .Call("aft_model_output", args, PACKAGE="rstpm2")
-    args$init <- coef <- as.vector(fit$coef)
-    hessian <- fit$hessian
-    names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
-    mle2 <- mle2(negll, coef, gr=gradient, vecpar=TRUE, control=control, ..., eval.only=TRUE)
-    mle2@vcov <- if (!inherits(vcov <- try(solve(hessian)), "try-error")) vcov else matrix(NA,length(coef), length(coef))
-    mle2@details$convergence <- fit$fail # fit$itrmcd
+    if (delayed && use.gr) { # initial search using nmmin
+        args$return_type <- "nmmin"
+        args$maxit <- 50
+        fit <- .Call("aft_model_output", args, PACKAGE="rstpm2")
+        args$maxit <- control$maxit
+    }
+    optim_step <- function(use.gr) {
+        args$return_type <<- if (use.gr) "vmmin" else "nmmin"
+        fit <- .Call("aft_model_output", args, PACKAGE="rstpm2")
+        coef <- as.vector(fit$coef)
+        hessian <- fit$hessian
+        names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
+        args$init <<- coef
+        mle2 <- if (use.gr) bbmle::mle2(negll, coef, vecpar=TRUE, control=control,
+                                        gr=gradient, ..., eval.only=TRUE)
+                else bbmle::mle2(negll, coef, vecpar=TRUE, control=control, ..., eval.only=TRUE)
+        ## browser()
+        mle2@details$convergence <- fit$fail # fit$itrmcd
+        vcov <- try(solve(hessian), silent=TRUE)
+        if (inherits(vcov, "try-error")) {
+            if (!use.gr)
+                message("Non-invertible Hessian")
+            mle2@vcov <- matrix(NA,length(coef), length(coef))
+        } else {
+            mle2@vcov <- vcov
+        }
+        mle2
+    }
+    mle2 <- optim_step(use.gr)
+    if (all(is.na(mle2@vcov)) && use.gr) {
+        args$init <- init
+        mle2 <- optim_step(FALSE)
+    }
     out <- as(mle2, "aft")
     out@args <- args
     return(out)
