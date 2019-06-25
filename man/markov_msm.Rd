@@ -15,7 +15,7 @@
 \alias{rbind.markov_msm}
 \alias{transform.markov_msm}
 \alias{collapse_markov_msm}
-\alias{zeroRate}
+\alias{zeroModel}
 \title{
 Predictions for continuous time, nonhomogeneous Markov multi-state
 models using parametric and penalised survival models.
@@ -67,7 +67,7 @@ ratio_markov_msm(x, y, \dots)
 \method{rbind}{markov_msm}(\dots, deparse.level=1)
 \method{transform}{markov_msm}(`_data`, \dots)
 collapse_markov_msm(object, which=NULL, sep="; ")
-zeroRate(object)
+zeroModel(object)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -78,8 +78,8 @@ list of functions or parametric or penalised survival models. Currently
 the models include
 combinations of \code{\link{stpm2}}, \code{\link{pstpm2}}, \code{\link[stats]{glm}},
 \code{\link[mgcv]{gam}},
-\code{\link[survPen]{survPen}} or an object of class \code{"zeroRate"} from
-\code{\link{zeroRate}} based on one of the other classes. The order in
+\code{\link[survPen]{survPen}} or an object of class \code{"zeroModel"} from
+\code{\link{zeroModel}} based on one of the other classes. The order in
 the list matches the indexing in the \code{trans} argument. The
 functions can optionally use a \code{t} argument for time and/or a
 \code{newdata} argument. Uncertainty in the models are incorporated into
@@ -215,7 +215,7 @@ For \code{collapse.states}:
 \item{which}{either an index of the states to collapse or a character vector of the state names to collapse}
 \item{sep}{separator to use for the collapsed state names}
 
-For \code{zeroRate}:
+For \code{zeroModel}:
 \item{object}{survival regression object to be wrapped to give predict
 hazards of zero}
 

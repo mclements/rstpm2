@@ -14,7 +14,7 @@ markov_msm <-
 {
     call <- match.call()
     inherits <- function(x, ...)
-        base::inherits(x, ...) || (base::inherits(x, "zeroRate") && base::inherits(x$base, ...))
+        base::inherits(x, ...) || (base::inherits(x, "zeroModel") && base::inherits(x$base, ...))
     base.classes <- c("stpm2","pstpm2","glm","survPen","gam")
     stopifnot(all(sapply(x, function(xi) inherits(xi,base.classes) | is.function(xi))))
     stopifnot(!is.null(newdata))
@@ -366,18 +366,45 @@ print.markov_msm <- function(x,
     print(df, digits=digits, ...)
     invisible(x)
 }
-zeroRate <- function(object) 
-    structure(list(base=object), class="zeroRate")
-predict.zeroRate <- function(object, ...)
-    0.0*predict(object$base, ...)
-coef.zeroRate <- function(object, ...) coef(object$base)
-vcov.zeroRate <- function(object, ...) vcov(object$base)
-zeroRateS3 <- function(object) {
-    class(object) <- c("zeroRate",class(object))
-    object
+
+zeroModel <- function(object) {
+    if (inherits(object, "zeroModel")) object
+    else structure(list(base=object), class="zeroModel")
 }
-predict.zeroRateS3 <- function(object, ...)
-    0.0*NextMethod("predict",object)
+predict.zeroModel <- function(object, type=c("haz","gradh"), ...) {
+    type <- match.arg(type)
+    0.0*predict(object$base, type=type...) 
+}
+## we keep the same length/dim to support comparisons between different interventions
+coef.zeroModel <- function(object, ...) 0.0*coef(object$base, ...)
+vcov.zeroModel <- function(object, ...) 0.0*vcov(object$base, ...)
+
+hrModel <- function(object, hr=1, ci=NULL) {
+    stopifnot(is.null(ci) || (is.numeric(ci) && length(ci)==2))
+    stopifnot(is.numeric(hr) && length(hr)==1 && hr>0)
+    newobject <- if (inherits(object, "hrModel")) object else structure(list(base=object),
+                                                                        class="hrModel")
+    attr(newobject, "loghr") <- log(hr)
+    attr(newobject, "seloghr") <- if (is.null(ci)) 0 else log(ci[2]/ci[1])/2/qnorm(0.975)
+    newobject
+}
+predict.hrModel <- function(object, type=c("haz","gradh"), ...) {
+    type <- match.arg(type)
+    hr <- exp(attr(object,"loghr"))
+    pred1 <- predict(object$base, type="haz", ...)
+    if (type=="haz") hr*pred1
+    else
+        cbind(predict(object$base, type="gradh", ...)*hr, pred1*hr*log(hr))
+}
+## This has different lengths/dimensions to the base model:
+##   wrap base intervention in hrModel(..., hr=1)
+coef.hrModel <- function(object, ...) c(coef(object$base), attr(object,"loghr"))
+vcov.hrModel <- function(object, ...) {
+    out <- rbind(cbind(vcov(object$base),0),0)
+    out[nrow(out),ncol(out)] <- attr(object, "seloghr")^2
+    out
+}
+
 subset.markov_msm <- function(x, subset, ...) {
     e <- substitute(subset)
     r <- eval(e, x$newdata, parent.frame())
@@ -783,3 +810,30 @@ collapse_markov_msm <- function(object, which=NULL, sep="; ") {
                            class=class(object))
     newobject
 }
+
+stratifiedModel <- function (object,strata) {
+  ## if(inherits (object, "stratifiedModel"))
+  ##     return(object)
+  if(! inherits (object, "stratifiedModel"))
+    class (object) <- c("stratifiedModel", class (object))
+  object$strata.name <- substitute (strata)
+  stopifnot(is.name(object$strata.name))
+  object$strata.index <- NULL
+  object
+}
+"[[.stratifiedModel" <- function (object, index) {
+  object$strata.index <- index
+  object
+}
+## does the following only work for index 1..K?
+predict.stratifiedModel <- function (object, type, newdata) {
+    if (! is.null(object$strata.index))
+        newdata[[object$strata.name]] <- object$strata.index
+    ## otherwise assume that the strata is specified in newdata
+    NextMethod ("predict", object)
+}
+## predict.test <- function(object, type, newdata) return(newdata$strata)
+## m <- stratifiedModel("class<-"(list(),"test"), strata)
+## predict(m[[2]],"",data.frame(x=1))
+coef.stratifiedModel <- function(object, ...) NextMethod("coef", object)
+vcov.stratifiedModel <- function(object, ...) NextMethod("vcov", object)
