@@ -397,6 +397,32 @@ namespace rstpm2 {
       return S;
     }
 
+    mat haz(vec time, mat X, mat XD)
+    {
+      vec beta = init.subvec(0,X.n_cols-1);
+      vec betas = init.subvec(X.n_cols,init.size()-1);
+      vec eta = X * beta;
+      vec etaD = XD * beta;
+      vec logtstar = log(time) - eta;
+      mat Xs = s.basis(logtstar);
+      mat XDs = s.basis(logtstar,1);
+      mat XDDs = s.basis(logtstar,2);
+      vec etas = Xs * betas;
+      vec etaDs = XDs * betas;
+      vec etaDDs = XDDs * betas;
+      // penalties
+      vec eps = etaDs*0. + 1e-8;
+      uvec pindexs = (etaDs < eps);
+      uvec pindex = ((1.0/time - etaD) < eps);
+      // fix bounds on etaDs
+      etaDs = max(etaDs, eps);
+      // fix bounds on etaD
+      etaD = 1/time - max(1/time-etaD, eps);
+      vec logh = etas + log(etaDs) + log(1/time -etaD);
+      vec h = exp(logh);
+      return h;
+    }
+  
     mat gradh(vec time, mat X, mat XD)
     {
       vec beta = init.subvec(0,X.n_cols-1);
@@ -461,6 +487,8 @@ namespace rstpm2 {
       return wrap(model.gradient(model.init));
     else if (return_type == "survival")
       return wrap(model.survival(as<vec>(list["time"]),as<mat>(list["X"])));
+    else if (return_type == "haz")
+      return wrap(model.haz(as<vec>(list["time"]),as<mat>(list["X"]),as<mat>(list["XD"])));
     else if (return_type == "gradh")
       return wrap(model.gradh(as<vec>(list["time"]),as<mat>(list["X"]),as<mat>(list["XD"])));
     else {

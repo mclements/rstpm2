@@ -630,7 +630,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
 
 setMethod("predict", "aft",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","meanhaz","af","fail","accfac"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","meanhaz","af","fail","accfac","gradh"),
                    grid=FALSE,seqLength=300,level=0.95,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,...) {
               type <- match.arg(type)
@@ -690,6 +690,9 @@ setMethod("predict", "aft",
                               log.transform=object@args$log.time.transform)
                   XD2 <- matrix(XD2,nrow=nrow(X))
                   time2 <- eval(args$timeExpr,newdata2) # is this always equal to time?
+              }
+              if (type == "gradh") {
+                  return(predict.aft.ext(object, type="gradh", time=time, X=X, XD=XD))
               }
               ## colMeans <- function(x) colSums(x)/apply(x,2,length)
               local <-  function (object, newdata=NULL, type="surv", exposed)
@@ -889,7 +892,7 @@ setMethod("plot", signature(x="aft", y="missing"),
                               ylab=ylab, line.col=line.col, lty=lty, add=add,
                               ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
           )
-predict.aft.ext <- function(obj, type=c("survival","gradh"),
+predict.aft.ext <- function(obj, type=c("survival","haz","gradh"),
                             time=obj@args$time, X=obj@args$X, XD=obj@args$XD) {
     type <- match.arg(type)
     localargs <- obj@args
@@ -897,25 +900,21 @@ predict.aft.ext <- function(obj, type=c("survival","gradh"),
     localargs$X <- X
     localargs$XD <- XD
     localargs$time <- time
-    if (type=="survival")
-        as.vector(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
-    else
-        as.matrix(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
+    as.matrix(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
 }
 
 ## simulate from Weibull with one binary covariate
 if (FALSE) {
-
     require(rstpm2)
     summary(aft0 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4))
     aft1 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4,init=coef(aft1))
-    
+    ##
     require(rstpm2)
     summary(aft0 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4))
     plot(survfit(Surv(rectime,censrec==1)~hormon,data=brcancer),col=1:2)
     plot(aft0,newdata=data.frame(hormon=0), add=TRUE, line.col="green", ci=FALSE)
     plot(aft0,newdata=data.frame(hormon=1), add=TRUE, line.col="blue", ci=FALSE)
-
+    ##
     summary(aft1 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4,smooth.formula=~hormon:ns(log(rectime),df=3)))
     plot(survfit(Surv(rectime,censrec==1)~hormon,data=brcancer),col=1:2)
     plot(aft1,newdata=data.frame(hormon=0), add=TRUE, line.col="green", ci=FALSE)
@@ -941,8 +940,32 @@ if (FALSE) {
     plot(aft1,newdata=data.frame(x=0), add=TRUE, line.col="green", ci=FALSE)
     plot(aft1,newdata=data.frame(x=1), add=TRUE, line.col="blue", ci=FALSE)
     
-    head(rstpm2:::predict.aft.ext(aft1)) - head(predict(aft1))
-
+    head(rstpm2:::predict.aft.ext(aft1) - predict(aft1))
+    range(rstpm2:::predict.aft.ext(aft1,type="haz") - predict(aft1, type="haz"))
+    rstpm2:::predict.aft.ext(aft1,type="haz",time=aft1@args$time[1:6],X=aft1@args$X[1:6,,drop=FALSE],XD=aft1@args$XD[1:6,,drop=FALSE]) - head(predict(aft1, type="haz"))
+    predict.aft.ext.test <- function(obj, eps=1e-5) {
+        localargs <- obj@args
+        localargs$return_type <- "haz"
+        basecoef <- coef(obj)
+        sapply(1:length(basecoef),
+               function(i) {
+                   coef <- basecoef
+                   coef[i] <- coef[i]+eps
+                   localargs$init <- coef
+                   upper <- as.vector(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
+                   coef <- basecoef
+                   coef[i] <- coef[i]-eps
+                   localargs$init <- coef
+                   lower <- as.vector(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
+                   (upper-lower)/eps/2
+               })
+    }
+    temp <- predict.aft.ext.test(aft1)
+    range(rstpm2:::predict.aft.ext(aft1,type="gradh") - temp)
+    rstpm2:::predict.aft.ext(aft1,type="gradh") - head(temp)
+    range(predict(aft1,newdata=data.frame(obstime=aft1@args$time[1:6],x=x[1:6]),type="gradh") -
+          head(temp))
+    
     plot(aft1,newdata=data.frame(x=0), type="hazard", line.col="green", rug=FALSE)
     plot(aft1,newdata=data.frame(x=1), type="hazard", add=TRUE, line.col="blue", ci=TRUE)
 
