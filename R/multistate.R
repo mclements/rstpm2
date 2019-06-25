@@ -14,8 +14,10 @@ markov_msm <-
 {
     call <- match.call()
     inherits <- function(x, ...)
-        base::inherits(x, ...) || (base::inherits(x, "zeroModel") && base::inherits(x$base, ...))
-    base.classes <- c("stpm2","pstpm2","glm","survPen","gam")
+        base::inherits(x, ...) ||
+            (base::inherits(x, c("zeroModel","hrModel","stratifiedModel"))
+                && base::inherits(x$base, ...))
+    base.classes <- c("stpm2","pstpm2","glm","survPen","gam","aft","survreg")
     stopifnot(all(sapply(x, function(xi) inherits(xi,base.classes) | is.function(xi))))
     stopifnot(!is.null(newdata))
     stopifnot(sum(!is.na(trans)) == length(x))
@@ -49,9 +51,11 @@ markov_msm <-
     if (nt < 2) 
         stop("number of times should be at least two")
     stopifnot(length(utility(t[2])) %in% c(1,nrow(trans)))
-    if (is.null(tmvar) && all(sapply(x,inherits,c("stpm2","pstpm2","survPen"))))
-        tmvar <- sapply(x,function(object) if(inherits(object,c("stpm2","pstpm2"))) object@timeVar
-                                           else object$t1.name)
+    if (is.null(tmvar) && all(sapply(x,inherits,c("stpm2","pstpm2","aft","survPen"))))
+        tmvar <- sapply(x,function(object)
+            if(inherits(object,c("stpm2","pstpm2"))) object@timeVar
+            else if (inherits(object,"aft")) object@args$timeVar
+            else object$t1.name)
     stopifnot(!is.null(tmvar))
     stopifnot(length(tmvar) %in% c(1,length(x)))
     if (length(tmvar)==1) tmvar <- rep(tmvar, length(x))

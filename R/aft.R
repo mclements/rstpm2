@@ -241,11 +241,12 @@ S0hat <- function(obj)
 setClass("aft", representation(args="list"), contains="mle2")
 
 aft <- function(formula, data, smooth.formula = NULL, df = 3,
-                 control = list(parscale = 1, maxit = 1000), init = NULL,
-                 weights = NULL, 
-                 timeVar = "", time0Var = "", log.time.transform=TRUE,
-                 reltol=1.0e-8, trace = 0,
-                 contrasts = NULL, subset = NULL, use.gr = TRUE, ...) {
+                tvc = NULL,
+                control = list(parscale = 1, maxit = 1000), init = NULL,
+                weights = NULL,
+                timeVar = "", time0Var = "", log.time.transform=TRUE,
+                reltol=1.0e-8, trace = 0,
+                contrasts = NULL, subset = NULL, use.gr = TRUE, ...) {
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
@@ -264,6 +265,19 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     if (!is.null(smooth.formula))
         rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
     rhs(full.formula) <- rhs(full.formula) %call+% quote(0)
+    if (!is.null(tvc)) {
+        tvc.formulas <-
+            lapply(names(tvc), function(name)
+                call(":",
+                     as.name(name),
+                     as.call(c(quote(ns),
+                               call("log",timeExpr),
+                                vector2call(list(df=tvc[[name]]))))))
+        if (length(tvc.formulas)>1)
+            tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
+        tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
+        rhs(full.formula) <- rhs(full.formula) %call+% rhs(tvc.formula)
+    }
     ##
     ## set up the data
     ## ensure that data is a data frame
