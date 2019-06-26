@@ -177,19 +177,17 @@ hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta
   tolerances. Default=list(search=1e-10, final=1e-10, outer=1e-5). Deprecated argument: use of the
 \code{control} argument with arguments \code{reltol.search},
 \code{reltol.final} and \code{reltol.outer} is preferred.}
-
 \item{outer_optim}{Integer to indicate the algorithm for outer
   optimisation. If outer_optim=1 (default), then use Neldear-Mead,
   otherwise use Nlm.} 
 \item{robust_initial}{logical for whether to use Nelder-Mead
   to find initial values (max 50 iterations). This is useful for
   ill-posed initial values. Default= FALSE. Deprecated argument: use of the
-\code{control} argument is preferred.}  
+  \code{control} argument is preferred.}
 \code{penalised} {logical to show whether to use penalised models with
   \code{pstpm} (\code{penalised=TRUE}) or parametrics models with
   \code{stpm2} (\code{penalised=FALSE}).}
-\item{\dots}{
-  additional arguments to be passed to the \code{\link{mle2}}.}
+\item{\dots}{ additional arguments to be passed to the \code{\link{mle2}}.}
 }
 \details{
   
