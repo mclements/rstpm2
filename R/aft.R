@@ -403,6 +403,8 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         names(coef1) <- names(coef1b)
         }
     init <- c(coef1,coef0)
+    if (any(is.na(init) | is.nan(init)))
+        stop("Some missing initial values - check that the design matrix is full rank.")
     if (!is.null(control) && "parscale" %in% names(control)) {
       if (length(control$parscale)==1)
         control$parscale <- rep(control$parscale,length(init))
