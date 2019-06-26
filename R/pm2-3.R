@@ -760,7 +760,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                 call(":",
                      as.name(name),
                      as.call(c(smoother,
-                               call("log",timeExpr),
+                               if (link.type=="AH") timeExpr else call("log",timeExpr),
                                if (penalised) vector2call(list(k=tvc[[name]]))
                                else vector2call(if (cure) list(cure=cure,df=tvc[[name]])
                                                 else list(df=tvc[[name]]))))))
