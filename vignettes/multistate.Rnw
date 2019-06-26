@@ -69,7 +69,7 @@ Parametric and penalised survival models have potential advantages for multi-sta
 % heemod - discrete time Markov models
 % hesim
 
-Recently, it has been recognised that smooth survival models can be used with ordinary differential equations to predict from multi-state models: \cite{Titman_2011} showed that gradients for transition probabilities can be estimated by augmenting the system of differential equations; and \cite{Jackson_2016} predicted length of stay using differential equations. 
+Predictions for Markov models can use ordinary differential equation solvers to solve Kolmogorov's forward differential equation. Recently, \cite{Jackson_2016} predicted length of stay using differential equations. \cite{Titman_2011} also demonstrated that the gradients for transition probabilities (or sensitivity equations) can be estimated by augmenting the system of differential equations.  Variance estimates for predictions can be calculated using the delta method and gradients for the predictors \citep{Gentleman_Lawless_Lindsey_Yan_1994}. This provides an opportunity to efficiently calculate a range of predictions from multi-state models.
 
 We have two objectives: first, to develop efficient methods for predictions for \emph{smooth, non-homogeneous multi-state Markov models} with variance estimation using the \emph{multivariate delta method}; and, second, to demonstrate that these methods support the use of multi-state models across descriptive statistics, causal inference, and economics.
 Importantly, our restriction to Markov models is not a heavy constraint: \cite{Datta_Satten_2001} have shown that the state occupation probabilities are consistently estimated under moderate conditions even when the time scale is mis-specified. Length of stay, prevalence, utilities and costs, when they are integrated functions of the state occupation probabilities, are also expected to be consistent under similar conditions.
@@ -84,7 +84,7 @@ In outline, we provide a theoretical development of a set of ordinary differenti
 
 For the predictions, the main inputs are (i) a multi-state model specification, (ii) the models for the transition intensities, and (iii) and the initial values for the states. We assume that the transition intensities are estimated using maximum (penalised) likelihood estimation, with stacked estimated parameters $\hat{\boldsymbol{\beta}}$ and stacked estimated variance-covariance matrix $\hat{\boldsymbol\Sigma}$. The estimated parameters could be from either model fit for all transitions, one model for each transition or a combination of models for different transitions.
 
-For a formal development, the asymptotic properties for parametric models were developed by \cite{Andersen_Borgan_Gill_Keiding_1993} under Cramér-like conditions. Under those conditions, the authors show that that the maximum likelihood parameters $\hat{\boldsymbol{\beta}}$ are asymptotically normal. Sufficient conditions would include smoothness (thrice differentiable for the log-likelihood) and boundedness of the hazard function. We can then estimate the asymptotic variance for the predictions using the multivariate delta method, which is expected to be asymptotically normal under moderate conditions. \cite{Ryalen_Stensrud_Roysland_2018} developed asymptotic properties for non-parametric stochastic differential equations under Hadamard continuity. In outline, Hadamard continuity is satisfied under the Cramér-like conditions, so that the results from Ryalen and colleagues can be adapted for parametric models. We will assess these asymptotic properties using simulations.
+For a formal development, the asymptotic properties for parametric survival models were developed by \cite{Borgan_1984} and \cite{Andersen_Borgan_Gill_Keiding_1993}. Under Cramér-like conditions, the authors show that that the maximum likelihood parameters $\hat{\boldsymbol{\beta}}$ are asymptotically normal. Sufficient conditions include uniform convergence, that the hazard is thrice differentiable with respect to the parameters, boundedness of the hazard function, and that the hazard is bounded away from zero \citep{Borgan_1984}. We can then estimate the asymptotic variance for the predictions using the multivariate delta method, which will be asymptotically normal if the parameters are asymptotically normal and the gradients of the predictions exist (see Theorem 3.4.6 in \cite{Sen_Singer_1993}). \cite{Ryalen_Stensrud_Roysland_2018} developed asymptotic properties for non-parametric stochastic differential equations under Hadamard continuity. We will assess these asymptotic properties using simulations.
 
 
 \subsection*{Notation}
@@ -300,6 +300,10 @@ For estimators that are on the open interval $(0,1)$, the gradient can be calcul
 
 To assess the small sample properties compared with the asymptotics properties, we undertook several simulations.
 
+The research questions included assessing the statistical properties (including bias and coverage) for: (i) different transformations of state occupation probabilities and length of stay; (ii) different regression models; and (iii) sample size.
+
+We used exponentially distributed data from an illness-death model to estimate the proportion that are healthy, ill or dead using (a) different sample sizes (500, 1000, 10000), (b) different regression models (Poisson regression, Weibull regression), and (c) different transformations for state occupation probabilities (identity, log, logit, and arcsin) and length of stay (identity, log).
+
 
 
 \section{Implementation}
@@ -319,15 +323,11 @@ For post-processing, the predictions and gradients can be calculated for combina
 
 % Differences from the same models are just different weights...
 
-\section{Example}
+\section{Examples}
+
+
 
 We follow the example by \cite{Crowther_Lambert_2017}.
-
-
-
-(We could extend the example used by Jackson to include standardisation.)
-
-
 
 
 
