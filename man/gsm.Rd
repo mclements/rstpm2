@@ -184,7 +184,7 @@ hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta
   to find initial values (max 50 iterations). This is useful for
   ill-posed initial values. Default= FALSE. Deprecated argument: use of the
   \code{control} argument is preferred.}
-\code{penalised} {logical to show whether to use penalised models with
+\item{penalised}{logical to show whether to use penalised models with
   \code{pstpm} (\code{penalised=TRUE}) or parametrics models with
   \code{stpm2} (\code{penalised=FALSE}).}
 \item{\dots}{ additional arguments to be passed to the \code{\link{mle2}}.}

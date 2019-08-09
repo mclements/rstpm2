@@ -33,7 +33,6 @@ Objects can be created by calls of the form \code{new("pstpm2", ...)} and
     \item{\code{timeExpr}:}{Object of class \code{"nameOrcall"} ~~ }
     \item{\code{like}:}{Object of class \code{"function"} ~~ }
     \item{\code{model.frame}:}{Object of class \code{"list"} ~~ }
-    \item{\code{fullformula}:}{Object of class \code{"formula"} ~~ }
     \item{\code{delayed}:}{Object of class \code{"logical"} ~~ }
     \item{\code{frailty}:}{Object of class \code{"logical"} ~~ }
     \item{\code{x}:}{Object of class \code{"matrix"} ~~ }

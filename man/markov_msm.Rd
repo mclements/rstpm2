@@ -16,6 +16,7 @@
 \alias{transform.markov_msm}
 \alias{collapse_markov_msm}
 \alias{zeroModel}
+\alias{hrModel}
 \title{
 Predictions for continuous time, nonhomogeneous Markov multi-state
 models using parametric and penalised survival models.
@@ -30,15 +31,17 @@ utilities), length of stay and costs. Standard errors are calculated
 using the delta method. Includes, differences, ratios and standardisation.
 }
 \usage{
-markov <- msm(x, trans, t = c(0,1), newdata = NULL, init=NULL,
+markov_msm(x, trans, t = c(0,1), newdata = NULL, init=NULL,
               tmvar = NULL, 
               sing.inf = 1e+10, method="adams", rtol=1e-10, atol=1e-10, slow=FALSE,
               min.tm=1e-8,
               utility=function(t) rep(1, nrow(trans)),
+              utility.sd=rep(0,nrow(trans)),
               use.costs=FALSE,
-              transition.costs=lapply(1:sum(!is.na(trans)),
-	                              function(i) function(t) 1000), # per transition
+              transition.costs=rep(0, sum(!is.na(trans))), # per transition
+              transition.costs.sd=rep(0,sum(!is.na(trans))),
               state.costs=function(t) rep(0,nrow(trans)), # per unit time
+              state.costs.sd=rep(0,nrow(trans)),
               discount.rate = 0,
               block.size=500,
               debug=FALSE,
@@ -48,7 +51,9 @@ markov <- msm(x, trans, t = c(0,1), newdata = NULL, init=NULL,
 \method{as.data.frame}{markov_msm}(x, row.names=NULL, optional=FALSE,
                                    ci=TRUE,
                                    P.conf.type="log-log", L.conf.type="log",
+				   C.conf.type="log",
                                    P.range=c(0,1), L.range=c(0,Inf),
+				   C.range=c(0,Inf),
                                    \dots)
 \method{as.data.frame}{markov_msm_diff}(x, \dots)
 \method{as.data.frame}{markov_msm_ratio}(x, \dots)
@@ -68,6 +73,12 @@ ratio_markov_msm(x, y, \dots)
 \method{transform}{markov_msm}(`_data`, \dots)
 collapse_markov_msm(object, which=NULL, sep="; ")
 zeroModel(object)
+\method{predict}{zeroModel}(object, type=c("haz","gradh"), ...)
+\method{coef}{zeroModel}(object, ...)
+\method{vcov}{zeroModel}(object, ...)
+hrModel(object,hr=1,ci=NULL,selogHR=NULL)
+\method{coef}{hrModel}(object, ...)
+\method{vcov}{hrModel}(object, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -138,15 +149,28 @@ implementation. Useful for debugging. Currently needed for costs.
   a function of the form \code{function(t)} that returns a utility for
 each state at time \code{t} for the length of stay values
 }
+  \item{utility.sd}{
+  a function of the form \code{function(t)} that returns the standard
+  deviation for the utility for
+each state at time \code{t} for the length of stay values
+}
   \item{use.costs}{
 logical for whether to use costs. Default: FALSE
 }
   \item{transition.costs}{
 a function of the form \code{function(t)} that returns the cost for each transition
 }
+  \item{transition.costs.sd}{
+a function of the form \code{function(t)} that returns the standard deviation
+for the cost for each transition
+}
   \item{state.costs}{
 a function of the form \code{function(t)} that returns the cost per unit
 time for each state
+}
+  \item{state.costs.sd}{
+a function of the form \code{function(t)} that returns the standard deviation
+ for the cost per unit time for each state
 }
   \item{discount.rate}{
   numerical value for the proportional reduction (per unit time) in the length of stay
@@ -175,9 +199,14 @@ calculation for the state occupancy probabilities. Default: log-log transformati
 \item{L.conf.type}{type of transformation for the confidence interval
 calculation for the length of stay calculation. Default: log transformation. This is changed for
 \code{\link{diff}} and \code{\link{ratio_markov_msm}} objects}
+\item{C.conf.type}{type of transformation for the confidence interval
+calculation for the length of stay calculation. Default: log transformation. This is changed for
+\code{\link{diff}} and \code{\link{ratio_markov_msm}} objects}
 \item{P.range}{valid values for the state occupancy probabilities. Default: (0,1). This is changed for
 \code{\link{diff}} and \code{\link{ratio_markov_msm}} objects}
 \item{L.range}{valid values for the state occupancy probabilities. Default: (0,Inf). This is changed for
+\code{\link{diff}} and \code{\link{ratio_markov_msm}} objects}
+\item{C.range}{valid values for the state occupancy probabilities. Default: (0,Inf). This is changed for
 \code{\link{diff}} and \code{\link{ratio_markov_msm}} objects}
 
 For \code{standardise.markov_msm}:
@@ -218,6 +247,13 @@ For \code{collapse.states}:
 For \code{zeroModel}:
 \item{object}{survival regression object to be wrapped to give predict
 hazards of zero}
+
+For \code{hrModel}:
+\item{object}{survival regression object to be wrapped to give predict
+hazards times a hazard ratio}
+\item{hr}{hazard ratio}
+\item{ci}{confidence interval as a length-two vector - used to specify the se of the log(HR)}
+\item{selogHR}{alternative specification for the se of the log(HR)}
 
 }
 \details{
