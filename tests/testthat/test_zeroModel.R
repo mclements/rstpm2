@@ -8,10 +8,11 @@ context("zeroModel")
 test_that("base", {
     x <- 1:10
     y <- c(1:9,11)
-    fit <- zeroModel(lm(y~x))
+    d <- data.frame(x,y)
+    fit <- zeroModel(lm(y~x,data=d))
     expect_eps(coef(fit), c(0,0), 1e-10)
     expect_eps(vcov(fit), matrix(0,2,2), 1e-10)
-    expect_eps(predict(fit), rep(0,10), 1e-10)
+    ## expect_eps(predict(fit,newdata=d), rep(0,10), 1e-10) # zeroModel class not exported
 })
 
 context("hrModel")
