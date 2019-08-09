@@ -97,23 +97,30 @@ markov_msm <-
     dp <- function(t, y, parms, ...) {
         P <- matrix(y[1:(nstates*nobs)],nstates,nobs) # only one state vector per individual
         Pu <- array(y[nstates*nobs+1:(nstates*ncoef*nobs)],c(nstates,ncoef,nobs))
-        QC <- Q <- array(0, c(nstates, nstates, nobs))
-        QCu <- Qu <- array(0, c(nstates, nstates, ncoef, nobs))
+        Q <- array(0, c(nstates, nstates, nobs))
+        Qu <- array(0, c(nstates, nstates, ncoef, nobs))
+        QC <- array(0, c(nstates, nobs))
+        QuC <- array(0, c(nstates, ncoef, nobs))
+        PQCu <- array(0, c(nstates, ntr, nobs))
+        froms <- tos <- rep(0,ntr)
         for (i in 1:ntr) {
             newdata[[tmvar[i]]] <- pmax(min.tm,t) # special case: t=0
             ij <- matwhich(trans == i)
-            from <- ij[1]
-            to <- ij[2]
-            Q[from,to,] <- predict(x[[i]], newdata=newdata, type="haz")
-            Qu[from,to,1:cs[i]+cumcs[i],] <- t(predict(x[[i]], newdata=newdata, type="gradh")) # transposed
+            froms[i] <- from <- ij[1]
+            tos[i] <- to <- ij[2]
+            Q[from,to,] <- predict(x[[i]], newdata=newdata, type="haz", tmvar=tmvar[i])
+            Qu[from,to,1:cs[i]+cumcs[i],] <- t(predict(x[[i]], newdata=newdata, type="gradh",
+                                                       tmvar=tmvar[i])) # transposed
             if (use.costs) {
-                QC[from,to,] <- Q[from,to,]*transition.costs[[i]](t)
-                QCu[from,to,1:cs[i]+cumcs[i],] <- Qu[from,to,1:cs[i]+cumcs[i],]*transition.costs[[i]](t)
+                ## collapse across "to" states
+                QC[from,] <- QC[from,] + Q[from,to,]*transition.costs(t)[[i]]
+                QuC[from,1:cs[i]+cumcs[i],] <- QuC[from,1:cs[i]+cumcs[i],] + Qu[from,to,1:cs[i]+cumcs[i],]*transition.costs(t)[i]
+                PQCu[from,i,] <- P[from,]*Q[from,to,]
             }
         }
-        Q[is.na(Q)] <- Qu[is.na(Qu)] <- QC[is.na(QC)] <- QCu[is.na(QCu)] <- 0
+        Q[is.na(Q)] <- Qu[is.na(Qu)] <- QC[is.na(QC)] <- QuC[is.na(QuC)] <- 0
         Q[is.infinite(Q) & Q > 0] <- Qu[is.infinite(Qu) & Qu > 0] <- sing.inf
-        QC[is.infinite(QC) & QC > 0] <- QCu[is.infinite(QCu) & QCu > 0] <- sing.inf
+        QC[is.infinite(QC) & QC > 0] <- QuC[is.infinite(QuC) & QuC > 0] <- sing.inf
         if (slow) {
             dTCdt <- dPdt <- array(0,c(nstates,nobs))
             dTCudt <- dPudt <- array(0,c(nstates,ncoef,nobs))
@@ -128,15 +135,16 @@ markov_msm <-
                     diag(Qui[,,j]) <- -rowSums(Qui[,,j])
                 dPudt[,,i] <- t(t(Pui)%*%Qi) + apply(Qui,3,function(x) t(Pi)%*%x) # nstates*ncoef
                 if (use.costs) {
-                    QCi <- QC[,,i]                # nstates*nstates
-                    QCui <- QCu[,,,i]             # nstates*nstates*ncoef
-                    dTCdt[,i] <- t(Pi)%*%QCi + Pi*state.costs(t)      # nstates
-                    dTCudt[,,i] <- t(t(Pui)%*%QCi) + apply(QCui,3,function(x) t(Pi)%*%x) # nstates*ncoef
+                    QCi <- QC[,i]                # nstates
+                    QuCi <- QuC[,,i]             # nstates*ncoef
+                    dTCdt[,i] <- Pi*(state.costs(t) + QCi)      # nstates
+                    dTCudt[,,i] <- Pui*(state.costs(t) + QCi) +
+                        Pi*QuCi # nstates*ncoef
                 }
             }
         } else {
             Qu2 <- array(Qu,c(nstates*nstates,ncoef,nobs))
-            QCu2 <- array(QCu,c(nstates*nstates,ncoef,nobs))
+            QuC2 <- array(QuC,c(nstates*nstates,ncoef,nobs))
             lst <- .Call("multistate_ddt",P,Pu,Q,Qu2,PACKAGE="rstpm2")
             dPdt <- lst[[1]]
             dPudt <- lst[[2]]
@@ -148,19 +156,23 @@ markov_msm <-
                    dPudt,
                    P*utility(t)*exp(-lambda.discount*t),
                    Pu*utility(t)*exp(-lambda.discount*t),
+                   P*exp(-lambda.discount*t), # d/dt for gradient of U wrt utilities *and* gradient of C wrt state costs
                    dTCdt*exp(-lambda.discount*t),
-                   dTCudt*exp(-lambda.discount*t)
+                   dTCudt*exp(-lambda.discount*t),
+                   PQCu*exp(-lambda.discount*t) # gradient of C wrt transition costs
                    ))
         else
             list(c(dPdt,
                    dPudt,
                    P*utility(t)*exp(-lambda.discount*t),
-                   Pu*utility(t)*exp(-lambda.discount*t)
+                   Pu*utility(t)*exp(-lambda.discount*t),
+                   P*exp(-lambda.discount*t) # d/dt for gradient of U wrt utilities (assumes u'_m(t)=1)
                    ))
     }
-    init <- if (use.costs) c(rep(init,nobs),rep(0,2*nobs*nstates+3*nobs*nstates*ncoef))
+    init <- if (use.costs) c(rep(init,nobs),
+                             rep(0,3*nobs*nstates+3*nobs*nstates*ncoef+nobs*nstates*ntr))
             else
-                c(rep(init,nobs),rep(0,nobs*nstates+2*nobs*nstates*ncoef))
+                c(rep(init,nobs),rep(0,2*nobs*nstates+2*nobs*nstates*ncoef))
     res <- ode(y = init, times = t, func = dp, method=method, atol=atol, rtol=rtol,
                ...)
     class(x) <- "surv_list"
@@ -169,21 +181,74 @@ markov_msm <-
     Pu <- array(res[,1+nobs*nstates+1:(nobs*nstates*ncoef)],c(nt,nstates,ncoef,nobs))
     L <- array(res[,1+nstates*nobs+nstates*nobs*ncoef+1:(nstates*nobs)],c(nt,nstates,nobs))
     Lu <- array(res[,1+2*nstates*nobs+nstates*nobs*ncoef+1:(nobs*nstates*ncoef)],c(nt,nstates,ncoef,nobs))
+    Pdisc <- array(res[,1+2*nstates*nobs+2*nstates*nobs*ncoef+1:(nstates*nobs)],c(nt,nstates,1,nobs))
     state.names <- if(is.null(rownames(trans))) 1:nrow(trans) else rownames(trans)
     dimnames(P) <- dimnames(L) <- 
         list(time=t, state= state.names, obs=rownames(newdata))
+    dimnames(Pdisc) <- 
+        list(time=t, state= state.names, coef="Pdisc", obs=rownames(newdata))
     coef.names <- unlist(lapply(x, function(xi) names(coef(xi))))
     dimnames(Pu) <- dimnames(Lu) <-
         list(time=t,
              state=state.names,
              coef=coef.names,
              obs=rownames(newdata))
-    structure(list(time = t, P=P, Pu=Pu, L=L, Lu=Lu, 
-                   res=if (debug) res else NULL, # for debugging only
+    if (use.costs) {
+        costs <- array(res[,1+3*nstates*nobs+2*nstates*nobs*ncoef+1:(nstates*nobs)],c(nt,nstates,nobs))
+        costsu <- array(res[,1+4*nstates*nobs+2*nstates*nobs*ncoef+1:(nobs*nstates*ncoef)],c(nt,nstates,ncoef,nobs))
+        costsu.trans <-   array(res[,1+4*nstates*nobs+3*nstates*nobs*ncoef+1:(nobs*nstates*ntr)],c(nt,nstates,ntr,nobs))
+        dimnames(costs) <- dimnames(P)
+        dimnames(costsu) <- dimnames(Pu)
+        dimnames(costsu.trans) <- list(time=t,
+                                       state=state.names,
+                                       trans=rownames(trans),
+                                       obs=rownames(newdata))
+    } 
+    structure(list(time = t, P=P, Pu=Pu, L=L, Lu=Lu, Pdisc=Pdisc,
+                   res=if (debug) res else NULL,
+                   use.costs=use.costs,
+                   costs=if (use.costs) costs else NULL,
+                   costsu=if (use.costs) costsu else NULL,
+                   costsu.trans=if (use.costs) costsu.trans else NULL,
                    vcov=Sigma, newdata=newdata, trans=trans,
+                   utility.sd=utility.sd,
+                   state.costs.sd=state.costs.sd,
+                   transition.costs.sd=transition.costs.sd,
                    call=call),
               class="markov_msm")
 }
+
+## Pu, vcov
+## Lu || Pdisc, bdiag(vcov,diag(utility.sd^2))
+## costsu || Pdisc || costsu.trans, bdiag(vcov, diag(state.costs.sd^2), diag(transition.costs.sd^2))
+
+bdiag <- function(...,initial=0) {
+    l <- list(...)
+    for (elt in l)
+        if (is.array(elt) && length(dim(elt))>2)
+            stop("not defined for arrays with more than 2 dimensions")
+    l <- lapply(l, as.matrix)
+    nr <- sapply(l,nrow)
+    nc <- sapply(l,ncol)
+    cumnr <- c(0,cumsum(nr))
+    cumnc <- c(0,cumsum(nc))
+    out <- matrix(initial,sum(nr),sum(nc))
+    for (i in 1:length(l))
+        out[(cumnr[i]+1):cumnr[i+1], (cumnc[i]+1):cumnc[i+1]] <- l[[i]]
+    ## if rownames/colnames are all missing, then NULL else convert the NULLs to blank strings
+    replace <- function(l,f,len) {
+        lf <- lapply(l,f)
+        nulls <- sapply(lf, is.null)
+        if (all(nulls)) NULL
+        else unlist(lapply(1:length(l), function(i) if (nulls[i]) rep("",len(l[[i]])) else lf[[i]]))
+    }
+    rownames(out) <- replace(l,rownames, nrow)
+    colnames(out) <- replace(l,colnames, ncol)
+    out
+}
+## all(rownames(bdiag(matrix(1:4,2),c(a=5,b=6),7L,t(8:9),initial=0L))==c("","","a","b","",""))
+## is.integer(bdiag(matrix(1:4,2),a=5:6,7L,t(8:9),initial=0L))
+## bdiag(list(1:2),list(3:4+0),initial=list())
 
 hazFun <- function(f, tmvar="t", ...) {
     if(all(c("newdata","t") %in% names(formals(f))))
@@ -210,21 +275,45 @@ vcov.hazFun <- function(object, ...) matrix(0,1,1,FALSE,list("hazFun","hazFun"))
 
 as.data.frame.markov_msm <- function(x, row.names=NULL, optional=FALSE,
                                      ci=TRUE,
-                                     P.conf.type="log-log", L.conf.type="log",
+                                     P.conf.type="log-log", L.conf.type="log", C.conf.type="log",
                                      P.range=c(0,1), L.range=c(0,Inf),
+                                     C.range=c(0,Inf),
                                      ...) {
     state.names <- rownames(x$trans)
     perm <- function(x) aperm(x, c(2,3,1))
+    ## probabilities
     seP <- apply(x$Pu, c(1,2), function(m) sqrt(colSums(m * (vcov(x) %*% m)))) # c(nobs,nt,nstates)
     seP <- array(seP, dim(x$Pu)[c(4,1,2)]) # c(nobs,nt,nstates))
     seP <- aperm(seP,c(2,3,1))
-    seL <- apply(x$Lu, c(1,2), function(m) sqrt(colSums(m * (vcov(x) %*% m)))) # c(nobs,nt,nstates)
-    seL <- array(seL, dim(x$Lu)[c(4,1,2)]) # c(nobs,nt,nstates))
+    ## utilities
+    keep.ith <- function(a,i) {
+        slice <- a[,i,,] 
+        a <- a*0
+        a[,i,,] <- slice
+        a
+    }
+    Lu <- do.call(abind, c(list(3, x$Lu),
+                           lapply(1:nrow(x$trans), function(i) keep.ith(x$Pdisc,i))))
+    vcovL <- bdiag(vcov(x), diag(x$utility.sd^2))
+    seL <- apply(Lu, c(1,2), function(m) sqrt(colSums(m * (vcovL %*% m)))) # c(nobs,nt,nstates)
+    seL <- array(seL, dim(Lu)[c(4,1,2)]) # c(nobs,nt,nstates))
     seL <- aperm(seL,c(2,3,1))
     out <- data.frame(P=as.vector(perm(x$P)),
                       seP=as.vector(perm(seP)),
                       L=as.vector(perm(x$L)),
                       seL=as.vector(perm(seL)))
+    if (!is.null(x$costsu)) {
+        ## error in the following 
+        costsu <- do.call(abind, c(list(3,x$costsu),
+                                   lapply(1:nrow(x$trans), function(i) keep.ith(x$Pdisc,i)),
+                                   list(x$costsu.trans)))
+        vcovC <- bdiag(vcov(x), diag(x$state.costs.sd^2), diag(x$transition.costs.sd^2))
+        seC <- apply(costsu, c(1,2), function(m) sqrt(colSums(m * (vcovC %*% m)))) # c(nobs,nt,nstates)
+        seC <- array(seC, dim(costsu)[c(4,1,2)]) # c(nobs,nt,nstates))
+        seC <- aperm(seC,c(2,3,1))
+        out$C <- as.vector(perm(x$costs))
+        out$seC <- as.vector(perm(seC))
+    }
     dimnames. <- dimnames(perm(x$P)) 
     dimnames.$obs <- 1:length(dimnames.$obs)
     y <- expand.grid(dimnames.)
@@ -237,6 +326,11 @@ as.data.frame.markov_msm <- function(x, row.names=NULL, optional=FALSE,
         tmp <- surv.confint(out$L,out$seL, conf.type=L.conf.type, min.value=L.range[1], max.value=L.range[2])
         out$L.lower=tmp$lower
         out$L.upper=tmp$upper
+        if (!is.null(x$costs)) {
+            tmp <- surv.confint(out$C,out$seC, conf.type=C.conf.type, min.value=C.range[1], max.value=C.range[2])
+            out$C.lower=tmp$lower
+            out$C.upper=tmp$upper
+        }
     }
     newdata <- as.data.frame(x$newdata[as.numeric(out$obs), , drop=FALSE])
     names(newdata) <- names(x$newdata)
@@ -263,14 +357,21 @@ standardise.markov_msm <- function(x,
     Pu <- add.dim(apply(x$Pu,1:3,wtd.mean))
     L <- add.dim(apply(x$L,c(1,2),wtd.mean))
     Lu <- add.dim(apply(x$Lu,1:3,wtd.mean))
+    Pdisc <- add.dim(apply(x$Pdisc,1:3,wtd.mean))
     dimnames(P) <- dimnames(L) <- list(time=x$time, state=state.names, obs=1)
     oldnames <- dimnames(x$Pu)
-    dimnames(Pu) <- dimnames(Lu) <- list(time=x$time, state=state.names, coef=oldnames[[3]], obs=1)
-    df <- x$newdata[0,]
-    out <- list(P=P, Pu=Pu, L=L, Lu=Lu, vcov=vcov(x), time=x$time, newdata=df, trans=x$trans,
-                call=call)
-    class(out) <- "markov_msm"
-    out
+    dimnames(Pdisc) <- list(time=x$time, state=state.names, coef="Pdisc", obs=1)
+    dimnames(Pu) <- dimnames(Lu) <-
+        list(time=x$time, state=state.names, coef=oldnames[[3]], obs=1)
+    ## update x
+    x$newdata <- x$newdata[0,]
+    x$P <- P
+    x$Pu <- Pu
+    x$L <- L
+    x$Lu <- Lu
+    x$Pdisc <- Pdisc
+    x$call <- call
+    x
 }
 vcov.survPen <- function(object) object$Vp
 "coef<-.survPen" <- function(this,value) {
@@ -361,11 +462,14 @@ print.markov_msm <- function(x,
                              digits=5,
                              se=FALSE, ci=TRUE,
                              P.conf.type="log-log", L.conf.type="log",
+                             C.conf.type="log",
                              P.range=c(0,1), L.range=c(0,Inf),
+                             C.range=c(0,Inf),
                              ...) {
     df <- as.data.frame(x, ci=ci,
                         P.conf.type=P.conf.type, L.conf.type=L.conf.type,
-                        P.range=P.range, L.range=L.range)
+                        C.conf.type=C.conf.type,
+                        P.range=P.range, L.range=L.range, C.range=C.range)
     if (!se) df$seP <- df$seL <- NULL
     print(df, digits=digits, ...)
     invisible(x)
@@ -377,13 +481,13 @@ zeroModel <- function(object) {
 }
 predict.zeroModel <- function(object, type=c("haz","gradh"), ...) {
     type <- match.arg(type)
-    0.0*predict(object$base, type=type...) 
+    0.0*predict(object$base, type=type, ...) 
 }
 ## we keep the same length/dim to support comparisons between different interventions
 coef.zeroModel <- function(object, ...) 0.0*coef(object$base, ...)
 vcov.zeroModel <- function(object, ...) 0.0*vcov(object$base, ...)
 
-hrModel <- function(object, hr=1, ci=NULL) {
+hrModel <- function(object, hr=1, ci=NULL, selogHR=NULL) {
     stopifnot(is.null(ci) || (is.numeric(ci) && length(ci)==2))
     stopifnot(is.numeric(hr) && length(hr)==1 && hr>0)
     newobject <- if (inherits(object, "hrModel")) object else structure(list(base=object),
@@ -409,26 +513,57 @@ vcov.hrModel <- function(object, ...) {
     out
 }
 
+aftModel <- function(object, af=1, ci=NULL) {
+    stopifnot(is.null(ci) || (is.numeric(ci) && length(ci)==2))
+    stopifnot(is.numeric(af) && length(af)==1 && af>0)
+    newobject <- if (inherits(object, "aftModel")) object else structure(list(base=object),
+                                                                        class="aftModel")
+    attr(newobject, "logaf") <- log(af)
+    attr(newobject, "selogaf") <- if (is.null(ci)) 0 else log(ci[2]/ci[1])/2/qnorm(0.975)
+    newobject
+}
+predict.aftModel <- function(object, newdata, type=c("haz","gradh"), ...) {
+    type <- match.arg(type)
+    af <- exp(attr(object,"logaf"))
+    pred1 <- predict(object$base, type="haz", ...)
+    if (type=="haz") af*pred1
+    else
+        cbind(predict(object$base, type="gradh", ...)*af, pred1*af*log(af))
+}
+## This has different lengths/dimensions to the base model:
+##   wrap base intervention in aftModel(..., af=1)
+coef.aftModel <- function(object, ...) c(coef(object$base), attr(object,"logaf"))
+vcov.aftModel <- function(object, ...) {
+    out <- rbind(cbind(vcov(object$base),0),0)
+    out[nrow(out),ncol(out)] <- attr(object, "selogaf")^2
+    out
+}
+
+vitals <- function(age,rate,method="natural",...) {
+    f <- stats::splinefun(age,rate,method=method, ...)
+    hazFun(function(t) f(t))
+}
+
 subset.markov_msm <- function(x, subset, ...) {
     e <- substitute(subset)
     r <- eval(e, x$newdata, parent.frame())
     if (!is.logical(r)) 
         stop("'subset' must be logical")
     r <- r & !is.na(r)
-    newx <- list(time=x$time,
-                 P=x$P[,,r,drop=FALSE],
-                 Pu=x$Pu[,,,r,drop=FALSE],
-                 ## seP=x$seP[,,r,drop=FALSE],
-                 L=x$L[,,r,drop=FALSE],
-                 Lu=x$Lu[,,,r,drop=FALSE],
-                 ## seL=x$seL[,,r,drop=FALSE],
-                 res=NULL, # not strictly needed
-                 vcov=x$vcov,
-                 newdata=x$newdata[r,,drop=FALSE],
-                 trans=x$trans)
-    newx$call <- match.call()
-    class(newx) <- "markov_msm"
-    newx
+    # update x
+    x$P <- x$P[,,r,drop=FALSE]
+    x$Pu <- x$Pu[,,,r,drop=FALSE]
+    x$L <- x$L[,,r,drop=FALSE]
+    x$Lu <- x$Lu[,,,r,drop=FALSE]
+    x$Pdisc <- x$Pdisc[,,,r,drop=FALSE]
+    x$newdata <- x$newdata[r,,drop=FALSE]
+    if (x$use.costs) {
+        x$costs <- x$costs[,,r,drop=FALSE]
+        x$costsu <- x$costsu[,,,r,drop=FALSE]
+    }
+    x$res <- NULL # not strictly needed
+    x$call <- match.call()
+    x
 }
 diff.markov_msm <- function(x, y, ...) {
     stopifnot(inherits(x,"markov_msm"))
@@ -437,21 +572,30 @@ diff.markov_msm <- function(x, y, ...) {
     stopifnot(all(x$vcov == y$vcov))
     stopifnot(all(x$time == y$time))
     stopifnot(all(x$trans == y$trans, na.rm=TRUE))
-    z <- list(P=x$P-y$P, Pu=x$Pu-y$Pu, L=x$L-y$L, Lu=x$Lu-y$Lu)
-    z <- c(list(time=x$time,
-                vcov=x$vcov,
-                trans=x$trans),
-           z)
+    z <- x # copy of x
+    z$P <- x$P-y$P
+    z$Pu <- x$Pu-y$Pu
+    z$L <- x$L-y$L
+    z$Lu <- x$Lu-y$Lu
+    z$Pdisc <- x$Pdisc-y$Pdisc
     z$call <- match.call()
-    z$newdata <- x$newdata
     z$newdata[x$newdata != y$newdata] <-  NA
+    if (z$use.costs) {
+        z$costs <- x$costs-y$costs
+        z$costsu <- x$costsu-y$costsu
+    }
     class(z) <- c("markov_msm_diff","markov_msm") # not strictly "markov_msm"...
     z
 }
-as.data.frame.markov_msm_diff <- function(x, ...)
-    as.data.frame.markov_msm(x, ...,
-                             P.conf.type="plain", L.conf.type="plain",
-                             P.range=c(-Inf, Inf), L.range=c(-Inf, Inf))
+as.data.frame.markov_msm_diff <- function(x, P.conf.type="plain", L.conf.type="plain",
+                             C.conf.type="plain",
+                             P.range=c(-Inf, Inf), L.range=c(-Inf, Inf),
+                             C.range=c(-Inf,Inf), ...)
+    as.data.frame.markov_msm(x,
+                             P.conf.type=P.conf.type, L.conf.type=L.conf.type,
+                             C.conf.type=C.conf.type,
+                             P.range=P.range, L.range=L.range,
+                             C.range=C.range, ...)
 
 
 plot.markov_msm <- function(x, y, stacked=TRUE, which=c("P","L"),
@@ -593,20 +737,17 @@ ratio_markov_msm <- function(x, y, ...) {
     stopifnot(all(x$vcov == y$vcov))
     stopifnot(all(x$time == y$time))
     stopifnot(all(x$trans == y$trans, na.rm=TRUE))
-    z <- list(P=log(x$P/y$P), L=log(x$L/y$L)) # logs of the ratios
+    z <- x # copy of x
+    z$P <- log(x$P/y$P)
+    z$L <- log(x$L/y$L) # logs of the ratios
     z$Pu <- apply(x$Pu, 3, function(slice) slice/x$P) - apply(y$Pu, 3, function(slice) slice/y$P)
     dim(z$Pu) <- dim(x$Pu)
     dimnames(z$Pu) <- dimnames(x$Pu)
     z$Lu <- apply(x$Lu, 3, function(slice) slice/x$L) - apply(y$Lu, 3, function(slice) slice/y$L)
     dim(z$Lu) <- dim(x$Lu)
     dimnames(z$Lu) <- dimnames(x$Lu)
-    z <- c(list(time=x$time,
-                vcov=x$vcov,
-                trans=x$trans,
-                res=NULL),
-           z)
+    z$Pdisc <- log(x$Pdisc/y$Pdisc)
     z$call <- match.call()
-    z$newdata <- x$newdata
     z$newdata[x$newdata != y$newdata] <-  NA
     class(z) <- c("markov_msm_ratio","markov_msm") # not strictly "markov_msm"...
     z
@@ -666,6 +807,56 @@ as.data.frame.markov_msm_ratio <- function(x, ...) {
 ## }
 
 
+
+abind <- function(index, ...) { # bind on nth slice for a bag of arrays
+    x <- list(...)
+    stopifnot(all(sapply(x,is.array)))
+    dim1 <- dim(x[[1]])
+    ## check index
+    stopifnot(index==floor(index) && index>=1 || index<=length(dim))
+    ## check all arrays have the same number of dimensions
+    stopifnot(all(sapply(x[-1],function(xi) length(dim(xi))==length(dim1))))
+    ## case: arrays of dimension 1
+    if (length(dim1)==1) return(array(unlist(x)))
+    ## check all arrays for the same dimensions (excluding the index dimension)
+    for (i in ((1:length(dim1))[-index]))
+        stopifnot(all(sapply(x[-1],function(xi) dim(xi)[i]==dim1[i])))
+    ## re-order to put the index dimension last
+    ord <- c((1:length(dim1))[-index],index)
+    x <- lapply(x, function(xi) aperm(xi,ord)) # REPLACEMENT
+    y <- do.call("c",lapply(x,as.vector)) # magic...
+    dims <- dim1[ord]
+    dimnames. <- dimnames(x[[1]])
+    dims[length(dims)] <- sum(sapply(x,function(xi) dim(xi)[length(dims)]))
+    if (!is.null(dimnames.[[length(dims)]]))
+        dimnames.[[length(dims)]] <- unlist(lapply(x,function(xi) dimnames(xi)[length(dims)]))
+    dim(y) <- dims
+    dimnames(y) <- dimnames.
+    aperm(y,order(ord))
+}
+## abind(1,array(1),array(2),array(3:4))
+## abind(1,array(1,c(1,1)),array(2,c(1,1)),array(3:4,c(2,1)))
+## abind(2,array(1,c(1,1)),array(2,c(1,1)),array(3:4,c(1,2)))
+## abind(1,array(1,c(1,1,1)),array(2,c(1,1,1)),array(3:4,c(2,1,1)))
+add_dim <- function(a,index,dimname="") {
+    stopifnot(is.array(a))
+    dims <- dim(a)
+    ndim <- length(dims)
+    dimnames. <- dimnames(a)
+    stopifnot(index==floor(index) && index>=1 && index<=ndim+1)
+    newdim <- if (index==1) c(1,dims)
+              else if (index==ndim+1) c(dims,1)
+              else c(dims[1:(index-1)], 1, dims[index:ndim])
+    dimnames. <- if (index==1) c(dimname,dimnames.)
+                 else if (index==ndim+1) c(dimnames.,dimname)
+                 else c(dimnames.[1:(index-1)], dimname, dimnames.[index:ndim])
+    array(a,newdim,dimnames.)
+}
+## add_dim(array(c(1,2,3,4),dimnames=list(11:14)),2,"blank")
+## add_dim(array(1:4),2)
+## add_dim(array(1:4,c(2,2)),1)[1,,]
+## add_dim(array(1:4,c(2,2)),2)[,1,]
+## add_dim(array(1:4,c(2,2)),3)[,,1]
 bindlast <- function(...) { # bind on last slice for a bag of arrays
     x <- list(...)
     stopifnot(all(sapply(x,is.array)))
@@ -692,22 +883,19 @@ rbind.markov_msm <- function(..., deparse.level = 1) {
     stopifnot(all(sapply(x[-1],function(xi) all(xi$time==x[[1]]$time))))
     stopifnot(all(sapply(x[-1],function(xi) all(xi$trans==x[[1]]$trans, na.rm=TRUE))))
     bind <- function(name) do.call(bindlast, lapply(x,"[[",name))
-    newx <- list(time=x[[1]]$time,
-                 P=bind("P"),
-                 Pu=bind("Pu"),
-                 L=bind("L"),
-                 Lu=bind("Lu"),
-                 vcov=x[[1]]$vcov,
-                 newdata=do.call(rbind,lapply(x,"[[", "newdata")),
-                 trans=x[[1]]$trans,
-                 res=NULL)
-    newx$call <- match.call()
+    z <- x[[1]]
+    z$P <- bind("P")
+    z$Pu <- bind("Pu")
+    z$L <- bind("L")
+    z$Lu <- bind("Lu")
+    z$Pdisc <- bind("Pdisc")
+    z$call <- match.call()
+    z$newdata <- do.call(rbind,lapply(x,"[[", "newdata"))
     ## is this a good idea? It will be lost if done more than once...
-    newx$newdata$.index <- unlist(lapply(1:length(x),
+    z$newdata$.index <- unlist(lapply(1:length(x),
                                          function(i) rep(i,nrow(x[[i]]$newdata))))
-    state.names <- rownames(newx$trans)
-    class(newx) <- class(x[[1]])
-    newx
+    ## state.names <- rownames(z$trans)
+    z
 }
 transform.markov_msm <- function(`_data`, ...) {
     `_data`$newdata <- transform(`_data`$newdata, ...)
@@ -794,6 +982,7 @@ collapse_markov_msm <- function(object, which=NULL, sep="; ") {
     L <- sum3(object$L,index)
     Pu <- sum4(object$Pu,index)
     Lu <- sum4(object$Lu,index)
+    Pdisc <- sum4(object$Pdisc,index)
     if ("C" %in% names(object)) {
         C <- sum3(object$C,index)
         Cu <- sum4(object$Cu,index)
@@ -806,13 +995,16 @@ collapse_markov_msm <- function(object, which=NULL, sep="; ") {
         }
     }
     colnames(trans) <- rownames(trans) <- new.state.names
-    newobject <- structure(list(time = object$time,
-                                P=P, L=L, Pu=Pu, Lu=Lu,
-                                res=NULL, vcov=object$vcov,
-                                newdata=object$newdata,
-                                trans=trans, call=call),
-                           class=class(object))
-    newobject
+    z <- object
+    z$P <- P
+    z$L <- L
+    z$Pu <- Pu
+    z$Lu <- Lu
+    z$Pdisc <- Pdisc
+    z$trans <- trans
+    ## costs??
+    z$call <- call
+    z
 }
 
 stratifiedModel <- function (object,strata) {
