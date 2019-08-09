@@ -23,6 +23,42 @@ setwd("~/src/R/rstpm2")
 library(devtools)
 devtools::test()
 
+## offset
+library(rstpm2)
+brcancer2 <- transform(brcancer,off=0.1)
+fit <- stpm2(Surv(rectime,censrec==1)~hormon, df = 2, data=brcancer2)
+fit2 <- stpm2(Surv(rectime,censrec==1)~hormon+offset(off), df = 2, data=brcancer2)
+fit
+fit2
+
+
+## p-value for survival differences
+library(rstpm2)
+fit <- stpm2(Surv(rectime,censrec==1)~hormon, df = 2, data=brcancer,tvc=list(hormon=2))
+test <- predict(fit, type="sdiff", var="hormon", newdata=data.frame(hormon=0,rectime=500),se.fit=TRUE)
+z <- test[1,1]/((test[1,3]-test[1,2])/2/qnorm(0.975))
+2*pnorm(-abs(z))
+##
+## test the difference in survival rates
+test <- predictnl(fit, function(object,newdata=NULL) {
+  lp1 <- predict(object, newdata=data.frame(hormon=1,rectime=500), type="surv")
+  lp2 <- predict(object, newdata=data.frame(hormon=0,rectime=500), type="surv")
+  lp1-lp2
+  })
+with(test, c(fit=fit,
+             se.fit=se.fit,
+             statistic=fit/se.fit,
+             p=2*pnorm(-abs(fit/se.fit))))
+## same p-value as predict(..., type="sdiff")
+##
+s18 <- summary(survfit(Surv(rectime,censrec==1)~hormon,data=brcancer),time=500)
+z2<-diff(s18$surv)/sqrt(sum(s18$std.err^2))
+2*pnorm(-abs(z2))
+##
+library(bpcp)
+with(brcancer,
+     fixtdiff(rectime,censrec,hormon,500,doall = TRUE))
+
 ## bug #3 on GitHub
 library(rstpm2)
 # Function with model_formula paramter **ERRORS**
