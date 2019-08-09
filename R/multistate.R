@@ -4,9 +4,12 @@ markov_msm <-
               sing.inf = 1e+10, method="adams", rtol=1e-10, atol=1e-10, slow=FALSE,
               min.tm=1e-8,
               utility=function(t) rep(1, nrow(trans)),
+              utility.sd=rep(0,nrow(trans)),
               use.costs=FALSE,
-              transition.costs=lapply(1:sum(!is.na(trans)), function(i) function(t) 1000), # per transition
+              transition.costs=function(t) rep(0,sum(!is.na(trans))), # per transition
+              transition.costs.sd=rep(0,sum(!is.na(trans))),
               state.costs=function(t) rep(0,nrow(trans)), # per unit time
+              state.costs.sd=rep(0,nrow(trans)),
               discount.rate = 0,
               block.size=500,
               debug = FALSE,
@@ -17,7 +20,7 @@ markov_msm <-
         base::inherits(x, ...) ||
             (base::inherits(x, c("zeroModel","hrModel","stratifiedModel"))
                 && base::inherits(x$base, ...))
-    base.classes <- c("stpm2","pstpm2","glm","survPen","gam","aft","survreg")
+    base.classes <- c("stpm2","pstpm2","glm","survPen","gam","aft","flexsurvreg","aftreg")
     stopifnot(all(sapply(x, function(xi) inherits(xi,base.classes) | is.function(xi))))
     stopifnot(!is.null(newdata))
     stopifnot(sum(!is.na(trans)) == length(x))
@@ -39,6 +42,8 @@ markov_msm <-
                                               min.tm = min.tm, utility = utility,
                                               use.costs = use.costs,
                                               transition.costs = transition.costs,
+                                              transition.costs.sd = transition.costs.sd,
+                                              state.costs.sd = state.costs.sd,
                                               state.costs = state.costs,
                                               discount.rate = discount.rate,
                                               block.size = block.size,
@@ -51,10 +56,15 @@ markov_msm <-
     if (nt < 2) 
         stop("number of times should be at least two")
     stopifnot(length(utility(t[2])) %in% c(1,nrow(trans)))
-    if (is.null(tmvar) && all(sapply(x,inherits,c("stpm2","pstpm2","aft","survPen"))))
+    if (is.null(tmvar) && all(sapply(x,inherits,c("stpm2","pstpm2","aft","survPen","flexsurvreg",
+                                                  "aftreg"))))
         tmvar <- sapply(x,function(object)
             if(inherits(object,c("stpm2","pstpm2"))) object@timeVar
             else if (inherits(object,"aft")) object@args$timeVar
+            else if (inherits(object,"flexsurvreg")) "t"
+            else if (inherits(object,"aftreg"))
+                local({lhs <- object$call$formula[[2]]
+                    deparse(if(length(lhs)==4) lhs[[4]] else lhs[[3]])})
             else object$t1.name)
     stopifnot(!is.null(tmvar))
     stopifnot(length(tmvar) %in% c(1,length(x)))
@@ -263,7 +273,7 @@ hazFun <- function(f, tmvar="t", ...) {
     class(out) <- "hazFun"
     out
 }
-predict.hazFun <- function(object, newdata, type=c("haz","gradh")) {
+predict.hazFun <- function(object, newdata, type=c("haz","gradh"), ...) {
     type <- match.arg(type)
     val <- if (type=="haz") object$haz(newdata) else 0
     if (length(val)==1 && length(val)<nrow(newdata))
@@ -384,7 +394,8 @@ survPenWrap <- function(object) {
         class(object) <- c("survPenWrap", class(object))
     object
 }
-predict.survPenWrap <- function(object, newdata, type=NULL, ...) {
+predict.survPenWrap <- function(object, newdata, type=NULL, min.eps=1e-6, ...) {
+    newdata[[object$t1.name]] <- pmax(min.eps, newdata[[object$t1.name]])
     if (is.null(type)) NextMethod("predict", object)
     else if (type=="haz") predict(object, newdata=newdata, do.surv=FALSE)$haz
     else if (type=="gradh") predict(object, newdata=newdata, type="lpmatrix") *
@@ -397,9 +408,9 @@ predict.glm <- function (object, newdata=NULL, type=NULL, ...) {
         stop("Currently only implemented for a log link")
     ## stopifnot() # Poisson family with log link?
     ## assumes response is a rate
-    if(type=="haz") stats::predict.glm(object, newdata=newdata, type="response") 
+    if(type=="haz") stats::predict.glm(object, newdata=newdata, type="response", ...) 
     else if (type=="gradh")
-        stats::predict.glm(object, newdata=newdata, type="response") *
+        stats::predict.glm(object, newdata=newdata, type="response", ...) *
             lpmatrix.lm(object, newdata=newdata)
     else NextMethod("predict", object)
 }
@@ -415,12 +426,241 @@ predict.gamWrap <- function (object, newdata=NULL, type=NULL, ...) {
         stop("Currently only implemented for a log link")
     ## stopifnot() # Poisson family with log link?
     ## assumes response is a rate
-    if (type=="haz") predict(object, newdata=newdata, type="response") 
+    if (type=="haz") predict(object, newdata=newdata, type="response", ...) 
     else if (type=="gradh") {
-        as.vector(predict(object, newdata=newdata, type="response")) *
-            predict(object, newdata=newdata, type="lpmatrix")
+        as.vector(predict(object, newdata=newdata, type="response", ...)) *
+            predict(object, newdata=newdata, type="lpmatrix", ...)
     } else NextMethod("predict", object)
 }
+predict.flexsurvreg <- function(object, newdata, type=NULL, t=NULL, se.fit=FALSE, tmvar="t", ...) {
+    if (is.null(t)) t <- unique(newdata[[tmvar]])
+    if (is.null(type)) return(summary(object, newdata=newdata, t=t, ci=se.fit, ...))
+    if (type=="haz")
+        sapply(summary(object, newdata=newdata, t=t, ci=se.fit, type="haz"),
+               "[[", "est")
+    else if (type=="gradh") {
+        g <- function(coef) {
+            object$res[,"est"] <- object$res.t[,"est"] <- coef
+            predict(object, newdata, type="haz", t=t, ci=FALSE, ...)
+        }
+        ## numDeriv::jacobian(g, x=coef(object), method="simple")
+        grad(g, coef(object))
+    }
+    else summary(object, newdata=newdata, type=type, t=t, ci=se.fit, ...)
+}
+
+vcov.aftreg <- function(object, ...)
+    object$var
+
+predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv", "gradh"), 
+          newdata, t=NULL, tmvar=NULL, na.action=na.pass, fd=FALSE, ...) 
+{
+    ## utility function
+    mref <- function(m,i,j) i+(j-1)*nrow(m)
+    if (!inherits(object, "aftreg")) 
+        stop("Works only with 'aftreg' objects.")
+    type <- match.arg(type)
+    if (type=="gradh" && fd) {
+        coef <- coef(object)
+        g1 <- function(coef) {
+            object$coefficients <- coef
+            predict.aftreg(object, newdata=newdata, type="haz", t=t,
+                    tmvar=tmvar, na.action=na.action, fd=FALSE, ...)
+        }
+        ## return(numDeriv::jacobian(g, coef))
+        ## return(numDeriv::jacobian(g, coef, method="simple"))
+        return(grad(g1, coef))
+    }
+    if (is.null(t)) {
+        if (is.null(tmvar)) {
+            lhs <- object$call$formula[[2]]
+            expr <- if (length(lhs)==4) lhs[[3]] else lhs[[2]]
+            t <- eval(expr, newdata, parent.frame())
+            rm(lhs,expr)
+        } else
+            t <- newdata[[tmvar]]
+    }
+    if (length(t)<nrow(newdata)) t <- rep(t,length=nrow(newdata))
+    if (type=="haz" && fd) {
+        S <- predict.aftreg(object, newdata=newdata, type="surv", t=t,
+                    tmvar=tmvar, na.action=na.action, ...)
+        g2 <- function(t)
+            predict.aftreg(object, newdata=newdata, type="surv", t=t,
+                    tmvar=tmvar, na.action=na.action, fd=FALSE, ...)
+        ## return(-numDeriv::jacobian(g, t)/S)
+        return(-grad(g2, t)/S)
+    }
+    ## BUG: add names to object$levels
+    if (any(object$isF))
+        names(object$levels) <- object$covars[object$isF]
+    Terms <- object$terms
+    if (!inherits(Terms, "terms")) 
+        stop("invalid terms component of  object")
+    strats <- attr(Terms, "specials")$strata
+    intercept <- attr(Terms, "intercept")
+    Terms <- delete.response(Terms)
+    newframe <- stats::model.frame(Terms, data = newdata, 
+                                   na.action = na.action,
+                                   xlev = object$levels)
+    if (length(strats)) {
+        if (!("strata" %in% names(object)))
+            stop("predictions with strata requires 'aftreg(..., x=TRUE)'")
+        temp <- untangle.specials(Terms, "strata", 1)
+        if (length(temp$vars) == 1) 
+            strata.keep <- newframe[[temp$vars]]
+        else strata.keep <- survival::strata(newframe[, temp$vars], shortlabel = TRUE)
+        strata.keep <- factor(as.character(strata.keep),levels=levels(object$strata))
+        strata <- as.numeric(strata.keep)
+        ## remove strats from object$terms
+        newTerms <- Terms[-temp$terms]
+        attr(newTerms, "intercept") <- attr(Terms, "intercept")
+        Terms <- newTerms
+    } else {
+        stopifnot(object$n.stata == 1)
+        strata <- rep(1, nrow(newframe))
+    }
+    "%mv%" <- function(a,b) as.vector(a %*% b)
+    newframe <- stats::model.frame(Terms, data = newdata, 
+                                   na.action = na.action,
+                                   xlev = object$levels)
+    object$terms <- Terms
+    x <- model.matrix(object, newframe)[,-1,drop=FALSE] # is the intercept always first?
+    x <- sweep(x, 2, object$means)
+    ncov <- length(object$means)
+    param.scale <- if (object$param=="lifeAcc") -1 else 1
+    if (object$pfixed) {
+        p <- object$shape[strata]
+        lambda <- exp(object$coefficients[ncov + strata] +
+                      param.scale*(x %mv% object$coefficients[1:ncov]))
+    }
+    else {
+        p <- exp(object$coefficients[ncov + strata * 2])
+        lambda <- exp(object$coefficients[ncov + strata * 2 - 1] +
+                      param.scale*(x %mv% object$coefficients[1:ncov]))
+    }
+    if (ncov) {
+        score <- exp(x %mv% object$coefficients[1:ncov])
+    }
+    else {
+        score <- 1
+    }
+    xx <- t
+    if (object$dist == "weibull") {
+        dist <- "Weibull"
+        haza <- eha::hweibull
+        Haza <- eha::Hweibull
+        Surviv <- stats::pweibull
+        Dens <- stats::dweibull
+    }
+    else if (object$dist == "loglogistic") {
+        dist <- "Loglogistic"
+        haza <- eha::hllogis
+        Haza <- eha::Hllogis
+        Surviv <- eha::pllogis
+        Dens <- eha::dllogis
+    }
+    else if (object$dist == "lognormal") {
+        dist = "Lognormal"
+        haza <- eha::hlnorm
+        Haza <- eha::Hlnorm
+        Surviv <- stats::plnorm
+        Dens <- stats::dlnorm
+    }
+    else if (object$dist == "ev") {
+        dist = "Extreme value"
+        haza <- eha::hEV
+        Haza <- eha::HEV
+        Surviv <- eha::pEV
+        Dens <- eha::dEV
+    }
+    else if (object$dist == "gompertz") {
+        dist = "Gompertz"
+        haza <- eha::hgompertz
+        Haza <- eha::Hgompertz
+        Surviv <- eha::pgompertz
+        Dens <- eha::dgompertz
+        ## canonical parameterisation
+        p <- p/lambda
+    }
+    if (type=="haz")
+        return(haza(xx, scale = lambda, shape = p))
+    if (type=="cumhaz")
+        return(Haza(xx, scale = lambda, shape = p))
+    if (type=="density") {
+        if (object$dist == "lognormal") {
+            sdlog <- 1/p
+            meanlog <- log(lambda)
+            den <- stats::dlnorm(xx, meanlog, sdlog)
+        }
+        else 
+            den <- Dens(xx, scale = lambda, shape = p)
+        return(den)
+    }
+    if (type=="surv") {
+        if (object$dist == "lognormal") {
+            sdlog <- 1/p
+            meanlog <- log(lambda)
+            sur <- stats::plnorm(xx, meanlog, sdlog, lower.tail = FALSE)
+        }
+        else {
+            sur <- Surviv(xx, scale = lambda, shape = p, 
+                          lower.tail = FALSE)
+        }
+        return(sur)
+    }
+    if (type=="gradh" && !fd) {
+        mapper <- list(ev="extreme",
+                       weibull="weibull",
+                       loglogistic="loglogistic",
+                       Lognormal="lognormal")
+        if (object$dist %in% names(mapper)) {
+            distname <- mapper[[object$dist]]
+            dd <- survival::survreg.distributions[[distname]]
+            if (is.null(dd$itrans)) {
+                trans <- function(x) x
+                itrans <- function(x) x
+                dtrans <- function(x) 1
+            }
+            else {
+                trans <- dd$trans
+                itrans <- dd$itrans
+                dtrans <- dd$dtrans
+            }
+            if (!is.null(dd$dist)) 
+                dd <- survival::survreg.distributions[[dd$dist]]
+            pred <- object$coefficients[ncov+strata*2-1] +
+                param.scale*drop(x %mv% object$coefficients[1:ncov]) # + offset
+            scale <- exp(-object$coefficients[ncov+strata*2])
+            u <- (trans(t)-pred) / scale # check dimensions
+            density <- dd$density(u, list()) # F, 1-F, f, f'/f, f''/f
+            S <- density[,2]
+            f <- density[,3]
+            f.prime <- density[,4]*f
+            grad.beta <- -cbind(x,1)*(f.prime*S+f^2)*dtrans(t)/(S*scale)^2
+            grad.logscale <- (-f.prime*u*S/dtrans(t) -
+                              f^2*u/dtrans(t) -
+                                f*S/dtrans(t)) / (S*scale/dtrans(t))^2*scale
+            out <- matrix(0,nrow(newdata),length(coef(object)))
+            nc <- ncol(grad.beta)
+            out[,1:(nc-1)] <- grad.beta[,1:(nc-1)]
+            out[mref(out,1:nrow(newdata),nc+strata*2-2)] <- grad.beta[,nc]
+            out[mref(out,1:nrow(newdata),nc+strata*2-1)] <- grad.logscale
+            return(out)
+        } else {
+            ## gompertz
+            h <- haza(xx, scale = lambda, shape = p)
+            grad.beta <- -cbind(x,1)*h*xx/p
+            grad.logscale <- h
+            out <- matrix(0,nrow(newdata),length(coef(object)))
+            nc <- ncol(grad.beta)
+            out[,1:(nc-1)] <- grad.beta*x
+            out[mref(out,1:nrow(newdata),nc+strata*2-2)] <- grad.beta[,nc]
+            out[mref(out,1:nrow(newdata),nc+strata*2-1)] <- grad.logscale
+            return(out)
+        }
+    }
+}
+
 surv.confint <- function(p, se, conf.type=c("log","log-log","plain","logit","arcsin"),
                          conf.int=0.95, min.value=0, max.value=1) {
     conf.type <- match.arg(conf.type)
@@ -1022,7 +1262,7 @@ stratifiedModel <- function (object,strata) {
   object
 }
 ## does the following only work for index 1..K?
-predict.stratifiedModel <- function (object, type, newdata) {
+predict.stratifiedModel <- function (object, type, newdata, ...) {
     if (! is.null(object$strata.index))
         newdata[[object$strata.name]] <- object$strata.index
     ## otherwise assume that the strata is specified in newdata
@@ -1033,3 +1273,4 @@ predict.stratifiedModel <- function (object, type, newdata) {
 ## predict(m[[2]],"",data.frame(x=1))
 coef.stratifiedModel <- function(object, ...) NextMethod("coef", object)
 vcov.stratifiedModel <- function(object, ...) NextMethod("vcov", object)
+

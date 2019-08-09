@@ -711,7 +711,7 @@ setMethod("predict", "aft",
                   return(predict.aft.ext(object, type="gradh", time=time, X=X, XD=XD))
               }
               ## colMeans <- function(x) colSums(x)/apply(x,2,length)
-              local <-  function (object, newdata=NULL, type="surv", exposed)
+              local <-  function (object, newdata=NULL, type="surv", exposed, ...)
               {
                   args <- object@args
                   betafull <- coef(object)

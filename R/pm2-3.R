@@ -810,7 +810,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     tf <- terms.formula(smooth.formula, specials = c("s", "te"))
     terms <- attr(tf, "term.labels")
     right <- paste0(terms, collapse = "+")
-    fullformula <- as.formula(paste0(left, "+", right), env = parent.frame())
+    ## fullformula <- as.formula(paste0(left, "+", right), env = parent.frame())
     rm(left,right) # tidy up
     ##
     ##
@@ -821,13 +821,13 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     ## Specials:
     specials.names <- c("cluster","bhazard")
     specials <- attr(terms.formula(formula, specials.names), "specials")
+    spcall <- mf
+    spcall[[1]] <- quote(stats::model.frame)
+    spcall$formula <- terms(formula, specials.names, data = data)
+    mf2 <- eval(spcall, parent.frame())
     if (any(!sapply(specials,is.null))) {
         cluster.index <- specials$cluster
         bhazard.index <- specials$bhazard
-        spcall <- mf
-        spcall[[1]] <- quote(stats::model.frame)
-        spcall$formula <- terms(formula, specials.names, data = data)
-        mf2 <- eval(spcall, parent.frame())
         if (length(cluster.index)>0) {
             cluster <- mf2[, cluster.index]
             frailty = !is.null(cluster) && !robust
@@ -849,6 +849,9 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         }
         ## rm(mf2,spcall)
     }
+    ## offset
+    offset <- as.vector(stats::model.offset(mf2))
+    rm(mf2)
     ## deprecated code for cluster
     cluster <- substitute(cluster)
     cluster <- switch(class(cluster),
@@ -896,6 +899,8 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     if (!is.null(cluster))
         .include <- .include & !is.na(cluster)
     .include <- .include & !is.na(bhazard)
+    if (!is.null(offset))
+        .include <- .include & !is.na(offset)
     excess <- !all(bhazard==0)
     ##
     data <- data[.include, , drop=FALSE]
@@ -912,6 +917,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     if (!is.null(cluster))
         cluster <- cluster[.include]
     bhazard <- bhazard[.include]
+    offset <- if (is.null(offset)) rep(0,sum(.include)) else offset[.include]
     ## setup for initial values
     if (!interval) {
         ## Cox regression
@@ -1130,7 +1136,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  maxkappa=control$maxkappa, Z=Z, Z.formula = Z.formula, thetaAO = theta.AO,
                  excess=excess, data=data,
                  robust_initial = control$robust_initial, .include=.include,
-                 offset=rep(0,nrow(X)))
+                 offset=as.vector(offset))
     ## checks on the parameters
     stopifnot(all(dim(args$X) == dim(args$XD)))
     if (!frailty) {
@@ -1418,7 +1424,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                    timeExpr = timeExpr,
                    time0Expr = time0Expr,
                    like = like,
-                   fullformula = fullformula,
+                   ## fullformula = fullformula,
                    delayed=delayed,
                    frailty = frailty,
                    x = X,
