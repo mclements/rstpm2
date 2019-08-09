@@ -38,7 +38,7 @@ markov_msm(x, trans, t = c(0,1), newdata = NULL, init=NULL,
               utility=function(t) rep(1, nrow(trans)),
               utility.sd=rep(0,nrow(trans)),
               use.costs=FALSE,
-              transition.costs=rep(0, sum(!is.na(trans))), # per transition
+              transition.costs=function(t) rep(0, sum(!is.na(trans))), # per transition
               transition.costs.sd=rep(0,sum(!is.na(trans))),
               state.costs=function(t) rep(0,nrow(trans)), # per unit time
               state.costs.sd=rep(0,nrow(trans)),
@@ -55,8 +55,13 @@ markov_msm(x, trans, t = c(0,1), newdata = NULL, init=NULL,
                                    P.range=c(0,1), L.range=c(0,Inf),
 				   C.range=c(0,Inf),
                                    \dots)
-\method{as.data.frame}{markov_msm_diff}(x, \dots)
-\method{as.data.frame}{markov_msm_ratio}(x, \dots)
+\method{as.data.frame}{markov_msm_diff}(x, row.names=NULL, optional=FALSE,
+                                   P.conf.type="plain", L.conf.type="plain",
+				   C.conf.type="plain",
+                                   P.range=c(-Inf,Inf), L.range=c(-Inf,Inf),
+				   C.range=c(-Inf,Inf),
+                                   \dots)
+\method{as.data.frame}{markov_msm_ratio}(x, row.names=NULL, optional=FALSE, ...)
 standardise(x, \dots)
 \method{standardise}{markov_msm}(x,
                                  weights = rep(1,nrow(x$newdata)),
@@ -73,12 +78,7 @@ ratio_markov_msm(x, y, \dots)
 \method{transform}{markov_msm}(`_data`, \dots)
 collapse_markov_msm(object, which=NULL, sep="; ")
 zeroModel(object)
-\method{predict}{zeroModel}(object, type=c("haz","gradh"), ...)
-\method{coef}{zeroModel}(object, ...)
-\method{vcov}{zeroModel}(object, ...)
 hrModel(object,hr=1,ci=NULL,selogHR=NULL)
-\method{coef}{hrModel}(object, ...)
-\method{vcov}{hrModel}(object, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -245,14 +245,10 @@ For \code{collapse.states}:
 \item{sep}{separator to use for the collapsed state names}
 
 For \code{zeroModel}:
-\item{object}{survival regression object to be wrapped to give predict
-hazards of zero}
+\item{object}{survival regression object to be wrapped}
 
 For \code{hrModel}:
-\item{object}{survival regression object to be wrapped to give predict
-hazards times a hazard ratio}
 \item{hr}{hazard ratio}
-\item{ci}{confidence interval as a length-two vector - used to specify the se of the log(HR)}
 \item{selogHR}{alternative specification for the se of the log(HR)}
 
 }
@@ -265,12 +261,18 @@ derivatives with respect to the model parameters. The predictions can also be co
 calculate differences, ratios and standardised.
 
 The current implementation supports a list of models for each
-transition. It would be useful to also allow for one model to predict
-for the different transitions.
+transition. 
 
 The current implementation also only allows for a vector of initial
 values rather than a matrix. The predictions will need to be re-run for
 different vectors of initial values.
+
+For \code{as.data.frame.markov_msm_ratio}, the data are provided in
+log form, hence the default transformations and bounds are as per
+\code{as.data.frame.markov_msm_diff}, with untransformed data on the
+real line.
+
+TODO: allow for one model to predict for the different transitions.
 
 }
 \value{

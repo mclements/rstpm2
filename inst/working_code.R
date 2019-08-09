@@ -30,7 +30,7 @@ fit <- stpm2(Surv(rectime,censrec==1)~hormon, df = 2, data=brcancer2)
 fit2 <- stpm2(Surv(rectime,censrec==1)~hormon+offset(off), df = 2, data=brcancer2)
 fit
 fit2
-
+zeroModel(fit)
 
 ## p-value for survival differences
 library(rstpm2)

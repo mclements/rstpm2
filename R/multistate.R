@@ -827,7 +827,8 @@ diff.markov_msm <- function(x, y, ...) {
     class(z) <- c("markov_msm_diff","markov_msm") # not strictly "markov_msm"...
     z
 }
-as.data.frame.markov_msm_diff <- function(x, P.conf.type="plain", L.conf.type="plain",
+as.data.frame.markov_msm_diff <- function(x, row.names=NULL, optional=FALSE,
+                                          P.conf.type="plain", L.conf.type="plain",
                              C.conf.type="plain",
                              P.range=c(-Inf, Inf), L.range=c(-Inf, Inf),
                              C.range=c(-Inf,Inf), ...)
@@ -992,10 +993,13 @@ ratio_markov_msm <- function(x, y, ...) {
     class(z) <- c("markov_msm_ratio","markov_msm") # not strictly "markov_msm"...
     z
 }
-as.data.frame.markov_msm_ratio <- function(x, ...) {
+as.data.frame.markov_msm_ratio <- function(x, row.names=NULL, optional=FALSE, ...) {
     ## data are on a log scale!!
     z <- as.data.frame.markov_msm_diff(x, ...)
-    for (name in c("P","L","P.lower","P.upper","L.lower","L.upper"))
+    names <- c("P","L","P.lower","P.upper","L.lower","L.upper")
+    if (!is.null(x$costs))
+        names <- c(names, c("C","C.lower","C.upper"))
+    for (name in names)
         z[[name]] <- exp(z[[name]])
     z
 }
