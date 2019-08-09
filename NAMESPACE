@@ -5,7 +5,7 @@ exportClasses(stpm2,pstpm2,tvcCoxph,aft)
 export(stpm2, pstpm2, aft, gsm,
        cox.tvc, # experimental --- don't export?
        markov_msm, ratio_markov_msm,
-       zeroModel, hrModel, stratifiedModel,
+       zeroModel, hrModel, # stratifiedModel,
        standardise,
        incrVar, nsx, nsxD, "coef<-",
        eform, predictnl, coef, confint, 
@@ -47,14 +47,12 @@ S3method(diff, markov_msm)
 S3method(predict, zeroModel)
 S3method(coef, zeroModel)
 S3method(vcov, zeroModel)
-##
 S3method(predict, hrModel)
 S3method(coef, hrModel)
 S3method(vcov, hrModel)
-##
-S3method(predict, stratifiedModel)
-S3method(coef, stratifiedModel)
-S3method(vcov, stratifiedModel)
+## S3method(predict, stratifiedModel)
+## S3method(coef, stratifiedModel)
+## S3method(vcov, stratifiedModel)
 
 
 ## All methods for imported generics:
