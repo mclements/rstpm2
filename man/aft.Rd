@@ -12,7 +12,7 @@ predictor using natural splines.
 }
 \usage{
 aft(formula, data, smooth.formula = NULL, df = 3,
-    control = list(parscale = 1, maxit = 1000),
+    tvc = NULL, control = list(parscale = 1, maxit = 1000),
     init = NULL, weights = NULL, timeVar = "", time0Var = "",
     log.time.transform = TRUE,
     reltol = 1e-08, trace = 0, contrasts = NULL, subset = NULL,
