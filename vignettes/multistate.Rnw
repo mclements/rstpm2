@@ -11,11 +11,12 @@
 \usepackage[utf8]{inputenc}
 \VerbatimFootnotes
 \usepackage[margin=2.6cm]{geometry} % wide margins
-\usepackage{wasysym}
+\usepackage{wasysym,bm}
 \usepackage{tablefootnote}
 \usepackage{algorithm2e}
 \usepackage{graphicx, tikz}
 \usetikzlibrary{arrows,decorations.pathmorphing,backgrounds,positioning,fit,petri,matrix}
+\usepackage{xcolor}
 
 \title{Predictions for parametric and penalised multi-state Markov models}
 
@@ -130,7 +131,7 @@ Let the vector $\boldsymbol{\pi}(t_0,t_0)=(\pi_j(t_0,t_0))$ represent the initia
 
 This general approach can be applied to a variety of predictions. The other predictions may require that a set of differential equations be defined for several related predictions, including their gradients, in combination with the delta method for variance estimation.
 
-\subsection*{Example 1: Length of stay}
+\subsection*{Example 1: Length of stay and restricted mean survival time}
 
 The ordinary differential equations in Equations~(\ref{eq:kolmogorov})--(\ref{eq:Puinit}) can be further augmented to calculate the integral $L_{ij}(t_0,t)=\int_{t_0}^t P_{ij}(t_0,v)dv$. The additional differential equations are then
 \begin{align}
@@ -138,7 +139,9 @@ The ordinary differential equations in Equations~(\ref{eq:kolmogorov})--(\ref{eq
   \frac{d\boldsymbol{L}'_m(t_0,t)}{dt} &= \boldsymbol{P}'_m(t_0,t) \label{eq:dLudt} \\
   \boldsymbol{L}(t_0,t_0) &= \boldsymbol{L}'_m(t_0,t_0) = \boldsymbol{0} \label{eq:Linit}
 \end{align}
-where the matrix $\boldsymbol{L}(t_0,t)$ is the the \emph{length of stay} or sojourn time for state $j$ given an initial state $i$ at time $t_0$. For an irreversible two-state system, the length of stay for the initial state would estimate the restricted mean survival time (or, for $t\rightarrow\infty$, life expectancy). Algorithm 1 would be augmented to include Equations~(\ref{eq:los})--(\ref{eq:Linit}) to calculate transition and state occupation probabilities and the lengths of stay.
+where the matrix $\boldsymbol{L}(t_0,t)$ is the the \emph{length of stay} or sojourn time for state $j$ given an initial state $i$ at time $t_0$. Algorithm 1 would be augmented to include Equations~(\ref{eq:los})--(\ref{eq:Linit}) to calculate transition and state occupation probabilities and the lengths of stay.
+
+For restricted mean survival times and life expectancy, we can weight the length of stay by a vector $\boldsymbol{w}=(w_j)$, where $w_j=1$ for a live state $j$, and $w_j=0$ for a death state $j$. We then have that the restricted mean survival is $\bm{L}(t_0,t)\bm{w}$. Moreover, as $t\rightarrow\infty$, $\bm{L}(t_0,t)\bm{w}$ will measure life expectancy. 
 
 \subsection*{Example 2: Prevalence}
 
@@ -146,7 +149,7 @@ Let the prevalence for the live states be defined by
 \begin{align*}
   \tilde{\boldsymbol{P}}(t_0,t) &= \left(\boldsymbol{P}(t_0,t)\text{diag}(\boldsymbol{w})\right)\oslash\left(\boldsymbol{P}(t_0,t)\boldsymbol{w}\right)
 \end{align*}
-for a weight vector $\boldsymbol{w}=(w_j)$, where $w_j=1$ for the live states, otherwise $w_j=0$. Generalising a result for illness-death models by \cite{Brinks_Hoyer_2018} to multi-state models, we have that
+where the weight vector $\bm{w}$ again has elements that are 1 for a live state and 0 for a death state. Generalising a result for illness-death models by \cite{Brinks_Hoyer_2018} to multi-state models, we have that
 \begin{align*}
   \frac{d\tilde{\boldsymbol{P}}(t_0,t)}{dt} 
   &= \left(\left(\frac{d\boldsymbol{P}(t_0,t)}{dt}\text{diag}(\boldsymbol{w})\right)
@@ -221,7 +224,7 @@ We can augment the system of differential equations to calculate the ratios for 
   &\quad\oslash\boldsymbol{P}(t_0,t|\boldsymbol{x}_2) \\
   \text{\bf R}(t_0,t_0) &= \boldsymbol{1}
 \end{align*}
-where $\boldsymbol{P}(t_0,t|\boldsymbol{x}_2)>0$. This approach generalises the concept of relative survival. Alternatively, we can calculate the gradient for $\log(\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_2))$ (that is, the log ratio), which is
+where $\boldsymbol{P}(t_0,t|\boldsymbol{x}_2)>0$. Alternatively, we can calculate the gradient for $\log(\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_2))$ (that is, the log ratio), which is
 \begin{align*}
 \left.\frac{\partial}{\partial \beta_m} \log\left(\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)\right)\right|_{\beta_m=\hat\beta_m} &= \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_1)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_1)
 - \boldsymbol{\phi}'_m(t_0,t|\boldsymbol{x}_2)\oslash\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)
@@ -235,37 +238,31 @@ This evaluation depends on $\boldsymbol\phi(t_0,t|\boldsymbol{x}_2)$ being non-z
 
 \subsection*{Example 5: Utilities and costs}
 
-The approach readily incorporates utilities and costs. For utilities, we have the cumulative discounted utilities $U_{ij}(t_0,t)=\int_{t_0}^t P_{ij}(t_0,v)u_j(u)e^{-\lambda t}dv$, where $u_j(v)$ is the utility for state $j$ at time $v$ and $\lambda=\log(1+\delta)$ is the rate of decline for a discount rate $\delta$. The augmented differential equations are then
+The approach readily incorporates utilities and costs. For utilities, we have the cumulative discounted utilities $U_{i}(t_0,t)=\sum_j \int_{t_0}^t P_{ij}(t_0,v)u_j(v)e^{-\lambda v}dv$, where $u_j(v)$ is the utility for state $j$ at time $v$ and $\lambda=\log(1+\delta)$ is the rate of decline for a discount rate $\delta$. The augmented differential equations are then
 \begin{align}
-\frac{d\boldsymbol{U}(t_0,t)}{dt} &= \left(\boldsymbol{P}(t_0,t)\circ\boldsymbol{u}(t)\right)e^{-\lambda t} \label{eq:utilities} \\
-  \frac{d\boldsymbol{U}'_m(t_0,t)}{dt} &= \left(\boldsymbol{P}'_m(t_0,t)\circ\boldsymbol{u}(t)+\boldsymbol{P}(t_0,t)\circ\boldsymbol{u}'_m(t)\right)e^{-\lambda t} \label{eq:dUudt} \\
+\frac{d\boldsymbol{U}(t_0,t)}{dt} &= \boldsymbol{P}(t_0,t)\boldsymbol{u}(t)e^{-\lambda t} \label{eq:utilities} \\
+  \frac{d\boldsymbol{U}'_m(t_0,t)}{dt} &= \left(\boldsymbol{P}'_m(t_0,t)\boldsymbol{u}(t)+\boldsymbol{P}(t_0,t)\boldsymbol{u}'_m(t)\right)e^{-\lambda t} \label{eq:dUudt} \\
 \boldsymbol{U}(t_0,t) &= \boldsymbol{U}'_m(t_0,t) = \boldsymbol{0}
 \end{align}
-In health economics, the sum across the states gives the discounted, quality-adjusted life-years $\text{QALY}(t_0,t)=\boldsymbol{\pi}(t_0,t)^T\boldsymbol{L}(t_0,t)\boldsymbol{1}$. 
+In health economics, the discounted, quality-adjusted life-years are calculated by the product of the initial state probabilities and the utilities, such that $\text{QALY}(t_0,t)=\boldsymbol{\pi}(t_0,t_0)^T\boldsymbol{U}(t_0,t)$, with gradient $\text{QALY}'_m(t_0,t)=\boldsymbol{\pi}(t_0,t_0)^T\boldsymbol{U}'_m(t_0,t)$.
 
-Costs may be represented as accumulated costs or costs at a point in time. Let costs per unit time for being in state $i$ at time $t$ be represented by the vector function $\boldsymbol{c}(t)=(c_{i}(t))$ and model for point costs for transitions from state $i$ to state $j$ at time $t$, represented by the matrix $\boldsymbol{\mathcal{C}}(t)=(\mathcal{C}_{ij}(t))$. Then the cumulative discounted costs $\boldsymbol{C}(t_0,t)$ can be represented by the equations
-\begin{align*}
-\frac{d\boldsymbol{C}(t_0,t)}{dt} &= \left(\boldsymbol{P}(t_0,t)\circ\boldsymbol{c}(t)+
-                                    \boldsymbol{P}(t_0,t)(\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}(t))\right)e^{-\lambda t} \\
-    \frac{d\boldsymbol{C}'_m(t_0,t)}{dt} &= \Big(\boldsymbol{P}'_m(t_0,t)\circ\boldsymbol{c}(t)+ \boldsymbol{P}(t_0,t)\circ\boldsymbol{c}'_m(t)+\\
-                                         &\qquad \boldsymbol{P}'_m(t_0,t)\left(\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}(t)\right)+\\
-                                         &\qquad \boldsymbol{P}(t_0,t)\left(\boldsymbol{Q}'_m(t)\circ \boldsymbol{\mathcal{C}}(t)\right)+\nonumber\\
-                                         &\qquad\boldsymbol{P}(t_0,t)\left(\boldsymbol{Q}(t)\circ \boldsymbol{\mathcal{C}}'_m(t)\right)
-                                         \Big)e^{-\lambda t}  \\
+Costs may be represented as accumulated costs or costs at a point in time. Let costs per unit time for being in state $i$ at time $t$ be represented by the vector function $\boldsymbol{c}(t)=(c_{i}(t))$ and model for costs for transitions from state $i$ to state $j$ at time $t$, represented by the matrix $\boldsymbol{\mathcal{C}}(t)=(\mathcal{C}_{ij}(t))$, with $\mathcal{C}_{ii}(t)=0$. Then the cumulative discounted costs $\boldsymbol{C}(t_0,t)$ can be represented by the equations
+\begin{align}
+\frac{d\boldsymbol{C}(t_0,t)}{dt} 
+  &= \boldsymbol{P}(t_0,t) 
+\left(\boldsymbol{c}(t)+\left(\boldsymbol{Q}(t)\circ\boldsymbol{\mathcal{C}}(t)\right)\bm{1}\right) 
+    e^{-\lambda t} \label{eq:costs} \\
+    \frac{d\boldsymbol{C}'_m(t_0,t)}{dt} 
+  &= \Big(\boldsymbol{P}'_m(t_0,t)
+\left(\boldsymbol{c}(t)+\left(\boldsymbol{Q}(t)\circ\boldsymbol{\mathcal{C}}(t)\right)\bm{1}\right) +\nonumber \\
+  &\qquad \boldsymbol{P}(t_0,t) 
+\left(\boldsymbol{c}'_m(t)+\left(\boldsymbol{Q}'_m(t)\circ\boldsymbol{\mathcal{C}}(t)+\boldsymbol{Q}(t)\circ\boldsymbol{\mathcal{C}}'_m(t)\right)\bm{1}\right)\Big)e^{-\lambda t}  \\
   \boldsymbol{C}(t_0,t) &= \boldsymbol{C}'_m(t_0,t) = \boldsymbol{0}
-\end{align*}
+\end{align}
 
-Note that these may require the evaluation of the gradients for the utility and cost functions, respectively. These equations simplify when the utilities $\boldsymbol{u}(t)$ and cost functions $\boldsymbol{c}(t)$ and $\boldsymbol{\mathcal{C}}(t)$ are fixed and have zero gradients.
-The total costs are summed across the health states, such that
-$\text{Costs}(t_0,t)=\boldsymbol{\pi}(t_0,t)^T\boldsymbol{C}(t_0,t)\boldsymbol{1}$. The partial
-derivatives with respect to the regression parameters for QALYs and
-total costs are
-\begin{align*}
- \text{QALY}'_m(t_0,t) &= \boldsymbol{\pi}(t_0,t)^T\boldsymbol{L}'_m(t_0,t)\boldsymbol{1} + \boldsymbol{\pi}'_m(t_0,t)^T\boldsymbol{L}(t_0,t)\boldsymbol{1} \\
-   \text{Costs}'_m(t_0,t) & = \boldsymbol{\pi}(t_0,t)^T\boldsymbol{C}'_m(t_0,t)\boldsymbol{1} +
-                            \boldsymbol{\pi}'_m(t_0,t)^T\boldsymbol{C}(t_0,t)\boldsymbol{1}
-\end{align*} 
-where $\boldsymbol{\pi}'_m(t_0,t)^T=\boldsymbol{\pi}(t_0,t_0)^T\boldsymbol{P}'_m(t_0,t)^T$.
+Note that these require the evaluation of the gradients for the utility and cost functions. 
+The total costs are calculated by weighting by the initial state probabilities, such that 
+$\text{Costs}(t_0,t)=\boldsymbol{\pi}(t_0,t_0)^T\boldsymbol{C}(t_0,t)$, with gradient $\text{Costs}'_m(t_0,t)=\boldsymbol{\pi}(t_0,t_0)^T\boldsymbol{C}'_m(t_0,t)$. 
 We can also consider incremental cost-effectiveness ratios, estimated by 
 \begin{align*}
 \text{ICER}(t_0,t|\boldsymbol{x}_1,\boldsymbol{x}_2) &= \frac{\text{Costs}(t_0,t|\boldsymbol{x}_1)-\text{Costs}(t_0,t|\boldsymbol{x}_2)}{\text{QALY}(t_0,t|\boldsymbol{x}_1)-\text{QALY}(t_0,t|\boldsymbol{x}_2)}
@@ -277,7 +274,17 @@ The gradient of the log of the ICER is
 &\qquad \frac{\text{QALY}'_m(t_0,t|\boldsymbol{x}_1)-\text{QALY}'_m(t_0,t|\boldsymbol{x}_2)}{\text{QALY}(t_0,t|\boldsymbol{x}_1)-\text{QALY}(t_0,t|\boldsymbol{x}_2)}
 \end{align*}
 
-\subsection*{Interval estimation}
+Finally, we can expand the equations to record the utilities or costs for different states. We can extend Equations~\eqref{eq:utilities} and \eqref{eq:costs} to 
+\begin{align*}
+\frac{d\tilde{\boldsymbol{U}}(t_0,t)}{dt} &= \left(\boldsymbol{P}(t_0,t)\circ\left(\bm{1}\,\boldsymbol{u}(t)^T\right)\right)e^{-\lambda t} \\
+\frac{d\tilde{\boldsymbol{C}}(t_0,t)}{dt} 
+  &= \left(\boldsymbol{P}(t_0,t) \circ
+\left(\bm{1}\,\boldsymbol{c}(t)^T+\bm{1}\left(\left(\boldsymbol{Q}(t)\circ\boldsymbol{\mathcal{C}}(t)\right)\bm{1}\right)^T\right)\right)
+    e^{-\lambda t}
+\end{align*}
+for matrices $\tilde{\bm{U}}$ and $\tilde{\bm{C}}$, where $\tilde{U}_{ij}$ is the cumulative utility for state $j$ given an initial state $i$, and $\tilde{C}_{ij}$ is the cumulative cost for being in state $j$ or a transition from state $j$ given an initial state $i$.
+
+\subsection*{Variance and interval estimation}
 
 For an estimator $\boldsymbol\phi(t_0,t)$ with support on the real line, a confidence interval can be calculated from the variance-covariance matrix $\boldsymbol{V} = \boldsymbol{\phi}'_m(t_0,t)\, \hat{\boldsymbol\Sigma}\, \boldsymbol{\phi}'_m(t_0,t)$ and normal quantiles $z$ at the $\alpha$ level with bounds $\boldsymbol\phi(t_0,t)\pm z_{(1-\frac{\alpha}{2})}\sqrt{\text{diag}(\boldsymbol{V})}$.
 For estimators that are on the open interval $(0,1)$, the gradient can be calculated using an identity or logit transformations. Similarly, for estimators that are on the open interval $(0,\infty)$, the gradient can be calculated using an identity of log transformations.
@@ -310,7 +317,7 @@ We used exponentially distributed data from an illness-death model to estimate t
 
 We have implemented the algorithm in \code{R} within the \code{rstpm2}. The ODE solver uses the Adams method for non-stiff ODEs. 
 
-The current implementation allows for independent models for the estimated transition intensities, including Poisson regression using \code{stats::glm}, flexible parametric survival models (\code{rstpm2::stpm2}), and penalised survival models (\code{rstpm2::pstpm2} and \code{survPen::survPen}). The implementation also allows for a transition being set to zero and for functions to represent the transitions. The function scales reasonably well with multiple covariates within the same system of ODEs. 
+The current implementation allows for independent models for the estimated transition intensities, including Poisson regression using \code{stats::glm} and \code{mgcv::gam}, parametric survival models (\code{flexsurv::flexsurvreg}), flexible parametric survival models (\code{rstpm2::stpm2} and \code{flexsurv::flexsurvspline}), and penalised survival models (\code{rstpm2::pstpm2} and \code{survPen::survPen}, where the latter is on the log-hazard scale). The implementation also allows for  for functions to represent the transitions and for a transition to be set to zero. The function scales reasonably well with multiple covariates within the same system of ODEs. A large number of covariate patterns will be blocked and run on separate cores.
 
 For post-processing, the predictions and gradients can be calculated for combinations and subsets of covariates, and for collapsed states, and standardised across covariates. The delta method is available for differences and ratios. 
 
@@ -325,12 +332,120 @@ For post-processing, the predictions and gradients can be calculated for combina
 
 \section{Examples}
 
+\subsection{Rotterdam Breast Cancer Data}
 
+First, we will extend an analysis by \cite{Crowther_Lambert_2017} of the Rotterdam Breast Cancer Data \citep{sauerbrei2007,foekens2000}. This dataset includes patients who were treated for primary breast cancer in Rotterdam during 1978--1993. Treatment included primary surgery, with either mastectomy or breast conserving therapy, with possible referral for radiation treatment within three months of surgery. Study exclusion criteria included: (i) patient tissue based on biopsy only; (ii) metastatic disease at primary surgery or within one month of surgery; (iii) relapse or residual disease within one month of surgery; (iv) relapse prior to referral to radiation therapy; or (v) a previous primary cancer. For the analysis, patients were also excluded if they had adjuvant treatment but were node-negative, or if they had missing information on the number of positive nodes. After these exclusions, data were available for 2982 patients.
 
-We follow the example by \cite{Crowther_Lambert_2017}.
+Following the analysis by \cite{Crowther_Lambert_2017}, we model for three states, including (1) the initial \emph{post-surgery} state, (2) \emph{relapse} and (3) \emph{death}, with transitions (1)$\rightarrow$(2) for death from the post-surgery state with hazard $h_1(t)$, (1)$\rightarrow$(3) for relapse with hazard $h_2(t)$, and (2)$\rightarrow$(3) for death from the relapse state with hazard $h_3(t)$. All three transitions are modelled using time since surgery as the primary time scale. Crowther and Lambert used flexible parametric survival models on the \emph{log cumulative hazard scale}, where $H_j(t|\bm{x})=\int_0^th_j(u|\bm{x})du=\exp(s_j(t)+\eta_j(t,\bm{x}))$ for baseline $s_j(t)$ and linear predictors $\eta_j(t,\bm{x})$ defined by
+\begin{align*}
+  \eta_1(t,\bm{x}) &= \beta_1\texttt{age}+\beta_2\texttt{nodes}+\beta_3\texttt{hormon} + I(20<\texttt{size}\leq 50)s_{4}(t) + \\ 
+               &\quad I(\texttt{size}>50)s_{5}(t) + I(\texttt{pr\_1})s_6(t) \\
+  \eta_2(t,\bm{x}) &= \beta_1\texttt{age}+\beta_2\texttt{nodes}+\beta_3\texttt{hormon} + \\
+               &\quad\beta_4I(20<\texttt{size}\leq 50)+\beta_4I(\texttt{size}>50)+\beta_5I(\texttt{pr\_1}) \\
+  \eta_3(t,\bm{x}) &= \beta_1\texttt{age}+\beta_2\texttt{nodes}+\beta_3\texttt{hormon} + \\    
+               &\quad\beta_4I(20<\texttt{size}\leq 50)+\beta_4I(\texttt{size}>50)+I(\texttt{pr\_1})s_{7}(t)
+\end{align*}
+where \texttt{age} is the age in years at cancer treatment, \texttt{nodes} is the number of positive lymph nodes, \texttt{hormon} is an indicator for whether the patient was on hormonal therapy, \texttt{size} is the tumour size (mm), \texttt{pr\_1} is the log of one plus the progesterone level (fmol/L), $I(p)$ is an indicator function with value 1 when the predicate $p$ is true and value 0 otherwise, $s_0(t)=\sum_{j=0}^3 B_j(\log(t))\beta_{0j}$ for a natural splines basis function $B_j()$ with knots at the quantiles for log of the events times, and $s_k(t)=\beta_{k0}+\beta_{k1}\log(t)$ for $k>1$. The parameters are assumed to be distinct between the linear predictors.
+The hazards are calculated from the cumulative hazard using $h_j(t|\bm{x})=H_j'(t|\bm{x})$. Note that ratios of these hazards may not have a simple interpretation, particularly with continuous or multiple time-varying effects (see Appendix). Moreover, age is expected to be closely related to the mortality rates and modelling using a single parameter may not capture this important variation. For ease of comparison, we do not further investigate changes in the model formulations and focus on predictions from these fitted models. 
 
+For predictions, Crowther and Lambert used \emph{conditional} predictions for a patient aged 54 years with a transformed progesterone level of 3 (that is, progesterone $=\exp(3)-1=19.1$ fmol/L), with the number of positive lymph nodes varying between 0, 10 and 20, and with each of the three levels for tumour size. We are able to model and predict for conditional relationships in less than 20 seconds (code included in the documentation for the \texttt{rstpm2} package on CRAN). We now focus on \emph{marginal} or \emph{standardised} predictions for patients aged 50--59 years. In particular, we will compare state occupation probabilities and length of stay under counterfactual tumour sizes.
+
+Let the subjects aged 50--59 years be indexed by $k=1\ldots K$ and let $X$ represent tumour size and $\bm{Z}$ represent the other covariates. Then the predictions under the counterfactual $\hat{X}=x$ are modelled by
+\begin{align*}
+  P_{1j}(0,t|\hat{X}=x) &= E_{\bm{Z}}(P_{1j}(0,t|\bm{Z},\hat{X}=x))\\
+  &= \frac{1}{K} \sum_{k=1}^K P_{1j}(0,t|\bm{Z}=\bm{z}_k,\hat{X}=x) \\
+  L_{1j}(0,t|\hat{X}=x) &= E_{\bm{Z}}(L_{1j}(0,t|\bm{Z},\hat{X}=x))
+\end{align*}
+The specific counterfactuals are that all patients have a tumour size that is either (i) $\leq$ 20 mm, (ii) $>$ 20 mm and $\leq$ 50 mm, or (iii) $>$ 50 mm. The age restriction is due to the strong age dependence for each of the transitions. Differences in state occupation probabilities and length of stay by the counterfactuals are show in Figures~\ref{fig:1} and \ref{fig:2}, respectively. There is clear evidence that smaller tumour sizes are associated with fewer early relapses and a lower risk of death for fifteen years after treatment. 
+
+\begin{figure}[!ht]
+  \centering
+  \includegraphics{multistate-fig-1.pdf}
+  \caption{Differences in standardised state occupation probabilities by state and by contrasts for counterfactual tumour size, for female breast cancer patients aged 50--59 years and diagnosed 1978--1993, Rotterdam} 
+  \label{fig:1}
+\end{figure}
+
+\begin{figure}[!ht]
+  \centering
+  \includegraphics{multistate-fig-2.pdf}
+  \caption{Differences in standardised length of stay by state and by contrasts for counterfactual tumour size, for female breast cancer patients aged 50--59 years and diagnosed 1978--1993, Rotterdam}
+  \label{fig:2}
+\end{figure}
+
+We also explored other model formulations, including penalised log-hazard models ($h_j(t|\bm{x})=\exp(s_j(t)+\eta_j(t,\bm{x}))$) and accelerated failure time models ($S_j(t|\bm{x})=S_{0j}(\int_0^t\exp(\eta_j(t,\bm{x}))du)$, where $S_{0j}(t)=\exp(-\exp(s_j(t)))$). 
 
 
 \bibliography{lib.bib}
+
+
+\section*{Appendix A: Time-varying effects for log cumulative hazards models}
+
+For modelling on the log cumulative hazard scale with a linear predictor $\eta(t,\bm{x}_i)$ given time $t$ and covariates $\bm{x}_i$, the cumulative hazard $H(t|\bm{x}_i)$ can be represented by
+  \begin{align*}
+    H(t|\bm{x}_i) &= \exp(\eta(t,\bm{x}_i)) \\
+    \implies h(t|\bm{x}_i) &= \exp(\eta(t,\bm{x}_i)) \frac{\partial}{\partial t} \eta\left(t,\bm{x}_i\right)
+  \end{align*}
+  where $h(t|\bm{x}_i)$ is the hazard. The \emph{hazard ratio} comparing covariates $\bm{x}_1$ and $\bm{x}_0$ is then 
+  \begin{align}
+    \frac{h(t|\bm{x}_1) }{h(t|\bm{x}_0) } &= \exp(\eta(t,\bm{x}_1)-\eta(t,\bm{x}_0))
+                                            \left(1+\frac{\frac{\partial}{\partial t} \left(\eta\left(t,\bm{x}_1\right)-\eta\left(t,\bm{x}_0\right)\right)}{\frac{\partial}{\partial t} \eta\left(t,\bm{x}_0\right)}\right)\label{eq:hrgen}
+  \end{align}
+  We have the following cases for the interpretation of the hazard ratios:
+  \begin{itemize}
+  \item[Case 1] \emph{Time-independent effects}: if $\frac{\partial}{\partial t} \left(\eta\left(t,\bm{x}_1\right)-\eta\left(t,\bm{x}_0\right)\right)=0$, then Equation~\eqref{eq:hrgen} gives the ratio $\exp(\eta(t,\bm{x}_1)-\eta(t,\bm{x}_0))$.  This case will hold when the difference in the linear predictors is independent of $t$. 
+    Usefully, the log hazard ratio is then the difference in the linear predictors, which has a straightforward interpretation.
+
+    A sufficient condition is that the covariates that change between $\bm{x}_1$ and $\bm{x}_0$ are independent of $t$. % Is this also a necessary condition?
+    As a specific example, for a linear predictor $\eta(t,\bm{x}_i)=s_0(t)+\eta_0(\bm{x}_i)$ for baseline $s_0(t)$ and linear predictor $\eta_0(\bm{x}_i)$, then the log hazard ratio equals $\eta_0(\bm{x}_1)-\eta_0(\bm{x}_0)$, which is a \emph{proportional hazards} model.     
+  \item[Case 2] \emph{Small time-varying effects}: if $\frac{\partial}{\partial t} \left(\eta\left(t,\bm{x}_1\right)-\eta\left(t,\bm{x}_0\right)\right)\ll \frac{\partial}{\partial t} \eta\left(t,\bm{x}_0\right)$, then $\frac{h(t|\bm{x}_1) }{h(t|\bm{x}_0) }\approx\exp(\eta(t,\bm{x}_1)-\eta(t,\bm{x}_0))$. For this case, the partial derivative with respect to time for the change in the linear predictor is small compared with partial derivative for the linear predictor for $\bm{x}_0$. This suggests that the interpretation for moderately small time-varying effects will be straightforward (up to an approximation).
+  \item[Case 3] \emph{Stratified model}: if we have a stratified linear predictor $\eta(t,\bm{x}_i,j)=s_j(t)+\eta_j(\bm{x}_i)$ for stratum $j$ with baseline $s_j(t)$ and linear predictor $\eta_j(\bm{x}_i)$, then 
+    \begin{align}
+      \frac{h(t|\bm{x}_1,j) }{h(t|\bm{x}_0,k) }
+      &= \exp\left(
+        s_j(t)+\eta_j(\bm{x}_1)+\log(s_j'(t))-
+        \left(s_k(t)+\eta_k(\bm{x}_0)+\log(s_k'(t))\right)
+        \right) \label{eq:stratified}  
+    \end{align}
+    If $j=k$ then $\frac{h(t|\bm{x}_1,j) }{h(t|\bm{x}_0,k)}=\exp(\eta_j(\bm{x}_1)-\eta_j(\bm{x}_0))$, which is proportional hazards. If $j\neq k$, then Equation~\eqref{eq:stratified} can be interpreted as having separable effects (on the log hazard scale) for the time effects and for the other covariates.
+    \item[Case 4] \emph{Linear time-varying effect}: if we have a linear predictor $\eta(t,x_i,\bm{u}_i)=s_0(t)+x_i s_1(t)+\eta_0(\bm{v}_i)$ for a scalar $x_i$ and a vector of other covariates $\bm{v}_i$, then 
+  \begin{align*}
+    \frac{h(t|x_1,\bm{v}_1) }{h(t|x_0,\bm{v}_0) }
+    &= \exp\left((x_1-x_0)s_1(t)+\eta_0(\bm{v}_1)-\eta_0(\bm{v}_0)\right)\left(1+\frac{(x_1-x_0)s_1'(t)}{s_0'(t)+x_0s_1'(t)}\right)
+  \end{align*}
+  From the ratio $(x_1-x_0)s_1'(t)/(s_0'(t)+x_0s_1'(t))$, we see that the time-varying hazard ratio depends on both the baseline value $x_0$ and the difference $x_1-x_0$. The interpretation of the effect will be straightforward when $x_i$ is for a binary indicator (e.g. $x_0=0$ and $x_1=1$).
+\item[Case 5] \emph{Multiple time-varying effects}: if we have a linear predictor $\eta(t,x_i,\bm{u}_i)=s_0(t)+x_i s_1(t)+u_i s_2(t)+\eta_0(\bm{v}_i)$ for scalars $x_i$ and $u_i$ and a vector of other covariates $\bm{v}_i$, then 
+  \begin{align*}
+    \frac{h(t|x_1,u_1,\bm{v}_1) }{h(t|x_0,u_0,\bm{v}_0) }
+    &= \exp\left((x_1-x_0)s_1(t)+(u_1-u_0)s_2(t)+\eta_0(\bm{v}_1)-\eta_0(\bm{v}_0)\right)\times\\
+    &\qquad \left(1+\frac{(x_1-x_0)s_1'(t)+(u_1-u_0)s_2'(t)}{s_0'(t)+x_0s_1'(t)+u_0s_2'(t)}\right)
+  \end{align*}
+  From the ratio in the last line, we see that the hazard ratio depends on both the baseline values $x_0$ and $u_0$ and the differences $x_1-x_0$ and $u_1-u_0$. The multiple effects will be straightforward to interpret if $x_i$ and $u_i$ are binary indicators for strata (see Case 3).
+% \item[Case 6] Otherwise, the hazard ratio for time-varying effects may depend on the combinationof covariate values of .
+  \end{itemize}
+  
+  In summary, time-independent effects and stratified models have a straightforward interpretation, however continuous time-varying effects and multiple time-varying effects on a log cumulative hazard scale are more difficult to interpret in terms of hazard ratios.
+
+  
+\section*{Appendix B: Regression model specifications}
+
+\begin{table}[!ht]
+  \centering
+\begin{minipage}{\textwidth}
+  \begin{tabular}{llll}
+    Class & Model & R function            & Specification\footnote{Notes: Formally, Poisson regression models for rates rather than hazards. $\eta(t,\bm{x})$ and $\eta(\bm{x})$ are linear predictors for time $t$ and covariates $\bm{x}$; the generality of the linear predictor may be constrained by the model class (e.g. \texttt{flexsurv::flexsurvspline} only allows for spline interactions between time and covariates). $S_0(t)$ is a baseline survival model; for \texttt{flexsurv::flexsurvreg} it is from a parametric family, while for \texttt{rstpm2::aft} the log cumulative hazards is based on splines. The generalised survival models also allow for other transformations, including proportional odds, probit and additive hazards models.} \\ \hline
+    Parametric & Poisson regression & \texttt{stats::glm} & $\log(h(t|\bm{x})) = \eta(t,\bm{x})$ \\
+          & Accelerated failure time & \texttt{flexsurv::flexsurvreg} & $S(t|\bm{x})=S_0(\exp(\eta(\bm{x}))t)$ \\
+          && \texttt{rstpm2::aft} & $S(t|\bm{x})=S_0(\int_0^t \exp(\eta(u,\bm{x})du)$\\
+          & Generalized survival & \texttt{flexsurv::flexsurvspline} & $\log(H(t|\bm{x})) = \eta(t,\bm{x})$ \\
+          && \texttt{rstpm2::stpm2} & $\log(H(t|\bm{x})) = \eta(t,\bm{x})$ \\
+    Penalised & Poisson regression & \texttt{mgcv::gam}  & $\log(h(t|\bm{x})) = \eta(t,\bm{x})$ \\
+
+          & Log-hazard & \texttt{survPen::survPen} & $\log(h(t|\bm{x})) = \eta(t,\bm{x})$ \\
+          & Generalised survival & \texttt{rstpm2::pstpm2} & $\log(H(t|\bm{x})) = \eta(t,\bm{x})$
+  \end{tabular}
+\end{minipage}
+\caption{Regression model specification}
+  \label{tab:models}
+\end{table}
 
 \end{document}
