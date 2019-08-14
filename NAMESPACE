@@ -5,7 +5,8 @@ exportClasses(stpm2,pstpm2,tvcCoxph,aft)
 export(stpm2, pstpm2, aft, gsm,
        cox.tvc, # experimental --- don't export?
        markov_msm, ratio_markov_msm,
-       zeroModel, hrModel, # stratifiedModel,
+       zeroModel, hrModel, aftModel, addModel, # stratifiedModel,
+       hazFun, splineFun,
        standardise,
        incrVar, nsx, nsxD, "coef<-",
        eform, predictnl, coef, confint, 

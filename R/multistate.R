@@ -453,7 +453,7 @@ vcov.aftreg <- function(object, ...)
     object$var
 
 predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv", "gradh"), 
-          newdata, t=NULL, tmvar=NULL, na.action=na.pass, fd=FALSE, ...) 
+                            newdata, t=NULL, tmvar=NULL, na.action=na.pass, fd=FALSE, ...) 
 {
     ## utility function
     mref <- function(m,i,j) i+(j-1)*nrow(m)
@@ -465,7 +465,7 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
         g1 <- function(coef) {
             object$coefficients <- coef
             predict.aftreg(object, newdata=newdata, type="haz", t=t,
-                    tmvar=tmvar, na.action=na.action, fd=FALSE, ...)
+                           tmvar=tmvar, na.action=na.action, fd=FALSE, ...)
         }
         ## return(numDeriv::jacobian(g, coef))
         ## return(numDeriv::jacobian(g, coef, method="simple"))
@@ -483,10 +483,10 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
     if (length(t)<nrow(newdata)) t <- rep(t,length=nrow(newdata))
     if (type=="haz" && fd) {
         S <- predict.aftreg(object, newdata=newdata, type="surv", t=t,
-                    tmvar=tmvar, na.action=na.action, ...)
+                            tmvar=tmvar, na.action=na.action, ...)
         g2 <- function(t)
             predict.aftreg(object, newdata=newdata, type="surv", t=t,
-                    tmvar=tmvar, na.action=na.action, fd=FALSE, ...)
+                           tmvar=tmvar, na.action=na.action, fd=FALSE, ...)
         ## return(-numDeriv::jacobian(g, t)/S)
         return(-grad(g2, t)/S)
     }
@@ -524,25 +524,22 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
                                    na.action = na.action,
                                    xlev = object$levels)
     object$terms <- Terms
-    x <- model.matrix(object, newframe)[,-1,drop=FALSE] # is the intercept always first?
-    x <- sweep(x, 2, object$means)
     ncov <- length(object$means)
-    param.scale <- if (object$param=="lifeAcc") -1 else 1
     if (object$pfixed) {
         p <- object$shape[strata]
-        lambda <- exp(object$coefficients[ncov + strata] +
-                      param.scale*(x %mv% object$coefficients[1:ncov]))
-    }
-    else {
+        lambda <- exp(object$coefficients[ncov + strata])
+    } else  {
         p <- exp(object$coefficients[ncov + strata * 2])
-        lambda <- exp(object$coefficients[ncov + strata * 2 - 1] +
-                      param.scale*(x %mv% object$coefficients[1:ncov]))
+        lambda <- exp(object$coefficients[ncov + strata * 2 - 1])
     }
     if (ncov) {
-        score <- exp(x %mv% object$coefficients[1:ncov])
-    }
-    else {
-        score <- 1
+        x <- model.matrix(object, newframe)[,-1,drop=FALSE] # is the intercept always first?
+        x <- sweep(x, 2, object$means)
+        param.scale <- if (object$param=="lifeAcc") -1 else 1
+        lambda <- lambda *
+            exp(param.scale*(x %mv% object$coefficients[1:ncov]))
+    } else {
+        x <- NULL
     }
     xx <- t
     if (object$dist == "weibull") {
@@ -628,8 +625,9 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
             }
             if (!is.null(dd$dist)) 
                 dd <- survival::survreg.distributions[[dd$dist]]
-            pred <- object$coefficients[ncov+strata*2-1] +
-                param.scale*drop(x %mv% object$coefficients[1:ncov]) # + offset
+            pred <- object$coefficients[ncov+strata*2-1]
+            if (ncov) pred <- pred + 
+                         param.scale*drop(x %mv% object$coefficients[1:ncov]) # + offset
             scale <- exp(-object$coefficients[ncov+strata*2])
             u <- (trans(t)-pred) / scale # check dimensions
             density <- dd$density(u, list()) # F, 1-F, f, f'/f, f''/f
@@ -642,7 +640,8 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
                                 f*S/dtrans(t)) / (S*scale/dtrans(t))^2*scale
             out <- matrix(0,nrow(newdata),length(coef(object)))
             nc <- ncol(grad.beta)
-            out[,1:(nc-1)] <- grad.beta[,1:(nc-1)]
+            if (!is.null(x))
+                out[,1:(nc-1)] <- grad.beta[,1:(nc-1)]
             out[mref(out,1:nrow(newdata),nc+strata*2-2)] <- grad.beta[,nc]
             out[mref(out,1:nrow(newdata),nc+strata*2-1)] <- grad.logscale
             return(out)
@@ -653,7 +652,8 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
             grad.logscale <- h
             out <- matrix(0,nrow(newdata),length(coef(object)))
             nc <- ncol(grad.beta)
-            out[,1:(nc-1)] <- grad.beta*x
+            if (!is.null(x))
+                out[,1:(nc-1)] <- grad.beta*x
             out[mref(out,1:nrow(newdata),nc+strata*2-2)] <- grad.beta[,nc]
             out[mref(out,1:nrow(newdata),nc+strata*2-1)] <- grad.logscale
             return(out)
@@ -727,13 +727,15 @@ predict.zeroModel <- function(object, type=c("haz","gradh"), ...) {
 coef.zeroModel <- function(object, ...) 0.0*coef(object$base, ...)
 vcov.zeroModel <- function(object, ...) 0.0*vcov(object$base, ...)
 
-hrModel <- function(object, hr=1, ci=NULL, selogHR=NULL) {
+hrModel <- function(object, hr=1, ci=NULL, seloghr=NULL) {
     stopifnot(is.null(ci) || (is.numeric(ci) && length(ci)==2))
     stopifnot(is.numeric(hr) && length(hr)==1 && hr>0)
     newobject <- if (inherits(object, "hrModel")) object else structure(list(base=object),
                                                                         class="hrModel")
+    if (!is.null(ci) && is.null(seloghr))
+        seloghr <- log(ci[2]/ci[1])/2/qnorm(0.975)
     attr(newobject, "loghr") <- log(hr)
-    attr(newobject, "seloghr") <- if (is.null(ci)) 0 else log(ci[2]/ci[1])/2/qnorm(0.975)
+    attr(newobject, "seloghr") <- if (is.null(seloghr)) 0 else seloghr
     newobject
 }
 predict.hrModel <- function(object, type=c("haz","gradh"), ...) {
@@ -753,22 +755,43 @@ vcov.hrModel <- function(object, ...) {
     out
 }
 
-aftModel <- function(object, af=1, ci=NULL) {
+## aftModel requires dh/dt - performed using finite differences
+## Slow? Cool for completeness - but unlikely to be used
+## axiom: h := operator 'h
+## axiom: hstar := h(t*exp(eta),beta)*exp(eta)
+## axiom: D(hstar,beta)
+## axiom: D(hstar,eta)
+## h(t)=h(exp(u)) where t=exp(u)
+## => dh/dt = dh/du * du/dt where du/dt=1/t
+## and dh/du ~= (h(t*exp(eps)) - h(t/exp(eps)))/2/eps
+aftModel <- function(object, af=1, ci=NULL, selogaf=NULL) {
     stopifnot(is.null(ci) || (is.numeric(ci) && length(ci)==2))
     stopifnot(is.numeric(af) && length(af)==1 && af>0)
+    if (!is.null(ci) && is.null(selogaf))
+        selogaf <- log(ci[2]/ci[1])/2/qnorm(0.975)
     newobject <- if (inherits(object, "aftModel")) object else structure(list(base=object),
                                                                         class="aftModel")
     attr(newobject, "logaf") <- log(af)
-    attr(newobject, "selogaf") <- if (is.null(ci)) 0 else log(ci[2]/ci[1])/2/qnorm(0.975)
+    attr(newobject, "selogaf") <- if (is.null(selogaf)) 0 else selogaf
     newobject
 }
-predict.aftModel <- function(object, newdata, type=c("haz","gradh"), ...) {
+predict.aftModel <- function(object, newdata, type=c("haz","gradh"), tmvar=NULL, eps=1e-5, ...) {
     type <- match.arg(type)
     af <- exp(attr(object,"logaf"))
-    pred1 <- predict(object$base, type="haz", ...)
+    time <- newdata[[tmvar]]
+    timeStar <- newdata[[tmvar]] <- af*time
+    pred1 <- predict(object$base, type="haz", newdata=newdata, ...)
     if (type=="haz") af*pred1
-    else
-        cbind(predict(object$base, type="gradh", ...)*af, pred1*af*log(af))
+    else {
+        newdata2 <- newdata
+        newdata2[[tmvar]] <- timeStar*exp(eps)
+        predu <- predict(object$base, type="haz", newdata=newdata2, ...)
+        newdata2[[tmvar]] <- timeStar/exp(eps)
+        predl <- predict(object$base, type="haz", newdata=newdata2, ...)
+        dhdt <- (predu-predl)/2/eps/timeStar
+        cbind(predict(object$base, type="gradh", newdata=newdata, ...)*af,
+              timeStar*af*dhdt + af*pred1)
+    }
 }
 ## This has different lengths/dimensions to the base model:
 ##   wrap base intervention in aftModel(..., af=1)
@@ -778,11 +801,28 @@ vcov.aftModel <- function(object, ...) {
     out[nrow(out),ncol(out)] <- attr(object, "selogaf")^2
     out
 }
+## h'(t):
+## gsm: S(t|x)=G(eta(t,x)) => H(t|x)=-log(S(t|x))
+## => h(t|x)= -G'(eta(t,x))/G(eta(t,x))*eta_{,1}(t,x)
+## => h'(t|x) = mess
 
-vitals <- function(age,rate,method="natural",...) {
-    f <- stats::splinefun(age,rate,method=method, ...)
-    hazFun(function(t) f(t))
+## export
+splineFun <- function(time, rate, method="natural", scale=1, ...) {
+    fun <- stats::splinefun(time, log(rate), method=method, ...)
+    hazFun(function(t) scale*exp(fun(t)))
 }
+
+## export
+addModel <- function (...) {
+    structure (as.list (...), class="addModel")
+}
+predict.addModel <- function (object, ...) {
+    Reduce("+", lapply(object, predict, ...))
+}
+coef.addModel <- function (object)
+    do.call(c,lapply(object, coef))
+vcov.addModel <- function (object)
+    do.call(bdiag,lapply(object, vcov))
 
 subset.markov_msm <- function(x, subset, ...) {
     e <- substitute(subset)

@@ -17,6 +17,10 @@
 \alias{collapse_markov_msm}
 \alias{zeroModel}
 \alias{hrModel}
+\alias{aftModel}
+\alias{addModel}
+\alias{hazFun}
+\alias{splineFun}
 \title{
 Predictions for continuous time, nonhomogeneous Markov multi-state
 models using parametric and penalised survival models.
@@ -78,7 +82,11 @@ ratio_markov_msm(x, y, \dots)
 \method{transform}{markov_msm}(`_data`, \dots)
 collapse_markov_msm(object, which=NULL, sep="; ")
 zeroModel(object)
-hrModel(object,hr=1,ci=NULL,selogHR=NULL)
+hrModel(object,hr=1,ci=NULL,seloghr=NULL)
+aftModel(object,af=1,ci=NULL,selogaf=NULL)
+addModel(\dots)
+hazFun(f, tmvar="t", \dots)
+splineFun(time,rate,method="natural",scale=1,\dots)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -129,8 +137,10 @@ where the time variable is ambiguous
     users should make sure by adjusting this parameter in these cases.
   }
   \item{method}{
-method used by the ordinary differential equation solver. Defaults to
-Adams method (\code{"adams"}) for non-stiff differential equations
+For \code{markov_msm}, the method used by the ordinary differential equation solver. Defaults to
+Adams method (\code{"adams"}) for non-stiff differential equations.
+
+For \code{splineFun}, the method jused for spline interpolation; see \code{splinefun}.
 }
   \item{rtol }{relative error tolerance, either a
     scalar or an array as long as the number of states. Passed to \code{\link{lsode}}
@@ -244,12 +254,26 @@ For \code{collapse.states}:
 \item{which}{either an index of the states to collapse or a character vector of the state names to collapse}
 \item{sep}{separator to use for the collapsed state names}
 
-For \code{zeroModel}:
+For \code{zeroModel} to predict zero rates:
 \item{object}{survival regression object to be wrapped}
 
-For \code{hrModel}:
+For \code{hrModel} to predict rates times a hazard ratio:
 \item{hr}{hazard ratio}
-\item{selogHR}{alternative specification for the se of the log(HR)}
+\item{seloghr}{alternative specification for the se of the log(hazard ratio); see also \code{ci} argument}
+
+For \code{aftModel} to predict accelerated rates:
+\item{af}{acceleration factor}
+\item{selogaf}{alternative specification for the se of the log(acceleration factor); see also \code{ci} argument}
+
+\code{addModel} predict rates based on adding rates from different models
+
+\code{hazFun} provides a rate function without uncertainty:
+\item{f}{rate function, possibly with \code{tmvar} and/or \code{newdata} as arguments}
+
+\code{splineFun} predicts rates using spline interpolation:
+\item{time}{exact times}
+\item{rate}{rates as per \code{time}}
+\item{scale}{rate multiplier (e.g. \code{scale=365.25} for converting from daily rates to yearly rates)}
 
 }
 \details{
