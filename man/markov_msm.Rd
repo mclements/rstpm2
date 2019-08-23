@@ -1,6 +1,5 @@
 \name{markov_msm}
 \alias{markov_msm}
-\alias{coef.markov_msm}
 \alias{vcov.markov_msm}
 \alias{as.data.frame.markov_msm}
 \alias{as.data.frame.markov_msm_diff}
@@ -51,7 +50,6 @@ markov_msm(x, trans, t = c(0,1), newdata = NULL, init=NULL,
               debug=FALSE,
               \dots)
 \method{vcov}{markov_msm}(object, \dots)
-\method{coef}{markov_msm}(object, \dots)
 \method{as.data.frame}{markov_msm}(x, row.names=NULL, optional=FALSE,
                                    ci=TRUE,
                                    P.conf.type="log-log", L.conf.type="log",

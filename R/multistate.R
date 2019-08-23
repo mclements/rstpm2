@@ -93,7 +93,7 @@ markov_msm <-
         c(wind %% nr + 1, wind %/% nr + 1)
     }
     coef.surv_list <- function(objects)
-        sapply(objects,function(x) coef(x)) # sapply(objects, coef) FAILS
+        unlist(lapply(objects,function(x) coef(x))) # sapply(objects, coef) FAILS
     vcov.surv_list <- function(objects) {
         vcovs <- lapply(objects, function(x) vcov(x))
         lengths <- sapply(vcovs,nrow)
@@ -224,6 +224,7 @@ markov_msm <-
                    utility.sd=utility.sd,
                    state.costs.sd=state.costs.sd,
                    transition.costs.sd=transition.costs.sd,
+                   coefficients=coef(x),
                    call=call),
               class="markov_msm")
 }
@@ -348,8 +349,6 @@ as.data.frame.markov_msm <- function(x, row.names=NULL, optional=FALSE,
     if(!is.null(row.names)) rownames(out) <- row.names
     out
 }
-coef.markov_msm <- function(object, ...)
-    sapply(object,coef)
 standardise <- function(x, ...)
     UseMethod("standardise")
 standardise.markov_msm <- function(x,
