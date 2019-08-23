@@ -284,6 +284,15 @@ Finally, we can expand the equations to record the utilities or costs for differ
 \end{align*}
 for matrices $\tilde{\bm{U}}$ and $\tilde{\bm{C}}$, where $\tilde{U}_{ij}$ is the cumulative utility for state $j$ given an initial state $i$, and $\tilde{C}_{ij}$ is the cumulative cost for being in state $j$ or a transition from state $j$ given an initial state $i$.
 
+
+\subsection*{Example 6: Transformations}
+
+For causal inference and health economic evaluations, it is often useful to combine evidence from different data sources to transform the baseline transitions. We introduce five such transformations. {First}, we can turn off a transition, where the transformed hazard $h^*(t|\bm{x})=0\times h(t|\bm{x})$. One advantage of this zero-model formulation is that we can keep the same variance-covariance matrix for the baseline transitions, which supports a straightforward comparison between the interventions.
+{Second}, we may have a hazard ratio $\exp(\phi)$ with 95\% confidence interval $(\exp(\phi_l),\exp(\phi_u))$, such as from a meta-analysis. The variance for the log hazard ratio is $\left((\phi_u-\phi_l)/2/1.96\right)^2$. The transformed hazard is $h^*(t|\bm{x},\phi)=\exp(\phi) h(t|\bm{x})$, with the gradient of the hazard $h^*$ with respect to the parameters of $h(t|\bm{x})$ being $\exp(\phi)\nabla h(t|\bm{x})$, and the gradient with respect to $\phi$ being $\exp(\phi)h(t|\bm{x})$.
+{Third}, we may have an acceleration factor $\exp(\phi)$. Then the transformed hazard is $h^*(t|\bm{x},\phi)=\exp(\phi) h(\exp(\phi)t|\bm{x})$, with the gradient of the hazard $h^*$ with respect to the parameters of $h(t\exp(\phi)|\bm{x})$ being $\exp(\phi)\nabla h(t\exp(\phi)|\bm{x})$, and the gradient with respect to $\phi$ being $t\exp(2\phi)h'(t\exp(\phi)|\bm{x})+\exp(\phi)h(t\exp(\phi)|\bm{x})$.
+{Fourth}, we can add transition hazards together, such that the transformed hazard is $h^*(t|\bm{x})=h_1(t|\bm{x})+h_2(t|\bm{x})$. The gradient of the sum is equal to the sum of the gradients. {Fifth}, we can include smooth mathematical functions with no uncertainty. A useful example of this would be to use a spline interpolation function for the log of background mortality rates from vital statistics for use in relative survival (or excess hazards) modelling. The spline interpolation has the advantage of being smooth for the ordinary differential equation solver.
+
+
 \subsection*{Variance and interval estimation}
 
 For an estimator $\boldsymbol\phi(t_0,t)$ with support on the real line, a confidence interval can be calculated from the variance-covariance matrix $\boldsymbol{V} = \boldsymbol{\phi}'_m(t_0,t)\, \hat{\boldsymbol\Sigma}\, \boldsymbol{\phi}'_m(t_0,t)$ and normal quantiles $z$ at the $\alpha$ level with bounds $\boldsymbol\phi(t_0,t)\pm z_{(1-\frac{\alpha}{2})}\sqrt{\text{diag}(\boldsymbol{V})}$.
@@ -438,11 +447,11 @@ For modelling on the log cumulative hazard scale with a linear predictor $\eta(t
     Parametric & Poisson regression & \texttt{stats::glm} & $\log(h(t|\bm{x})) = \eta(t,\bm{x})$ \\
           & Accelerated failure time & \texttt{flexsurv::flexsurvreg} & $S(t|\bm{x})=S_0(\exp(\eta(\bm{x}))t)$ \\
           &  & \texttt{eha::aftreg} & $S(t|\bm{x})=S_0(\exp(\eta(\bm{x}))t)$ \\
-          && \texttt{rstpm2::aft} & $S(t|\bm{x})=S_0(\int_0^t \exp(\eta(u,\bm{x})du)$\\
+          && \texttt{rstpm2::aft} & $S(t|\bm{x})=S_0(\int_0^t \exp(\eta(u,\bm{x}))du)$\\
           & Generalized survival & \texttt{flexsurv::flexsurvspline} & $\log(H(t|\bm{x})) = \eta(t,\bm{x})$ \\
           && \texttt{rstpm2::stpm2} & $\log(H(t|\bm{x})) = \eta(t,\bm{x})$ \\
           & Hazard function & \texttt{rstpm2::hazFun} & $h(t|\bm{x})$ \\
-          & Spline interpolation & \texttt{rstpm2::splineFun} & $h(t|\bm{x})$ \\
+          & Spline interpolation & \texttt{rstpm2::splineFun} & $h(t|\bm{x})=\exp(s(t))$ \\
     Penalised & Poisson regression & \texttt{mgcv::gam}  & $\log(h(t|\bm{x})) = \eta(t,\bm{x})$ \\
 
           & Log-hazard & \texttt{survPen::survPen} & $\log(h(t|\bm{x})) = \eta(t,\bm{x})$ \\
