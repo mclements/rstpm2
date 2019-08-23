@@ -624,25 +624,30 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
             }
             if (!is.null(dd$dist)) 
                 dd <- survival::survreg.distributions[[dd$dist]]
-            pred <- object$coefficients[ncov+strata*2-1]
-            if (ncov) pred <- pred + 
-                         param.scale*drop(x %mv% object$coefficients[1:ncov]) # + offset
-            scale <- exp(-object$coefficients[ncov+strata*2])
+            ## pred <- object$coefficients[ncov+strata*2-1]
+            ## if (ncov) pred <- pred + 
+            ##              param.scale*drop(x %mv% object$coefficients[1:ncov]) # + offset
+            ## scale <- exp(-object$coefficients[ncov+strata*2])
+            pred <- log(lambda)
+            scale <- 1/p
             u <- (trans(t)-pred) / scale # check dimensions
             density <- dd$density(u, list()) # F, 1-F, f, f'/f, f''/f
             S <- density[,2]
             f <- density[,3]
             f.prime <- density[,4]*f
+            ## NOTE: x may be NULL
             grad.beta <- -cbind(x,1)*(f.prime*S+f^2)*dtrans(t)/(S*scale)^2
-            grad.logscale <- (-f.prime*u*S/dtrans(t) -
-                              f^2*u/dtrans(t) -
-                                f*S/dtrans(t)) / (S*scale/dtrans(t))^2*scale
             out <- matrix(0,nrow(newdata),length(coef(object)))
             nc <- ncol(grad.beta)
-            if (!is.null(x))
+            if (ncov)
                 out[,1:(nc-1)] <- grad.beta[,1:(nc-1)]
             out[mref(out,1:nrow(newdata),nc+strata*2-2)] <- grad.beta[,nc]
-            out[mref(out,1:nrow(newdata),nc+strata*2-1)] <- grad.logscale
+            if (!object$pfixed) {
+                grad.logscale <- (-f.prime*u*S/dtrans(t) -
+                                  f^2*u/dtrans(t) -
+                                    f*S/dtrans(t)) / (S*scale/dtrans(t))^2*scale
+                out[mref(out,1:nrow(newdata),nc+strata*2-1)] <- grad.logscale
+            }
             return(out)
         } else {
             ## gompertz
