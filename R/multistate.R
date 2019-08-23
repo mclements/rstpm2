@@ -118,7 +118,7 @@ markov_msm <-
             ij <- matwhich(trans == i)
             froms[i] <- from <- ij[1]
             tos[i] <- to <- ij[2]
-            Q[from,to,] <- predict(x[[i]], newdata=newdata, type="haz", tmvar=tmvar[i])
+            Q[from,to,] <- pmax(0,predict(x[[i]], newdata=newdata, type="haz", tmvar=tmvar[i]))
             Qu[from,to,1:cs[i]+cumcs[i],] <- t(predict(x[[i]], newdata=newdata, type="gradh",
                                                        tmvar=tmvar[i])) # transposed
             if (use.costs) {
