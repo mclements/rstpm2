@@ -748,7 +748,7 @@ predict.hrModel <- function(object, type=c("haz","gradh"), ...) {
     pred1 <- predict(object$base, type="haz", ...)
     if (type=="haz") hr*pred1
     else
-        cbind(predict(object$base, type="gradh", ...)*hr, pred1*hr*log(hr))
+        cbind(predict(object$base, type="gradh", ...)*hr, pred1*hr)
 }
 ## This has different lengths/dimensions to the base model:
 ##   wrap base intervention in hrModel(..., hr=1)
