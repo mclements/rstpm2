@@ -636,7 +636,7 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
             f <- density[,3]
             f.prime <- density[,4]*f
             ## NOTE: x may be NULL
-            grad.beta <- -cbind(x,1)*(f.prime*S+f^2)*dtrans(t)/(S*scale)^2
+            grad.beta <- cbind(x,-1)*(f.prime*S+f^2)*dtrans(t)/(S*scale)^2
             out <- matrix(0,nrow(newdata),length(coef(object)))
             nc <- ncol(grad.beta)
             if (ncov)
@@ -646,7 +646,7 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
                 grad.logscale <- (-f.prime*u*S/dtrans(t) -
                                   f^2*u/dtrans(t) -
                                     f*S/dtrans(t)) / (S*scale/dtrans(t))^2*scale
-                out[mref(out,1:nrow(newdata),nc+strata*2-1)] <- grad.logscale
+                out[mref(out,1:nrow(newdata),nc+strata*2-1)] <- -grad.logscale
             }
             return(out)
         } else {
