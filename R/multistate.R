@@ -628,10 +628,6 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
             }
             if (!is.null(dd$dist)) 
                 dd <- survival::survreg.distributions[[dd$dist]]
-            ## pred <- object$coefficients[ncov+strata*2-1]
-            ## if (ncov) pred <- pred + 
-            ##              param.scale*drop(x %mv% object$coefficients[1:ncov]) # + offset
-            ## scale <- exp(-object$coefficients[ncov+strata*2])
             pred <- log(lambda)
             scale <- 1/p
             u <- (trans(t)-pred) / scale # check dimensions
@@ -656,14 +652,14 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
         } else {
             ## gompertz
             h <- haza(xx, scale = lambda, shape = p)
-            grad.beta <- -cbind(x,1)*h*xx/p
+            grad.beta <- cbind(x,-1)*h*xx/p
             grad.logscale <- h
             out <- matrix(0,nrow(newdata),length(coef(object)))
             nc <- ncol(grad.beta)
             if (!is.null(x))
                 out[,1:(nc-1)] <- grad.beta*x
             out[mref(out,1:nrow(newdata),nc+strata*2-2)] <- grad.beta[,nc]
-            out[mref(out,1:nrow(newdata),nc+strata*2-1)] <- grad.logscale
+            out[mref(out,1:nrow(newdata),nc+strata*2-1)] <- -grad.logscale
             return(out)
         }
     }
