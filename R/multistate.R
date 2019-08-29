@@ -179,14 +179,18 @@ markov_msm <-
                    P*exp(-lambda.discount*t) # d/dt for gradient of U wrt utilities (assumes u'_m(t)=1)
                    ))
     }
+    class(x) <- "surv_list"
+    Sigma <- vcov(x)
+    if (any(is.na(Sigma)))
+        stop("NAs in the covariance matrix")
+    if (any(is.na(coef(x))))
+        stop("NAs in the coefficient vector")
     init <- if (use.costs) c(rep(init,nobs),
                              rep(0,3*nobs*nstates+3*nobs*nstates*ncoef+nobs*nstates*ntr))
             else
                 c(rep(init,nobs),rep(0,2*nobs*nstates+2*nobs*nstates*ncoef))
     res <- ode(y = init, times = t, func = dp, method=method, atol=atol, rtol=rtol,
                ...)
-    class(x) <- "surv_list"
-    Sigma <- vcov(x)
     P <- array(res[,1+1:(nstates*nobs)],c(nt,nstates,nobs))
     Pu <- array(res[,1+nobs*nstates+1:(nobs*nstates*ncoef)],c(nt,nstates,ncoef,nobs))
     L <- array(res[,1+nstates*nobs+nstates*nobs*ncoef+1:(nstates*nobs)],c(nt,nstates,nobs))
