@@ -290,7 +290,7 @@ vcov.hazFun <- function(object, ...) matrix(0,1,1,FALSE,list("hazFun","hazFun"))
 
 as.data.frame.markov_msm <- function(x, row.names=NULL, optional=FALSE,
                                      ci=TRUE,
-                                     P.conf.type="log-log", L.conf.type="log", C.conf.type="log",
+                                     P.conf.type="logit", L.conf.type="log", C.conf.type="log",
                                      P.range=c(0,1), L.range=c(0,Inf),
                                      C.range=c(0,Inf),
                                      ...) {
@@ -671,7 +671,7 @@ surv.confint <- function(p, se, conf.type=c("log","log-log","plain","logit","arc
     zval <- qnorm(1 - (1 - conf.int)/2)
     selog <- se/p # transform to selog
     if (conf.type == "plain") {
-        se2 <- selog * p * zval
+        se2 <- se * zval
         list(lower = pmax(p - se2, min.value), upper = pmin(p + se2, max.value))
     }
     else if (conf.type == "log") {
@@ -705,7 +705,7 @@ surv.confint <- function(p, se, conf.type=c("log","log-log","plain","logit","arc
 print.markov_msm <- function(x, 
                              digits=5,
                              se=FALSE, ci=TRUE,
-                             P.conf.type="log-log", L.conf.type="log",
+                             P.conf.type="logit", L.conf.type="log",
                              C.conf.type="log",
                              P.range=c(0,1), L.range=c(0,Inf),
                              C.range=c(0,Inf),
