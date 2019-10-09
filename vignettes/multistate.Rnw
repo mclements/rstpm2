@@ -38,7 +38,7 @@
   equations to calculate the predictions and their gradients, with
   standard errors calculated using the delta method. These methods
   have applications to a range of disciplines, including descriptive
-  epidemiology, causal inference and economics.
+  epidemiology, causal inference and economic evaluations.
   
 }
 
@@ -242,7 +242,7 @@ The approach readily incorporates utilities and costs. For utilities, we have th
 \begin{align}
 \frac{d\boldsymbol{U}(t_0,t)}{dt} &= \boldsymbol{P}(t_0,t)\boldsymbol{u}(t)e^{-\lambda t} \label{eq:utilities} \\
   \frac{d\boldsymbol{U}'_m(t_0,t)}{dt} &= \left(\boldsymbol{P}'_m(t_0,t)\boldsymbol{u}(t)+\boldsymbol{P}(t_0,t)\boldsymbol{u}'_m(t)\right)e^{-\lambda t} \label{eq:dUudt} \\
-\boldsymbol{U}(t_0,t) &= \boldsymbol{U}'_m(t_0,t) = \boldsymbol{0}
+\boldsymbol{U}(t_0,t_0) &= \boldsymbol{U}'_m(t_0,t_0) = \boldsymbol{0}
 \end{align}
 In health economics, the discounted, quality-adjusted life-years are calculated by the product of the initial state probabilities and the utilities, such that $\text{QALY}(t_0,t)=\boldsymbol{\pi}(t_0,t_0)^T\boldsymbol{U}(t_0,t)$, with gradient $\text{QALY}'_m(t_0,t)=\boldsymbol{\pi}(t_0,t_0)^T\boldsymbol{U}'_m(t_0,t)$.
 
@@ -257,7 +257,7 @@ Costs may be represented as accumulated costs or costs at a point in time. Let c
 \left(\boldsymbol{c}(t)+\left(\boldsymbol{Q}(t)\circ\boldsymbol{\mathcal{C}}(t)\right)\bm{1}\right) +\nonumber \\
   &\qquad \boldsymbol{P}(t_0,t) 
 \left(\boldsymbol{c}'_m(t)+\left(\boldsymbol{Q}'_m(t)\circ\boldsymbol{\mathcal{C}}(t)+\boldsymbol{Q}(t)\circ\boldsymbol{\mathcal{C}}'_m(t)\right)\bm{1}\right)\Big)e^{-\lambda t}  \\
-  \boldsymbol{C}(t_0,t) &= \boldsymbol{C}'_m(t_0,t) = \boldsymbol{0}
+  \boldsymbol{C}(t_0,t_0) &= \boldsymbol{C}'_m(t_0,t_0) = \boldsymbol{0}
 \end{align}
 
 Note that these require the evaluation of the gradients for the utility and cost functions. 
@@ -311,14 +311,24 @@ For estimators that are on the open interval $(0,1)$, the gradient can be calcul
 % \end{align*}
 % with bounds $\exp\left(\log(\boldsymbol\phi(t_0,t))\pm z_{(1-\frac{\alpha}{2})}\text{diag}(\boldsymbol{V})\right)$.
 
+\subsection*{Integration of hazards that are functions of log(time)}
+Many parametric survival models are implemented in terms of log(time), including flexible parametric survival models and accelerated failure time models. Integration of the ordinary differential equation solvers from the origin for such models can lead to numerical issues. We offer two approaches to address these issues. First, we can truncate small values for time, such that $t^*=\text{max}(t,\epsilon)$, e.g. using $\epsilon=$1e-5. Defining cumulative hazards as $H_{ij}(t_0,t)=\int_{t_0}^t Q_{ij}(u)du$, the value for $H_{ij}(0,\epsilon)$ may be poorly estimated by $\epsilon Q_{ij}(\epsilon)$. Moreover, the hazards will generally not be smooth at $t=\epsilon$.
+
+Second, we could directly calculate initial values at $t=\epsilon$ using cumulative hazard estimates. Let the matrix of cumulative hazard intensities from 0 to $\epsilon$ be $\bm{H}(t_0,t)=(H_{ij}(t_0,t))$ and let $\bm{H}'_m(t_0,t)=\int_{t_0}^t \bm{Q}_m'(u)du$. The transition probabilities at $\epsilon$ can be calculated approximately by 
+\begin{align*}
+  \bm{P}(0,\epsilon) &\approx \text{mexp}(\bm{H}(0,\epsilon)) \\
+  \bm{P}'_m(0,\epsilon) &\approx \bm{H}'_m(0,\epsilon) \\
+  \bm{L}(0,\epsilon) &\approx \epsilon(\bm{I}+\bm{P}(0,\epsilon))/2 \\
+  \bm{L}'_m(0,\epsilon) &\approx \epsilon\bm{P}'_m(0,\epsilon)/2 \\
+  \bm{U}(0,\epsilon) &\approx \epsilon\bm{P}(0,\epsilon)\bm{u}(\epsilon)e^{-\lambda\epsilon}/2 \\
+  \bm{U}'_m(0,\epsilon) &\approx \epsilon(\bm{P}'_m(0,\epsilon)\bm{u}(\epsilon) + \bm{P}(0,\epsilon)\bm{u}'_m(\epsilon))e^{-\lambda\epsilon}/2 \\
+\end{align*}
+where $\text{mexp}(\bm{M})$ is the matrix exponential for a matrix $\bm{M}$.
+
 
 \section{Implementation}
 
-We have implemented the algorithm in \code{R} within the \code{rstpm2}. The ODE solver uses the Adams method for non-stiff ODEs. 
-
-The current implementation allows for independent models for the estimated transition intensities, including Poisson regression using \code{stats::glm} and \code{mgcv::gam}, parametric survival models (\code{flexsurv::flexsurvreg}), flexible parametric survival models (\code{rstpm2::stpm2} and \code{flexsurv::flexsurvspline}), and penalised survival models (\code{rstpm2::pstpm2} and \code{survPen::survPen}, where the latter is on the log-hazard scale). The implementation also allows for  for functions to represent the transitions and for a transition to be set to zero. The function scales reasonably well with multiple covariates within the same system of ODEs. A large number of covariate patterns will be blocked and run on separate cores.
-
-For post-processing, the predictions and gradients can be calculated for combinations and subsets of covariates, and for collapsed states, and standardised across covariates. The delta method is available for differences and ratios. 
+We have implemented the algorithm in R as the \code{rstpm2::markov_msm} function. The current implementation allows for: independent models for each of the transitions; a rich set of models for each transitions (see Appendix B); predictions for state occupation and transition intensities, length of stay, utilities and costs; and useful post-processing facilities, including weighted standardisation, differences and ratios.
 
 % A basic call to \code{markov_msm()} to estimate the state occupancy probabilities and length of stay would be \code{markov_msm(x, trans, t, newdata)}, where \code{x} is a list of regression models for the transition intensities, \code{trans} is a matrix that defines the multistate transitions as per the \code{mstate} package, \code{t} is a vector of times to report (including the initial time), and \code{newdata} is a data-frame with the covariates for predictions.
 
@@ -330,22 +340,38 @@ For post-processing, the predictions and gradients can be calculated for combina
 % Differences from the same models are just different weights...
 
 
+
 \section{Simulations}
 
+
+% The research questions included assessing the statistical properties (including bias and coverage) for: (i) different transformations of state occupation probabilities and length of stay; (ii) different regression models; and (iii) sample size.
+% We used exponentially distributed data from an illness-death model to estimate the proportion that are healthy, ill or dead using (a) different sample sizes (500, 1000, 10000), (b) different regression models (Poisson regression, Weibull regression), and (c) different transformations for state occupation probabilities (identity, log, logit, and arcsin) and length of stay (identity, log).
+
 To assess the small sample properties compared with the asymptotics properties, we undertook several simulations.
+We fitted a Markov illness-death model with Weibull transition rates with a shape parameter of 1.5 and a scale parameter of 10 for the transitions Healthy $\rightarrow$ Illness, Healthy $\rightarrow$ Death, and Illness $\rightarrow$ Death. We simulated for 1000 individuals with censoring min(20,Uniform(0,30)). We fitted the transitions using Weibull regression using the \code{aftreg} model from the \pkg{eha} package. The expected state occupation probabilities were predicted using the ODE solver with the true parameters. For each simulation, we predicted the state occupation probabilities, bias, confidence intervals using five transformations (plain confidence intervals, and confidence intervals based on log-log, log, logit and arcsin transformations), and coverage. We then calculated the mean bias, mean squared error and coverage across 1000 simulations.
 
-The research questions included assessing the statistical properties (including bias and coverage) for: (i) different transformations of state occupation probabilities and length of stay; (ii) different regression models; and (iii) sample size.
+\begin{figure}[!ht]
+  \centering
+  \includegraphics{aft-weibull-20190816.pdf}
+  \caption{State occupation coverage for a Markov illness-death model with Weibull-distributed times, fitted using Weibull regression models. The panels represent confidence intervals based on different transformation methods.}
+  \label{fig:coverage}
+\end{figure}
 
-We used exponentially distributed data from an illness-death model to estimate the proportion that are healthy, ill or dead using (a) different sample sizes (500, 1000, 10000), (b) different regression models (Poisson regression, Weibull regression), and (c) different transformations for state occupation probabilities (identity, log, logit, and arcsin) and length of stay (identity, log).
+Across the 1000 simulations, the mean bias for the state occupation probabilities for any of the three states across time varied between -0.0006 and 0.0008, while the mean squared error varied between 0 and 0.0002. Coverage was generally close to 0.95 for each of the transformation methods (Figure~\ref{fig:coverage}), particularly given that the binomial variability at 950/1000 has a 95\% confidence interval of (0.945,0.963). The ``plain'' untransformed approach performs poorly close to start for the initial state.
+
+\begin{figure}[!ht]
+  \centering
+  \includegraphics[width=0.7\linewidth]{aft-weibull-los-20190816.pdf}
+  \caption{Length of stay coverage for a Markov illness-death model with Weibull-distributed times, fitted using Weibull regression models. The panels represent confidence intervals based on different transformation methods.}
+  \label{fig:coverage-los}
+\end{figure}
+
+Across the 1000 simulations, the mean bias for the length of stay for any of the three states across time varied between -0.006 and 0.008 , while the mean squared error varied between 0 and 0.004. Coverage was generally close to 0.95 for both of the transformation methods (Figure~\ref{fig:coverage-los}). 
 
 
+\section{Example}
 
-
-\section{Examples}
-
-\subsection{Rotterdam Breast Cancer Data}
-
-First, we will extend an analysis by \cite{Crowther_Lambert_2017} of the Rotterdam Breast Cancer Data \citep{sauerbrei2007,foekens2000}. This dataset includes patients who were treated for primary breast cancer in Rotterdam during 1978--1993. Treatment included primary surgery, with either mastectomy or breast conserving therapy, with possible referral for radiation treatment within three months of surgery. Study exclusion criteria included: (i) patient tissue based on biopsy only; (ii) metastatic disease at primary surgery or within one month of surgery; (iii) relapse or residual disease within one month of surgery; (iv) relapse prior to referral to radiation therapy; or (v) a previous primary cancer. For the analysis, patients were also excluded if they had adjuvant treatment but were node-negative, or if they had missing information on the number of positive nodes. After these exclusions, data were available for 2982 patients.
+We will extend an analysis by \cite{Crowther_Lambert_2017} of the Rotterdam Breast Cancer Data \citep{sauerbrei2007,foekens2000}. This dataset includes patients who were treated for primary breast cancer in Rotterdam during 1978--1993. Treatment included primary surgery, with either mastectomy or breast conserving therapy, with possible referral for radiation treatment within three months of surgery. Study exclusion criteria included: (i) patient tissue based on biopsy only; (ii) metastatic disease at primary surgery or within one month of surgery; (iii) relapse or residual disease within one month of surgery; (iv) relapse prior to referral to radiation therapy; or (v) a previous primary cancer. For the analysis, patients were also excluded if they had adjuvant treatment but were node-negative, or if they had missing information on the number of positive nodes. After these exclusions, data were available for 2982 patients.
 
 Following the analysis by \cite{Crowther_Lambert_2017}, we model for three states, including (1) the initial \emph{post-surgery} state, (2) \emph{relapse} and (3) \emph{death}, with transitions (1)$\rightarrow$(2) for death from the post-surgery state with hazard $h_1(t)$, (1)$\rightarrow$(3) for relapse with hazard $h_2(t)$, and (2)$\rightarrow$(3) for death from the relapse state with hazard $h_3(t)$. All three transitions are modelled using time since surgery as the primary time scale. Crowther and Lambert used flexible parametric survival models on the \emph{log cumulative hazard scale}, where $H_j(t|\bm{x})=\int_0^th_j(u|\bm{x})du=\exp(s_j(t)+\eta_j(t,\bm{x}))$ for baseline $s_j(t)$ and linear predictors $\eta_j(t,\bm{x})$ defined by
 \begin{align*}
@@ -384,6 +410,16 @@ The specific counterfactuals are that all patients have a tumour size that is ei
 \end{figure}
 
 We also explored other model formulations, including penalised log-hazard models ($h_j(t|\bm{x})=\exp(s_j(t)+\eta_j(t,\bm{x}))$) and accelerated failure time models ($S_j(t|\bm{x})=S_{0j}(\int_0^t\exp(\eta_j(t,\bm{x}))du)$, where $S_{0j}(t)=\exp(-\exp(s_j(t)))$). 
+
+
+\section{Discussion}
+
+In summary, we describe how to predict from Markov multi-state models with smooth transition intensities using ordinary differential equations. A variety of predictions can be estimated, together with interval estimation based on the multivariate delta method. 
+The method is suitable for a range of models, including Poisson regression, parametric and flexible accelerated failure time models, and parametric and penalised generalised survival models. Applications of these methods could range from descriptive epidemiology, to causal inference, through to health economic evaluations of cost-effectiveness.
+
+The recent article by \citet{Ryalen_Stensrud_Roysland_2018} provides a non-parametric analogue to our development. Those non-parametric methods can readily be extended to many of the estimators described herein, including standardisation, quality-adjusted life-years and costs. The asymptotic theory for the non-parametric approach has been shown to hold for Aalen's additive hazards model; it is unclear whether non-parametric estimators for accelerated failure and proportional hazards models will satisfy the assumptions in Theorems 1 and 2 of \citet{Ryalen_Stensrud_Roysland_2018}. Moreover, it is arguable when an additive hazards scale is suitable for covariate adjustment, for example, for modelling all-cause or cause-specific survival with age at cancer diagnosis as a covariate. We suggest that (smooth) accelerated failure time models may provide a useful alternative regression model framework which is also collapsible.
+
+Under the conditions described by \citet{Datta_Satten_2001}, predictions that are functions of the state occupation probability are, under suitable regularity assumptions, expected to be consistently estimated irrespective of whether the Markov assumption holds. However other predictions (e.g. transition probabilities, or the proportion to ever pass through a state) may not be consistently estimated. Moreover, the efficiency of the predictions when the time scale has been mis-specified may be low. Alternative approaches include individual-based simulations, with variance estimation using the bootstrap \cite{Crowther_Lambert_2017}, which are expected to be computationally expensive.
 
 
 \bibliography{lib.bib}
@@ -450,8 +486,6 @@ For modelling on the log cumulative hazard scale with a linear predictor $\eta(t
           && \texttt{rstpm2::aft} & $S(t|\bm{x})=S_0(\int_0^t \exp(\eta(u,\bm{x}))du)$\\
           & Generalized survival & \texttt{flexsurv::flexsurvspline} & $\log(H(t|\bm{x})) = \eta(t,\bm{x})$ \\
           && \texttt{rstpm2::stpm2} & $\log(H(t|\bm{x})) = \eta(t,\bm{x})$ \\
-          & Hazard function & \texttt{rstpm2::hazFun} & $h(t|\bm{x})$ \\
-          & Spline interpolation & \texttt{rstpm2::splineFun} & $h(t|\bm{x})=\exp(s(t))$ \\
     Penalised & Poisson regression & \texttt{mgcv::gam}  & $\log(h(t|\bm{x})) = \eta(t,\bm{x})$ \\
 
           & Log-hazard & \texttt{survPen::survPen} & $\log(h(t|\bm{x})) = \eta(t,\bm{x})$ \\
@@ -459,7 +493,9 @@ For modelling on the log cumulative hazard scale with a linear predictor $\eta(t
     Transformation & Zero & \texttt{rstpm2::zeroModel} & $h^*(t|\bm{x})=0$ \\
      & Hazard ratio & \texttt{rstpm2::hrModel} & $h^*(t|\bm{x},\phi)=h(t|\bm{x})\phi$ \\
      & Accelerated failure & \texttt{rstpm2::aftModel} & $h^*(t|\bm{x},\phi)=h(\phi t|\bm{x})\phi$ \\
-     & Additive models  & \texttt{rstpm2::addModel} & $h^*(t|\bm{x})=h_1(t|\bm{x})+h_2(t|\bm{x})$
+     & Additive models  & \texttt{rstpm2::addModel} & $h^*(t|\bm{x})=h_1(t|\bm{x})+h_2(t|\bm{x})$ \\
+          & Hazard function & \texttt{rstpm2::hazFun} & $h(t|\bm{x})$ \\
+          & Spline interpolation & \texttt{rstpm2::splineFun} & $h(t|\bm{x})=\exp(s(t))$ 
   \end{tabular}
 \end{minipage}
 \caption{Hazard specifications}
