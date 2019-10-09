@@ -1,5 +1,15 @@
 # rstpm2
 
+# Version 1.5.0
+	- Major change: markov_msm function for Markov multistate models
+	- Add predict(..., type="lpmatrix")
+	- Add cluster and bhazard specials
+	- Internal: use Nelder-Mead for AFT if the model did not converge
+	- Internal: refactor stpm2 and pstpm2 to use a common gsm function
+	- Internal: add test suite
+	- Documentation: update vuniroot vignette
+	- Bug fixes: delayed entry; missing bhazard and cluster values; 
+
 # Version 1.4.5
     - Fixed a bug in fitting frailty models (introduced in 1.4.4)
 	- Introduced package tests
