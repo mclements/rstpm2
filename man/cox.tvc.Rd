@@ -36,4 +36,5 @@ temp <- rstpm2:::cox.tvc(fit, "age")
 print(temp)                  # display the results 
 plot(temp)                   # plot curves 
 }
-\keyword{time-varying,Cox}
+\keyword{time-varying}
+\keyword{Cox}

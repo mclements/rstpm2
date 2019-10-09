@@ -1,6 +1,6 @@
 Package: rstpm2
 Type: Package
-Title: Generalized Survival Models, smooth accelerated failure time models, vectorised uniroot and Markov multistate models
+Title: Generalized Survival Models, Smooth Accelerated Failure Time Models and Markov Multistate Models
 Authors@R: c(person("Mark", "Clements", role = c("aut", "cre"),
 		     email = "mark.clements@ki.se"),
 	      person("Xing-Rong", "Liu", role = "aut",
