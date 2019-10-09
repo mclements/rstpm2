@@ -29,6 +29,6 @@ test_that("base", {
     expect_eps(predict(fit), predict.glm(fit$base,type="haz")*2, 1e-10)
     expect_eps(predict(fit,type="gradh"),
                cbind(predict.glm(fit$base,type="gradh")*2,
-                     predict.glm(fit$base,type="haz")*2*log(2)),
+                     predict.glm(fit$base,type="haz")*2),
                1e-10)
 })

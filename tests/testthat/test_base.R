@@ -61,7 +61,7 @@ test_that("base", {
     expect_eps(coef(fit)[2], -0.3650564, 1e-5)
     fit <- pstpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
                   control=list(optimiser="NelderMead"))
-    expect_eps(coef(fit)[2], -0.3652168, 1e-5)
+    expect_eps(coef(fit)[2], -0.3652168, 1e-4)
 })
 
 if (slow) {
