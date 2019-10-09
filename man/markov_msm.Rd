@@ -52,7 +52,7 @@ markov_msm(x, trans, t = c(0,1), newdata = NULL, init=NULL,
 \method{vcov}{markov_msm}(object, \dots)
 \method{as.data.frame}{markov_msm}(x, row.names=NULL, optional=FALSE,
                                    ci=TRUE,
-                                   P.conf.type="log-log", L.conf.type="log",
+                                   P.conf.type="logit", L.conf.type="log",
 				   C.conf.type="log",
                                    P.range=c(0,1), L.range=c(0,Inf),
 				   C.range=c(0,Inf),
