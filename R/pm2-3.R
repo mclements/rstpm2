@@ -992,6 +992,9 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     }
     if (is.null(init)) {
         init <- coef(lm.obj)
+    } else {
+        ## ASSUMES ONLY ONE-DIMENSIONAL FRAILTY
+        stopifnot(length(init)+frailty == length(coef(lm.obj)))
     }
     ##
     ## set up mf and wt
