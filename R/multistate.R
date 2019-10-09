@@ -18,7 +18,7 @@ markov_msm <-
     call <- match.call()
     inherits <- function(x, ...)
         base::inherits(x, ...) ||
-            (base::inherits(x, c("zeroModel","hrModel","stratifiedModel"))
+            (base::inherits(x, c("hazFun","zeroModel","hrModel","stratifiedModel"))
                 && base::inherits(x$base, ...))
     base.classes <- c("stpm2","pstpm2","glm","survPen","gam","aft","flexsurvreg","aftreg")
     stopifnot(all(sapply(x, function(xi) inherits(xi,base.classes) | is.function(xi))))
