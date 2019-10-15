@@ -422,7 +422,7 @@ The recent article by \citet{Ryalen_Stensrud_Roysland_2018} provides a non-param
 Under the conditions described by \citet{Datta_Satten_2001}, predictions that are functions of the state occupation probability are, under suitable regularity assumptions, expected to be consistently estimated irrespective of whether the Markov assumption holds. However other predictions (e.g. transition probabilities, or the proportion to ever pass through a state) may not be consistently estimated. Moreover, the efficiency of the predictions when the time scale has been mis-specified may be low. Alternative approaches include individual-based simulations, with variance estimation using the bootstrap \cite{Crowther_Lambert_2017}, which are expected to be computationally expensive.
 
 
-\bibliography{lib.bib}
+\bibliography{lib}
 
 
 \section*{Appendix A: Time-varying effects for log cumulative hazards models}
