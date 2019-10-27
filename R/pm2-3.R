@@ -251,7 +251,10 @@ numDeltaMethod <- function(object, fun, gd=NULL, ...) {
   if (!is.null(names(fit)))
       names(se.fit) <- names(fit)
   if(all(se.fit==0)) warning("Zero variance estimated. Do you need to pass a newdata argument to fun()?")
-  structure(data.frame(fit = fit, se.fit = se.fit, Estimate = fit, SE = se.fit), # vcov=Sigma,
+  df <- data.frame(fit = as.numeric(fit), se.fit = as.numeric(se.fit),
+                   Estimate = as.numeric(fit), SE = as.numeric(se.fit))
+  row.names(df) <- names(fit)
+  structure(df, # vcov=Sigma,
             class=c("predictnl","data.frame"))
 }
 "coef<-" <- function (x, value) 
