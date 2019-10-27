@@ -1672,6 +1672,7 @@ predict.stpm2.base <-
                            loghazard = "I", link = "I", odds = "log", or = "log",
                            margsurv = "log", marghaz = "I", marghr = "I",
                            meansurv = "I", meanhr = "I", meanhaz = "I", af = "I",
+                           meansurvdiff = "I",
                            fail = "cloglog", uncured = "log", density = "log",
                            rmst = "I", probcure = "cloglog", lpmatrix="I", gradh="I",
                            gradH="I")
@@ -1681,6 +1682,7 @@ predict.stpm2.base <-
                            loghazard = "I", link = "I", odds = "log", or = "log",
                            margsurv = "cloglog", marghaz = "log", marghr = "log",
                            meansurv = "I", meanhr="log", meanhaz = "I", af = "I",
+                           meansurvdiff = "I",
                            fail = "cloglog", uncured = "cloglog", density = "log",
                            rmst = "I", probcure = "cloglog", lpmatrix="I", gradh="I",
                            gradH="I")
@@ -2371,7 +2373,7 @@ plot.stpm2.base <-
                    type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us, rmap, scale=365.24, ...) {
               if (type %in% c("meansurv","meansurvdiff","af","meanhaz","meanhr")) {
                   return(plot.meansurv(x,times=times,newdata=newdata,type=type,xlab=xlab,ylab=ylab,line.col=line.col,ci.col=ci.col,
-                                       lty=lty,add=add,ci=ci,rug=rug, exposed=exposed, ...))
+                                       lty=lty,add=add,ci=ci,rug=rug, exposed=exposed, var=var, ...))
               }
               if (is.null(newdata)) stop("newdata argument needs to be specified")
               y <- predict(x,newdata,type=switch(type,fail="surv",margfail="margsurv",type),var=var,exposed=exposed,
