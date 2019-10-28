@@ -2328,8 +2328,14 @@ plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", 
                                       newd
                                   }))
         pred <- predict(x, newdata=newdata, type=type, keep.attributes=TRUE, se.fit=ci, exposed=exposed, var=var) # requires recent version
-        if (type=="meansurv")
-            pred <- if (ci) rbind(c(Estimate=1,lower=1,upper=1),pred) else c(1,pred)
+        if (type=="meansurv") {
+          pred <- if (ci) rbind(c(Estimate=1,lower=1,upper=1),pred) else c(1,pred)
+          times <- c(0,times)
+        }
+        if (type=="meansurvdiff") {
+          pred <- if (ci) rbind(c(Estimate=0,lower=0,upper=0),pred) else c(0,pred)
+          times <- c(0,times)
+        }
     } else {
         pred <- lapply(times, 
                        function(time) {
@@ -2339,6 +2345,10 @@ plot.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", 
         pred <- do.call("rbind", pred)
         if (type=="meansurv")  {
             pred <- if (ci) rbind(c(Estimate=1,lower=1,upper=1),pred) else c(1,unlist(pred))
+            times <- c(0,times)
+            }
+        if (type=="meansurvdiff")  {
+            pred <- if (ci) rbind(c(Estimate=0,lower=0,upper=0),pred) else c(0,unlist(pred))
             times <- c(0,times)
             }
         }
