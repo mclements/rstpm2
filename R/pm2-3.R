@@ -1499,7 +1499,8 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                    link=link,
                    args=args)
         if (robust && !frailty) # kludge
-            out@vcov <- sandwich.stpm2(out, cluster=cluster)
+          out@vcov <- sandwich.stpm2(out, cluster=cluster)
+        attr(out,"nobs") <- nrow(out@x) # for logLik method
     }
     return(out)
 }
