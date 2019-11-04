@@ -166,7 +166,7 @@ For contrasts (e.g. survival differences, hazard ratios), the \verb+newdata+ arg
     Standardised survival & $E_{X^*}S(t|X^*;\hat\theta)$ & \verb+"meansurv"+ \\
     Standardised survival differences & $E_{X_1^*}S(t|X_1^*;\hat\theta)-E_{X_0^*}S(t|X_0^*;\hat\theta)$ & \verb+"meansurvdiff"+ \\
     Standardised hazard & $h_{X^*}(t|X^*;\hat\theta) = \frac{E_{X^*}(S(t|X^*;\hat\theta)h(t|X^*;\hat\theta))}{E_{X^*}(S(t|X^*;\hat\theta))}$ & \verb+"meanhaz"+ \\
-    Standardised hazard ratio & $h_{X_1^*}(t|X_1^*;\hat\theta)/h_{X_0^*}(t|X_0^*\hat\theta)$ & \verb+"meanhazdiff"+ \\
+    Standardised hazard ratio & $h_{X_1^*}(t|X_1^*;\hat\theta)/h_{X_0^*}(t|X_0^*\hat\theta)$ & \verb+"meanhr"+ \\
     Attributable fraction & $\frac{E_{X^*}S(t|X^*;\hat\theta)--E_{X}S(t|X;\hat\theta)}{1-E_{X}S(t|X;\hat\theta)}$ & \verb+"af"+ \\
   \end{tabular}
 \end{minipage}
