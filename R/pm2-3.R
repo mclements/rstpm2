@@ -2258,8 +2258,11 @@ predict.stpm2.base <-
     }
     if (keep.attributes)
         attr(out,"newdata") <- newdata
-    if (full) 
-        out <- if(is.data.frame(out)) cbind(newdata,out) else cbind(newdata, data.frame(Estimate=out))
+    if (full) {
+      if (type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure"))
+        newdata <- exposed(newdata)
+      out <- if(is.data.frame(out)) cbind(newdata,out) else cbind(newdata, data.frame(Estimate=out))
+    }
     return(out)
 }
 
