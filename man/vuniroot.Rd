@@ -161,15 +161,15 @@ tools::assertCondition( vuniroot(function(x) 1, cbind(0,1), extendInt="yes"),
                        "error", verbose=TRUE)
 
 ## Convergence checking :
-sinc <- function(x) ifelse(x == 0, 1, sin(x)/x)
-curve(sinc, -6,18); abline(h=0,v=0, lty=3, col=adjustcolor("gray", 0.8))
+sinc_ <- function(x) ifelse(x == 0, 1, sin(x)/x)
+curve(sinc_, -6,18); abline(h=0,v=0, lty=3, col=adjustcolor("gray", 0.8))
 \dontshow{tools::assertWarning(}
-vuniroot(sinc, cbind(0,5), extendInt="yes", maxiter=4) #-> "just" a warning
+vuniroot(sinc_, cbind(0,5), extendInt="yes", maxiter=4) #-> "just" a warning
 \dontshow{ , verbose=TRUE)}
 
 ## now with  check.conv=TRUE, must signal a convergence error :
 \dontshow{tools::assertError(}
-vuniroot(sinc, cbind(0,5), extendInt="yes", maxiter=4, check.conv=TRUE)
+vuniroot(sinc_, cbind(0,5), extendInt="yes", maxiter=4, check.conv=TRUE)
 \dontshow{ , verbose=TRUE)}
 
 ### Weibull cumulative hazard (example origin, Ravi Varadhan):

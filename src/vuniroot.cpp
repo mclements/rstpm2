@@ -8,10 +8,10 @@ namespace rstpm2 {
   // List vunirootRcpp(Function f, NumericVector lower, NumericVector upper, int numiter, double tol) {
   RcppExport SEXP vunirootRcpp(SEXP __f, SEXP __lower, SEXP __upper, SEXP __fa, SEXP __fb, SEXP __numiter, SEXP __tol) {
     Rcpp::Function f = as<Rcpp::Function>(__f);
-    NumericVector lower = as<NumericVector>(__lower);
-    NumericVector upper = as<NumericVector>(__upper);
-    NumericVector fa = as<NumericVector>(__fa);
-    NumericVector fb = as<NumericVector>(__fb);
+    NumericVector lower = clone(as<NumericVector>(__lower));
+    NumericVector upper = clone(as<NumericVector>(__upper));
+    NumericVector fa = clone(as<NumericVector>(__fa));
+    NumericVector fb = clone(as<NumericVector>(__fb));
     int numiter = as<int>(__numiter);
     double tol = as<double>(__tol);
     int size = lower.size();
