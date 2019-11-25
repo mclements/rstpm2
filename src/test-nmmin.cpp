@@ -82,22 +82,16 @@ namespace rstpm2 {
   }
   // vectorised functions
   vec pnorm01(vec const & x) {
-    vec out(x.size());
-    for (size_t i=0; i<x.size(); ++i)
-      out(i) = R::pnorm(x(i),0.0,1.0,1,0);
-    return out;
+    NumericVector x2(wrap(x));
+    return Rcpp::pnorm(x2);
   }
   vec qnorm01(vec const & x) {
-    vec out(x.size());
-    for (size_t i=0; i<x.size(); ++i)
-      out(i) = R::qnorm(x(i),0.0,1.0,1,0);
-    return out;
+    NumericVector x2(wrap(x));
+    return Rcpp::qnorm(x2);
   }
   vec dnorm01(vec const & x) {
-    vec out(x.size());
-    for (size_t i=0; i<x.size(); ++i)
-      out(i) = R::dnorm(x(i),0.0,1.0,0);
-    return out;
+    NumericVector x2(wrap(x));
+    return Rcpp::dnorm(x2);
   }
   // we could use templates for the following...
   vec logit(vec const & p) {

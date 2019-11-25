@@ -36,6 +36,10 @@ test_that("Cure", {
     fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,cure=TRUE)
     expect_eps(coef(fit)[2], -0.3564268, 1e-5)
 })
+test_that("probit", {
+    fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,link="probit")
+    expect_eps(coef(fit)[2], -0.282318, 1e-5)
+})
 
 context("stpm2 + frailty")
 ##
