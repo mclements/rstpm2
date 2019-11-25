@@ -944,8 +944,8 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         coxph.obj <- eval(coxph.call, coxph.data)
         y <- model.extract(model.frame(coxph.obj),"response")
         data$logHhat <- if (is.null(bhazard)) {
-                            pmax(-18,link$link(Shat(coxph.obj)))
-                        } else  pmax(-18,link$link(Shat(coxph.obj)/exp(-control$bhazinit*bhazard*time)))
+                            link$link(pmin(1-1e-5,pmax(1e-5,Shat(coxph.obj))))
+                        } else  link$link(pmin(1-1e-5,pmax(1e-5,Shat(coxph.obj)/exp(-control$bhazinit*bhazard*time))))
         if (frailty && is.null(logtheta)) {
             coxph.data$.cluster <- as.vector(unclass(factor(cluster)))
             coxph.formula <- coxph.call$formula
