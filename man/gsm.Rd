@@ -99,7 +99,7 @@ as per \code{smooth.args}. Deprecated.
   }
 \item{cure}{logical for whether to estimate a cure model (parametric
   model only).}
-\item{control}{list of arguments passed to \code{gsm.control}.}
+\item{control}{list of arguments passed to \code{\link{gsm.control}}.}
 \item{init}{\code{init} should either be \code{NULL}, such that initial
                   values will be determined using Cox regression, or a numeric
                   vector of initial values.}
