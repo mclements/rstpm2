@@ -515,42 +515,6 @@ if (FALSE) {
 }
 bhazard <- function(x) x
 
-stpm2.control <- function(parscale=1,
-                          maxit=300,
-                          optimiser=c("BFGS","NelderMead"),
-                          reltol=1e-8,
-                          trace=0,
-                          nodes=9,
-                          adaptive=TRUE,
-                          kappa.init=1,
-                          maxkappa=1e3,
-                          suppressWarnings.coxph.frailty=TRUE,
-                          robust_initial=FALSE,
-                          bhazinit=0.1,
-                          use.gr=TRUE) {
-    stopifnot.logical <- function(arg)
-        stopifnot(is.logical(arg) || (is.numeric(arg) && arg>=0))
-    stopifnot(parscale>0)
-    stopifnot(maxit>1)
-    optimiser <- match.arg(optimiser)
-    stopifnot(reltol>0)
-    stopifnot(trace>=0)
-    stopifnot(nodes>=3)
-    stopifnot.logical(adaptive)
-    stopifnot(maxkappa>0)
-    stopifnot.logical(suppressWarnings.coxph.frailty)
-    stopifnot.logical(robust_initial)
-    stopifnot(bhazinit>0)
-    stopifnot.logical(use.gr)
-    stopifnot(kappa.init>0)
-    list(mle2.control=list(parscale=parscale, maxit=maxit),
-         optimiser=optimiser, reltol=reltol, trace=trace, nodes=nodes,
-         adaptive=adaptive, maxkappa=maxkappa,
-         suppressWarnings.coxph.frailty=suppressWarnings.coxph.frailty,
-         robust_initial=robust_initial, bhazinit=bhazinit, use.gr=use.gr,
-         kappa.init=kappa.init)
-}
-
 ## general link functions
 setClass("stpm2", representation(xlevels="list",
                                  contrasts="listOrNULL",
