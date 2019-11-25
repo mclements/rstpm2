@@ -551,7 +551,8 @@ gsm.control <- function(parscale=1,
                                maxkappa=1e3,
                                suppressWarnings.coxph.frailty=TRUE,
                                robust_initial=FALSE,
-                               bhazinit=0.1,
+                        bhazinit=0.1,
+                        eps.init=1e-5,
                                use.gr=TRUE,
                                penalty=c("logH","h"),
                                outer_optim=1,
@@ -581,7 +582,8 @@ gsm.control <- function(parscale=1,
          optimiser=optimiser, trace=trace, nodes=nodes,
          adaptive=adaptive, maxkappa=maxkappa,
          suppressWarnings.coxph.frailty=suppressWarnings.coxph.frailty,
-         robust_initial=robust_initial, bhazinit=bhazinit, use.gr=use.gr,
+         robust_initial=robust_initial, bhazinit=bhazinit, eps.init=eps.init,
+         use.gr=use.gr,
          kappa.init=kappa.init, penalty=penalty, outer_optim=outer_optim,
          reltol.search=reltol.search, reltol.final=reltol.final,
          reltol.outer=reltol.outer,
@@ -908,8 +910,11 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         coxph.obj <- eval(coxph.call, coxph.data)
         y <- model.extract(model.frame(coxph.obj),"response")
         data$logHhat <- if (is.null(bhazard)) {
-                            link$link(pmin(1-1e-5,pmax(1e-5,Shat(coxph.obj))))
-                        } else  link$link(pmin(1-1e-5,pmax(1e-5,Shat(coxph.obj)/exp(-control$bhazinit*bhazard*time))))
+                            link$link(pmin(1-control$eps.init,
+                                           pmax(control$eps.init,Shat(coxph.obj))))
+                        } else  link$link(pmin(1-control$eps.init,
+                                               pmax(control$eps.init,Shat(coxph.obj)/
+                                                                     exp(-control$bhazinit*bhazard*time))))
         if (frailty && is.null(logtheta)) {
             coxph.data$.cluster <- as.vector(unclass(factor(cluster)))
             coxph.formula <- coxph.call$formula
@@ -2527,50 +2532,6 @@ setClass("pstpm2", representation(xlevels="list",
                                   df="numeric",
                                   args="list"),
          contains="mle2")
-
-pstpm2.control <- function(parscale=1,
-                           maxit=300,
-                           optimiser=c("BFGS","NelderMead"),
-                           trace=0,
-                           nodes=9,
-                           adaptive=TRUE,
-                           kappa.init=1,
-                           maxkappa=1e3,
-                           suppressWarnings.coxph.frailty=TRUE,
-                           robust_initial=FALSE,
-                           bhazinit=0.1,
-                           use.gr=TRUE,
-                           penalty=c("logH","h"),
-                           outer_optim=1,
-                           reltol.search=1e-10, reltol.final=1e-10, reltol.outer=1e-5) {
-    stopifnot.logical <- function(arg)
-        stopifnot(is.logical(arg) || (is.numeric(arg) && arg>=0))
-    stopifnot(parscale>0)
-    stopifnot(maxit>1)
-    optimiser <- match.arg(optimiser)
-    stopifnot(trace>=0)
-    stopifnot(nodes>=3)
-    stopifnot.logical(adaptive)
-    stopifnot(maxkappa>0)
-    stopifnot.logical(suppressWarnings.coxph.frailty)
-    stopifnot.logical(robust_initial)
-    stopifnot(bhazinit>0)
-    stopifnot.logical(use.gr)
-    stopifnot(kappa.init>0)
-    penalty <- match.arg(penalty)
-    stopifnot(outer_optim %in% c(0,1))
-    stopifnot(reltol.search>0)
-    stopifnot(reltol.final>0)
-    stopifnot(reltol.outer>0)
-    list(mle2.control=list(parscale=parscale, maxit=maxit),
-         optimiser=optimiser, trace=trace, nodes=nodes,
-         adaptive=adaptive, maxkappa=maxkappa,
-         suppressWarnings.coxph.frailty=suppressWarnings.coxph.frailty,
-         robust_initial=robust_initial, bhazinit=bhazinit, use.gr=use.gr,
-         kappa.init=kappa.init, penalty=penalty, outer_optim=outer_optim,
-         reltol.search=reltol.search, reltol.final=reltol.final,
-         reltol.outer=reltol.outer)
-}
 
 ## Could this inherit from summary.stpm2?
 setClass("summary.pstpm2", representation(pstpm2="pstpm2",frailty="logical",theta="list",wald="matrix"), contains="summary.mle2")
