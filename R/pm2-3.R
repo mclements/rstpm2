@@ -1062,7 +1062,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                                  log.transform=log.time.transform))
         data0 <- data
         data0[[timeVar]] <- data0[[as.character(time2Expr)]]
-        data0[[timeVar]] <- ifelse(data0[[timeVar]]<=0,NA,data0[[timeVar]])
+        data0[[timeVar]] <- ifelse(data0[[timeVar]]<=0 | data0[[timeVar]]==Inf,NA,data0[[timeVar]])
         X1 <- if (penalised) transX(predict(lm.obj,data0,type="lpmatrix"), data0)
               else transX(lpmatrix.lm(lm.obj, data0), data0)
         X0 <- matrix(0,nrow(X),ncol(X))
