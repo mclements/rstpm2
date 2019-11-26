@@ -935,7 +935,9 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         weibullShape <- 1/survreg.obj$scale
         weibullScale <- predict(survreg.obj)
         y <- model.extract(model.frame(survreg.obj),"response")
-        data$logHhat <- pmax(-18,link$link(pweibull(time,weibullShape,weibullScale,lower.tail=FALSE)))
+        data$logHhat <- link$link(pmin(1-control$eps.init,
+                                       pmax(control$eps.init,
+                                            pweibull(time,weibullShape,weibullScale,lower.tail=FALSE))))
         ##
         if (frailty && is.null(logtheta)) {
             logtheta <- -1
