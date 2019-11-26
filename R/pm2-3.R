@@ -964,7 +964,8 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         sp.init <- lm.call$sp <- rep(sp.init,length=length(lm.obj$sp))
         lm.obj <- eval(lm.call)
     }
-    if (is.null(init)) {
+    has.init <- !is.null(init)
+    if (!has.init) {
         init <- coef(lm.obj)
     } else {
         stopifnot(length(init) == length(coef(lm.obj)))
@@ -1319,7 +1320,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         parnames(negll) <- parnames(gradnegll) <- names(init)
     }
     ## MLE
-    if (frailty) { # first fit without the frailty
+    if (frailty && !has.init) { # first fit without the frailty
         args2 <- args
         args2$frailty <- FALSE
         args2$cluster <- NULL
