@@ -1083,13 +1083,28 @@ hiv <- read.textConnection("0 16 0 0 0 1
 0 14 1 1 0 0")
 names(hiv) <- c("Left","Right","Stage","Dose","CdLow","CdHigh")
 ##hiv <- transform(hiv, Left=pmax(1e-5,Left))
-hiv <- transform(hiv,Event = ifelse(Left==0,2,ifelse(Right>=26,0,3)))
-require(rstpm2)
-## stpm2(Surv(Left,Right,Event,type="interval")~Stage, data=hiv, df=2) # FAILS
-## survreg(Surv(Left, Right, Event, type = "interval")~Stage, data=hiv) # FAILS
-## require(rms)
-## psm(Surv(Left, Right, Event, type = "interval")~Stage, data=hiv) # FAILS
+hiv <- transform(hiv,Event = ifelse(Left==0,2,
+                             ifelse(Right>=26,0,
+                                    3)))
+hiv2 <- transform(hiv,
+                 Left = ifelse(Event==2,Right,
+                        ifelse(Event==0,Left,
+                               Left)),
+                 Right = ifelse(Event==2,NA,
+                         ifelse(Event==0,NA,
+                                Right)))
+library(rstpm2)
+summary(stpm2(Surv(Left,Right,Event,type="interval")~Stage, data=hiv2, df=2))[2]
+survreg(Surv(Left, Right, Event, type = "interval")~Stage, data=hiv2,dist="exponential")
+library(rms)
+psm(Surv(Left, Right, Event, type = "interval")~Stage, data=hiv2,dist="exponential")
 
+##
+my.brcancer = brcancer
+my.brcancer$left = my.brcancer$rectime
+my.brcancer$right = ifelse(my.brcancer$censrec==1, my.brcancer$rectime, NA)
+test.stpm2.C = rstpm2::stpm2(Surv(left, right, censrec, type = "interval")~hormon,
+                             data=my.brcancer,df=3)
 ## additive model
 summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
                      logH.formula=~nsx(rectime,df=3),
