@@ -18,6 +18,13 @@
 ##   require(bbmle)
 ## }
 
+## predict linear predictor
+library(rstpm2)
+fit <- stpm2(Surv(rectime, censrec)~hormon, data=brcancer,df=3)
+predict(fit, newdata=data.frame(hormon=0:1, rectime=1000), type="link")
+predict(fit, newdata=data.frame(hormon=1, rectime=1000), type="link") -
+    predict(fit, newdata=data.frame(hormon=0, rectime=1000), type="link")
+
 ## testing - Bug requires loading devtools *before* rstpm2
 setwd("~/src/R/rstpm2")
 library(devtools)
@@ -1100,9 +1107,10 @@ library(rms)
 psm(Surv(Left, Right, Event, type = "interval")~Stage, data=hiv2,dist="exponential")
 
 ##
+library(rstpm2)
 my.brcancer = brcancer
 my.brcancer$left = my.brcancer$rectime
-my.brcancer$right = ifelse(my.brcancer$censrec==1, my.brcancer$rectime, NA)
+my.brcancer$right = ifelse(my.brcancer$censrec==1, my.brcancer$rectime, Inf)
 test.stpm2.C = rstpm2::stpm2(Surv(left, right, censrec, type = "interval")~hormon,
                              data=my.brcancer,df=3)
 ## additive model
