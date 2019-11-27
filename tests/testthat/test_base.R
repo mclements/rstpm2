@@ -57,6 +57,19 @@ test_that("base", {
     expect_eps(coef(fit)[2], 0.93819784, 1e-5)
     expect_eps(coef(fit)[6], 0.02906888, 1e-5)
 })
+##
+test_that("providing initial values with frailty works", {
+  dat <- data.frame(
+    y     = c(1, 2, 1, 2, 1, 1), 
+    event = c(0, 1, 1, 0, 1, 1),
+    grp   = c(1, 1, 2, 2, 3, 3))
+  
+  fit     <- gsm(Surv(y, event) ~ 1, dat, df = 1, cluster = dat$grp)
+  fit_new <- gsm(Surv(y, event) ~ 1, dat, df = 1, cluster = dat$grp, 
+                 init = head(coef(fit), -1), logtheta = tail(coef(fit), 1))
+  
+  expect_equal(coef(fit), coef(fit_new))
+})
 
 context("pstpm2")
 ##

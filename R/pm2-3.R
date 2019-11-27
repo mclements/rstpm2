@@ -775,12 +775,8 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     }
     Z.formula <- Z
     ##
-    left <- deparse(formula)
     tf <- terms.formula(smooth.formula, specials = c("s", "te"))
     terms <- attr(tf, "term.labels")
-    right <- paste0(terms, collapse = "+")
-    ## fullformula <- as.formula(paste0(left, "+", right), env = parent.frame())
-    rm(left,right) # tidy up
     ##
     ##
     ## Different models:
@@ -966,7 +962,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         init <- coef(lm.obj)
     } else {
         ## ASSUMES ONLY ONE-DIMENSIONAL FRAILTY
-        stopifnot(length(init)+frailty == length(coef(lm.obj)))
+        stopifnot(length(init) == length(coef(lm.obj)))
     }
     ##
     ## set up mf and wt
@@ -1072,7 +1068,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         if (ncol(Z)>2) stop("Current implementation only allows for one or two random effects")
         if (ncol(Z)==2) {
             init <- c(init,logtheta1=logtheta,corrtrans=0,logtheta2=logtheta)
-        } else init <- c(init, logtheta=logtheta)
+        } else init <- c(init, logtheta=unname(logtheta))
     } else {
         Z.formula <- NULL
         Z <- matrix(1,1,1)
