@@ -931,7 +931,9 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         weibullShape <- 1/survreg.obj$scale
         weibullScale <- predict(survreg.obj)
         y <- model.extract(model.frame(survreg.obj),"response")
-        data$logHhat <- pmax(-18,link$link(pweibull(time,weibullShape,weibullScale,lower.tail=FALSE)))
+        data$logHhat <- link$link(pmin(1-control$eps.init,
+                                       pmax(control$eps.init,
+                                            pweibull(time,weibullShape,weibullScale,lower.tail=FALSE))))
         ##
         if (frailty && is.null(logtheta)) {
             logtheta <- -1
@@ -958,10 +960,10 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         sp.init <- lm.call$sp <- rep(sp.init,length=length(lm.obj$sp))
         lm.obj <- eval(lm.call)
     }
-    if (is.null(init)) {
+    has.init <- !is.null(init)
+    if (!has.init) {
         init <- coef(lm.obj)
     } else {
-        ## ASSUMES ONLY ONE-DIMENSIONAL FRAILTY
         stopifnot(length(init) == length(coef(lm.obj)))
     }
     ##
@@ -1056,7 +1058,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                                  log.transform=log.time.transform))
         data0 <- data
         data0[[timeVar]] <- data0[[as.character(time2Expr)]]
-        data0[[timeVar]] <- ifelse(data0[[timeVar]]<=0,NA,data0[[timeVar]])
+        data0[[timeVar]] <- ifelse(data0[[timeVar]]<=0 | data0[[timeVar]]==Inf,NA,data0[[timeVar]])
         X1 <- if (penalised) transX(predict(lm.obj,data0,type="lpmatrix"), data0)
               else transX(lpmatrix.lm(lm.obj, data0), data0)
         X0 <- matrix(0,nrow(X),ncol(X))
@@ -1314,7 +1316,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         parnames(negll) <- parnames(gradnegll) <- names(init)
     }
     ## MLE
-    if (frailty) { # first fit without the frailty
+    if (frailty && !has.init) { # first fit without the frailty
         args2 <- args
         args2$frailty <- FALSE
         args2$cluster <- NULL
