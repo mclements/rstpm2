@@ -21,4 +21,5 @@ vignettes/*.pdf
 NEWS.html
 rstpm2*.tar.gz
 ..Rcheck
+*.Rproj
 .Rproj.user
