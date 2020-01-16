@@ -47,6 +47,7 @@ markov_msm(x, trans, t = c(0,1), newdata = NULL, init=NULL,
               state.costs.sd=rep(0,nrow(trans)),
               discount.rate = 0,
               block.size=500,
+              spline.interpolation=TRUE,
               debug=FALSE,
               \dots)
 \method{vcov}{markov_msm}(object, \dots)
@@ -186,6 +187,10 @@ and costs
 }
   \item{block.size}{
   divide \code{newdata} into blocks. Uses less memory but is slower. Reduce this number if the function call runs out of memory. 
+}
+  \item{spline.interpolation}{
+  logical for whether to use spline interpolation for the transition
+  hazards rather than the model predictions directly (default=TRUE).
 }
   \item{debug}{
   logical flag for whether to keep the full output from the ordinary differential equation in the \code{res} component (default=\code{FALSE}). 
@@ -379,7 +384,7 @@ nd <- transform(nd, age=54, pr_1=3, hormon=0,
                 size3=(unclass(size)==3)+0)
 ## Predictions
 system.time(pred1 <- rstpm2::markov_msm(list(c.ar,c.ad,c.rd), t = seq(0,15,length=301),
-                                        newdata=nd, trans = transmat)) # ~15 seconds
+                                        newdata=nd, trans = transmat)) # ~2 seconds
 pred1 <- transform(pred1, Nodes=paste("Nodes =",nodes), Size=paste("Size",size))
 ## Figure 3
 plot(pred1, ggplot=TRUE) + facet_grid(Nodes ~ Size) + xlab("Years since surgery")

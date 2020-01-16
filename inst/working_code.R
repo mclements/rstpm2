@@ -18,12 +18,36 @@
 ##   require(bbmle)
 ## }
 
+## bug in plot(..., xlab="Something")
+library(rstpm2)
+fit <- stpm2(Surv(rectime, censrec)~hormon, data=brcancer,df=3)
+plot(fit, newdata=data.frame(hormon=1), type="hr", xlab="Time since diagnosis (years)", var="hormon",
+     ylab="Hazard ratio", main="Lung cancer-BMI")
+
 ## predict linear predictor
 library(rstpm2)
 fit <- stpm2(Surv(rectime, censrec)~hormon, data=brcancer,df=3)
 predict(fit, newdata=data.frame(hormon=0:1, rectime=1000), type="link")
 predict(fit, newdata=data.frame(hormon=1, rectime=1000), type="link") -
     predict(fit, newdata=data.frame(hormon=0, rectime=1000), type="link")
+
+##
+library(rstpm2)
+library(Hmisc)
+d <- local({
+    set.seed(12345)
+    x <- rep(0:1,length=200)
+    y <- rexp(length(x), exp(-3+x))
+    data.frame(x,y,e=TRUE)
+    })
+fit0 <- stpm2(Surv(y, e)~1, data=d,df=3)
+fit <- stpm2(Surv(y, e)~x, data=d,df=3)
+rcorr.cens(predict(fit0,type="link")-predict(fit0,newdata=transform(d,x=0),type="link"),
+           with(d,Surv(y,e)))
+rcorr.cens(-predict(fit,type="link")+
+           predict(fit,newdata=transform(d,x=0),type="link"),
+           with(d,Surv(y,e)))
+summary(fit)
 
 ## testing - Bug requires loading devtools *before* rstpm2
 setwd("~/src/R/rstpm2")
