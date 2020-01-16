@@ -12,6 +12,7 @@ markov_msm <-
               state.costs.sd=rep(0,nrow(trans)),
               discount.rate = 0,
               block.size=500,
+              spline.interpolation=TRUE,
               debug = FALSE,
               ...)
 {
@@ -47,6 +48,7 @@ markov_msm <-
                                               state.costs = state.costs,
                                               discount.rate = discount.rate,
                                               block.size = block.size,
+                                              spline.interpolation = spline.interpolation,
                                               ...))
         return(do.call(rbind.markov_msm,lst))
     }
@@ -76,6 +78,18 @@ markov_msm <-
             x[[i]] <- gamWrap(x[[i]])
         else if(is.function(x[[i]]))
             x[[i]] <- hazFun(x[[i]], tmvar[i])
+    }
+    if (spline.interpolation) {
+        replace <- function(object,tmvar) {
+            t <- seq(max(c(min.tm,min(t))), max(t), length.out=1000)
+            if (inherits(object,"hazFun")) object
+            else if (inherits(object, "addModel"))
+                structure(lapply(object,replace,tmvar=tmvar), class="addModel")
+            else makeSplineFun(object, newdata=newdata, tmvar=tmvar, min.tm=min.tm, tm=t,
+                               log=switch(class(object),aftreg=TRUE,flexsurvreg=TRUE,stpm2=TRUE,
+                                          pstpm2=TRUE,aft=TRUE,FALSE))
+        }
+        x <- mapply(replace, x, tmvar, SIMPLIFY=FALSE)
     }
     ntr <- sum(!is.na(trans))
     nobs <- nrow(newdata)
@@ -293,7 +307,18 @@ as.data.frame.markov_msm <- function(x, row.names=NULL, optional=FALSE,
                                      P.conf.type="logit", L.conf.type="log", C.conf.type="log",
                                      P.range=c(0,1), L.range=c(0,Inf),
                                      C.range=c(0,Inf),
+                                     state.weights=NULL,
+                                     obs.weights=NULL,
                                      ...) {
+    if(!is.null(obs.weights))
+        x <- standardise(x, weights=obs.weights, ...)
+    if (!is.null(state.weights))
+        return(state_weights(x=x, row.names=row.names,
+                             optional=optional, ci=ci,
+                             P.conf.type=P.conf.type, L.cont.type=L.cont.type,
+                             C.conf.type=C.conf.type,
+                             P.range=P.range, L.range=L.range, C.range=C.range,
+                             state.weights=state.weights, ...))
     state.names <- rownames(x$trans)
     perm <- function(x) aperm(x, c(2,3,1))
     ## probabilities
@@ -353,6 +378,73 @@ as.data.frame.markov_msm <- function(x, row.names=NULL, optional=FALSE,
     if(!is.null(row.names)) rownames(out) <- row.names
     out
 }
+
+# if var(P1)=g1*Sigma*g1' and var(P2)=g2*Sigma*g2' then var(P1+P2)=(g1+g2)*Sigma*(g1+g2)' 
+state_weights <- function(x, row.names=NULL, optional=FALSE,
+                          ci=TRUE,
+                          P.conf.type="logit", L.conf.type="log", C.conf.type="log",
+                          P.range=c(0,1), L.range=c(0,Inf),
+                          C.range=c(0,Inf),
+                          state.weights,
+                          ...) {
+    stopifnot(!missing(state.weights))
+    state.names <- rownames(x$trans)
+    ## stopifnot(length(state.names) == length(state.weights))
+    w <- function(m) colSums(m * state.weights)
+    perm <- function(x) aperm(x, c(2,3,1))
+    ## probabilities
+    seP <- apply(x$Pu, c(1,4), function(m) sqrt(colSums(w(m) * (vcov(x) %*% w(m))))) # c(nobs,nt)
+    ## utilities
+    keep.ith <- function(a,i) {
+        slice <- a[,i,,] 
+        a <- a*0
+        a[,i,,] <- slice
+        a
+    }
+    Lu <- do.call(abind, c(list(3, x$Lu),
+                           lapply(1:nrow(x$trans), function(i) keep.ith(x$Pdisc,i))))
+    vcovL <- bdiag(vcov(x), diag(x$utility.sd^2))
+    seL <- apply(Lu, c(1,4), function(m) sqrt(colSums(w(m) * (vcovL %*% w(m))))) # c(nobs,nt)
+    out <- data.frame(P=as.vector(apply(x$P,1,w)),
+                      seP=as.vector(t(seP)),
+                      L=as.vector(apply(x$L,1,w)),
+                      seL=as.vector(t(seL)))
+    if (!is.null(x$costsu)) {
+        ## error in the following 
+        costsu <- do.call(abind, c(list(3,x$costsu),
+                                   lapply(1:nrow(x$trans), function(i) keep.ith(x$Pdisc,i)),
+                                   list(x$costsu.trans)))
+        vcovC <- bdiag(vcov(x), diag(x$state.costs.sd^2), diag(x$transition.costs.sd^2))
+        seC <- apply(costsu, c(1,4), function(m) sqrt(colSums(w(m) * (vcovC %*% w(m))))) # c(nobs,nt)
+        out$C <- as.vector(apply(x$costs,1,w))
+        out$seC <- as.vector(t(seC))
+    }
+    dimnames. <- dimnames(x$P)[c(3,1)] 
+    dimnames.$obs <- 1:length(dimnames.$obs)
+    y <- expand.grid(dimnames.)
+    y$time <- as.numeric(attr(y$time,"levels"))[y$time]
+    out <- cbind(y,out)
+    if (ci) {
+        tmp <- surv.confint(out$P,out$seP, conf.type=P.conf.type, min.value=P.range[1], max.value=P.range[2])
+        out$P.lower=tmp$lower
+        out$P.upper=tmp$upper
+        tmp <- surv.confint(out$L,out$seL, conf.type=L.conf.type, min.value=L.range[1], max.value=L.range[2])
+        out$L.lower=tmp$lower
+        out$L.upper=tmp$upper
+        if (!is.null(x$costs)) {
+            tmp <- surv.confint(out$C,out$seC, conf.type=C.conf.type, min.value=C.range[1], max.value=C.range[2])
+            out$C.lower=tmp$lower
+            out$C.upper=tmp$upper
+        }
+    }
+    newdata <- as.data.frame(x$newdata[as.numeric(out$obs), , drop=FALSE])
+    names(newdata) <- names(x$newdata)
+    out <- "rownames<-"(cbind(newdata, out),rownames(out))
+    if(!is.null(row.names)) rownames(out) <- row.names
+    out
+}
+
+
 standardise <- function(x, ...)
     UseMethod("standardise")
 standardise.markov_msm <- function(x,
@@ -882,6 +974,8 @@ as.data.frame.markov_msm_diff <- function(x, row.names=NULL, optional=FALSE,
                              P.range=P.range, L.range=L.range,
                              C.range=C.range, ...)
 
+plot.markov_msm_diff <- function(x, y, ...)
+    stop("Plots for markov_msm_diff have not yet been implemented")
 
 plot.markov_msm <- function(x, y, stacked=TRUE, which=c("P","L"),
                             xlab="Time", ylab=NULL, col=2:6, border=col,
@@ -1094,8 +1188,6 @@ as.data.frame.markov_msm_ratio <- function(x, row.names=NULL, optional=FALSE, ..
 ##     z
 ## }
 
-
-
 abind <- function(index, ...) { # bind on nth slice for a bag of arrays
     x <- list(...)
     stopifnot(all(sapply(x,is.array)))
@@ -1196,6 +1288,8 @@ reorder <- function(x,order) {
 nrow.markov_msm <- function(x, ...) nrow(as.data.frame(x, ...)) 
 vcov.markov_msm <- function(object, ...) object$vcov
 
+## Collapse across states
+## issue with variance calculations...
 collapse_markov_msm <- function(object, which=NULL, sep="; ") {
     ## example: which=c(1,2) => combine states 1 and 2
     stopifnot(inherits(object, "markov_msm"))
@@ -1322,3 +1416,35 @@ predict.stratifiedModel <- function (object, type, newdata, ...) {
 coef.stratifiedModel <- function(object, ...) NextMethod("coef", object)
 vcov.stratifiedModel <- function(object, ...) NextMethod("vcov", object)
 
+vsplinefun <- function(x,y,...) {
+    stopifnot(is.matrix(y))
+    splinefuns <- lapply(1:ncol(y), function(j) stats::splinefun(x,y[,j],...))
+    function(x) sapply(splinefuns, function(obj) obj(x))
+}
+makeSplineFun <- function(object,tm,newdata=data.frame(one=1),tmvar="", min.tm=1e-7, log=FALSE) {
+    tm <- pmax(tm,min.tm)
+    trans <- if (log) base::log else base::identity
+    ## itrans <- if (log) base::exp else base::identity
+    newdata <- as.data.frame(newdata)
+    times <- data.frame(t=tm); if (tmvar != "") names(times) <- tmvar
+    hazard <- lapply(1:nrow(newdata), function(i)
+        splinefun(trans(tm),
+                  predict(object,type="hazard",newdata=merge(newdata[i,], times))))
+    gradh <- lapply(1:nrow(newdata), function(i)
+        vsplinefun(trans(tm),
+                   predict(object,type="gradh",newdata=merge(newdata[i,], times))))
+    out <- list(
+        object=object,
+        hazard=function(t) sapply(hazard, function(obj) obj(trans(t))),
+        gradh=function(t) t(sapply(gradh, function(obj) obj(trans(t)))))
+    class(out) <- "SplineFun"
+    out
+}
+predict.SplineFun <- function(object, newdata, type=c("hazard","gradh"), tmvar="", ...) {
+    type <- match.arg(type)
+    time <- newdata[[tmvar]]
+    stopifnot(all(time[1] == time[-1]))
+    if (type=="hazard") object$hazard(time[1]) else object$gradh(time[1])
+}
+vcov.SplineFun <- function(object) vcov(object$object)
+coef.SplineFun <- function(object) coef(object$object)
