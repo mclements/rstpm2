@@ -3,6 +3,14 @@
 #include <map>
 #include "c_optim.h"
 
+#ifdef DO_PROF
+#include <gperftools/profiler.h>
+#include <iostream>
+#include <iomanip>
+#include <ctime>
+#include <sstream>
+#endif
+
 namespace rstpm2 {
 
   // import namespaces
@@ -606,18 +614,18 @@ namespace rstpm2 {
       List list = as<List>(sexp);
       std::string linkType = as<std::string>(list["link"]);
       if (linkType=="PH")
-	link=new LogLogLink(sexp);
+	      link=new LogLogLink(sexp);
       else if (linkType=="PO")
-	link=new LogitLink(sexp);
+	      link=new LogitLink(sexp);
       else if (linkType=="probit")
-	link=new ProbitLink(sexp);
+	      link=new ProbitLink(sexp);
       else if (linkType=="AH")
-	link=new LogLink(sexp);
+	      link=new LogLink(sexp);
       else if (linkType=="AO")
-	link=new ArandaOrdazLink(sexp);
+	      link=new ArandaOrdazLink(sexp);
       else {
-	REprintf("No matching link.type");
-	return;
+	      REprintf("No matching link.type");
+	      return;
       }
       bfgs.coef = init = as<NumericVector>(list["init"]);
       X = as<mat>(list["X"]); 
@@ -2472,7 +2480,33 @@ namespace rstpm2 {
       return wrap(-1);
     }
   }
+  
+  class prof_class {
+  public:
+    prof_class(const std::string &name){
+#ifdef DO_PROF
+      std::stringstream ss;
+      auto t = std::time(nullptr);
+      auto tm = *std::localtime(&t);
+      ss << "profile-" << name 
+         << std::put_time(&tm, "-%d-%m-%Y-%H-%M-%S.log");
+      Rcpp::Rcout << "Saving profile output to '" << ss.str() << "'" 
+                  << std::endl;
+      const std::string s = ss.str();
+      ProfilerStart(s.c_str());
+#endif
+    }
+    
+#ifdef DO_PROF
+    ~prof_class(){
+      ProfilerStop();
+    }
+#endif
+  };
+  
   RcppExport SEXP model_output(SEXP args) {
+    prof_class prof("model_output");
+    
     List list = as<List>(args);
     std::string type = as<std::string>(list["type"]);
     if (type=="stpm2") {
