@@ -2,6 +2,7 @@
 #include <vector>
 #include <map>
 #include "c_optim.h"
+#include <limits>
 
 #ifdef DO_PROF
 #include <gperftools/profiler.h>
@@ -89,17 +90,33 @@ namespace rstpm2 {
     }
   }
   // vectorised functions
-  vec pnorm01(vec const & x) {
-    NumericVector x2(wrap(x));
-    return Rcpp::pnorm(x2);
+  vec pnorm01(vec const &x) {
+    vec out(x.size());
+    double const *xi = x.begin();
+    for(double &o : out)
+      o = R::pnorm5(*xi++, 0, 1, true, false);
+    return out;
   }
-  vec qnorm01(vec const & x) {
-    NumericVector x2(wrap(x));
-    return Rcpp::qnorm(x2);
+  vec pnorm01_log(vec const &x) {
+    vec out(x.size());
+    double const *xi = x.begin();
+    for(double &o : out)
+      o = R::pnorm5(*xi++, 0, 1, true, true);
+    return out;
   }
-  vec dnorm01(vec const & x) {
-    NumericVector x2(wrap(x));
-    return Rcpp::dnorm(x2);
+  vec qnorm01(vec const &x) {
+    vec out(x.size());
+    double const *xi = x.begin();
+    for(double &o : out)
+      o = R::qnorm5(*xi++, 0, 1, true, false);
+    return out;
+  }
+  vec dnorm01(vec const &x) {
+    vec out(x.size());
+    double const *xi = x.begin();
+    for(double &o : out)
+      o = R::dnorm4(*xi++, 0, 1, false);
+    return out;
   }
   // we could use templates for the following...
   vec logit(vec const & p) {
@@ -313,19 +330,24 @@ namespace rstpm2 {
       return pnorm01(-eta); 
     }
     vec H(vec const &eta) const { 
-      return -log(pnorm01(-eta)); 
+      return -pnorm01_log(-eta); 
     }
-    vec h(vec const &eta, vec const &etaD) const { 
-      return etaD % dnorm01(-eta) / pnorm01(-eta); 
+    vec h(vec const &eta, vec const &etaD) const {
+      constexpr double eps = std::numeric_limits<double>::epsilon();
+      return etaD % dnorm01(-eta) / (pnorm01(-eta) + eps); 
     }
     mat gradH(vec const &eta, mat const &X) const { 
-      return rmult(X, dnorm01(-eta) / pnorm01(-eta));
+      constexpr double eps = std::numeric_limits<double>::epsilon();
+      return rmult(X, dnorm01(-eta) / (pnorm01(-eta) + eps));
     }
     mat gradh(vec const &eta, vec const &etaD, mat const &X, 
               mat const &XD) const { 
-      return rmult(X, -eta % dnorm01(eta) % etaD / pnorm01(-eta)) +
-	      rmult(X, dnorm01(eta) % dnorm01(eta) / pnorm01(-eta) / pnorm01(-eta) % etaD) +
-	      rmult(XD,dnorm01(eta) / pnorm01(-eta));
+      constexpr double eps = std::numeric_limits<double>::epsilon();
+      vec const pnrm = pnorm01(-eta), 
+                dnrm = dnorm01( eta);
+      return rmult(X, -eta % dnrm % etaD / (pnrm + eps)) +
+	      rmult(X, dnrm % dnrm / (pnrm % pnrm + eps) % etaD) +
+	      rmult(XD, dnrm / (pnrm + eps));
     }
     // incomplete implementation
     cube hessianh(vec const &beta, mat const &X, mat const &XD) const { 
