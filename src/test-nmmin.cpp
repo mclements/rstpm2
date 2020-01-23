@@ -2,7 +2,6 @@
 #include <vector>
 #include <map>
 #include "c_optim.h"
-#include <limits>
 
 #ifdef DO_PROF
 #include <gperftools/profiler.h>
@@ -104,6 +103,24 @@ namespace rstpm2 {
       o = R::pnorm5(*xi++, 0, 1, true, true);
     return out;
   }
+  /* \frac \partial{\partial x} \log \Phi(x) = \frac{\phi(x)}{\Phi(x)} */
+  vec dpnorm01_log(vec const &x) {
+    vec out(x.size());
+    double const *xi = x.begin();
+    for(double &o : out){
+      double const xv = *xi++; 
+      if(xv > -10){
+        double const dv     = R::dnorm4(xv, 0, 1    , 0L), 
+                     pv     = R::pnorm5(xv, 0, 1, 1L, 0L);
+        o = dv / pv;
+      } else {
+        double const log_dv = R::dnorm4(xv, 0, 1    , 1L), 
+                     log_pv = R::pnorm5(xv, 0, 1, 1L, 1L);
+        o = std::exp(log_dv - log_pv);
+      }
+    }
+    return out;
+  }
   vec qnorm01(vec const &x) {
     vec out(x.size());
     double const *xi = x.begin();
@@ -142,39 +159,44 @@ namespace rstpm2 {
     }
     return wrap(out);
   }
-  // http://gallery.rcpp.org/articles/dmvnorm_arma/
-  arma::vec dmvnrm_arma(arma::mat x,  
-			arma::rowvec mean,  
-			arma::mat sigma, 
-			bool logd = false) { 
+  // https://github.com/RcppCore/rcpp-gallery/issues/123#issue-553642056
+  arma::vec dmvnrm_arma(arma::mat const &x,  
+                        arma::rowvec const &mean,  
+                        arma::mat const &sigma, 
+                        bool const logd = false) { 
     int n = x.n_rows;
     int xdim = x.n_cols;
     arma::vec out(n);
-    arma::mat rooti = arma::trans(arma::inv(trimatu(arma::chol(sigma))));
-    double rootisum = arma::sum(log(rooti.diag()));
-    double constants = -(static_cast<double>(xdim)/2.0) * log2pi;
+    arma::mat const rooti = arma::inv(trimatu(arma::chol(sigma)));
+    double const rootisum = arma::sum(log(rooti.diag())), 
+                constants = -xdim/2.0 * log2pi, 
+              other_terms = rootisum + constants;
+    
+    arma::rowvec z;
     for (int i=0; i < n; i++) {
-      arma::vec z = rooti * arma::trans( x.row(i) - mean) ;    
-      out(i)      = constants - 0.5 * arma::sum(z%z) + rootisum;     
+      z      = (x.row(i) - mean) * rooti;    
+      out(i) = other_terms - 0.5 * arma::dot(z, z);     
     }  
-    if (logd == false) {
+    
+    if (logd == false)
       out = exp(out);
-    }
     return(out);
   }
-  double dmvnrm_arma(arma::vec x,  
-		     arma::vec mean,  
-		     arma::mat sigma, 
-		     bool logd = false) { 
-    int xdim = x.n_rows;
-    arma::mat rooti = arma::trans(arma::inv(trimatu(arma::chol(sigma))));
-    double rootisum = arma::sum(log(rooti.diag()));
-    double constants = -(static_cast<double>(xdim)/2.0) * log2pi;
-    arma::vec z = rooti * (x - mean) ;    
-    double out = constants - 0.5 * arma::sum(z%z) + rootisum;     
-    if (logd == false) {
+  double dmvnrm_arma(arma::vec const &x,  
+                     arma::vec const &mean,  
+                     arma::mat const &sigma, 
+                     bool const logd = false) { 
+    int xdim = x.n_elem;
+    arma::mat const rooti = arma::inv(trimatu(arma::chol(sigma)));
+    double const rootisum = arma::sum(log(rooti.diag())), 
+                constants = -xdim/2.0 * log2pi, 
+              other_terms = rootisum + constants;
+    
+    auto z = (x - mean).t() * rooti;
+    double out = other_terms - 0.5 * arma::dot(z, z);
+    
+    if (logd == false)
       out = exp(out);
-    }
     return(out);
   }
   
@@ -333,21 +355,17 @@ namespace rstpm2 {
       return -pnorm01_log(-eta); 
     }
     vec h(vec const &eta, vec const &etaD) const {
-      constexpr double eps = std::numeric_limits<double>::epsilon();
-      return etaD % dnorm01(-eta) / (pnorm01(-eta) + eps); 
+      return etaD % dpnorm01_log(-eta); 
     }
-    mat gradH(vec const &eta, mat const &X) const { 
-      constexpr double eps = std::numeric_limits<double>::epsilon();
-      return rmult(X, dnorm01(-eta) / (pnorm01(-eta) + eps));
+    mat gradH(vec const &eta, mat const &X) const {
+      return rmult(X, dpnorm01_log(-eta));
     }
     mat gradh(vec const &eta, vec const &etaD, mat const &X, 
-              mat const &XD) const { 
-      constexpr double eps = std::numeric_limits<double>::epsilon();
-      vec const pnrm = pnorm01(-eta), 
-                dnrm = dnorm01( eta);
-      return rmult(X, -eta % dnrm % etaD / (pnrm + eps)) +
-	      rmult(X, dnrm % dnrm / (pnrm % pnrm + eps) % etaD) +
-	      rmult(XD, dnrm / (pnrm + eps));
+              mat const &XD) const {
+      vec const dpnrm_log = dpnorm01_log(-eta);
+      return rmult(X , -eta % etaD % dpnrm_log) +
+	      rmult     (X , etaD % dpnrm_log % dpnrm_log) +
+	      rmult     (XD, dpnrm_log);
     }
     // incomplete implementation
     cube hessianh(vec const &beta, mat const &X, mat const &XD) const { 
