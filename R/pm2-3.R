@@ -607,8 +607,9 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                 logH.formula = NULL, logH.args = NULL,
                 ## arguments specific to relative survival
                 bhazard = NULL, bhazinit=NULL,
-                ## arguments specific to the fraility models
-                frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=NULL,
+                ## arguments specific to the fraility models and copulas
+                copula=FALSE,
+                frailty = !is.null(cluster) & !robust & !copula, cluster = NULL, logtheta=NULL,
                 nodes=NULL, RandDist=c("Gamma","LogN"), recurrent = FALSE,
                 adaptive = NULL, maxkappa = NULL,
                 ## arguments specific to the penalised models
@@ -656,6 +657,10 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     na.action.old <- options()[["na.action"]]
     options(na.action = "na.pass")
     on.exit(options(na.action = na.action.old))
+    if (copula && control$use.gr) {
+        warning("Gradients not currently available for copulas: redefined control$use.gr=FALSE")
+        control$use.gr <- FALSE
+    }
     ##
     ## set up the data
     ## ensure that data is a data frame
@@ -795,7 +800,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         bhazard.index <- specials$bhazard
         if (length(cluster.index)>0) {
             cluster <- mf2[, cluster.index]
-            frailty = !is.null(cluster) && !robust
+            frailty = !is.null(cluster) && !robust && !copula
             base.formula <- formula(stats::drop.terms(terms(mf2), cluster.index - 1, keep.response=TRUE))
             cluster.index2 <- attr(terms.formula(full.formula, "cluster"), "specials")$cluster
             lm.formula <- formula(stats::drop.terms(terms(full.formula), cluster.index2 - 1))
@@ -883,6 +888,8 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         cluster <- cluster[.include]
     bhazard <- bhazard[.include]
     offset <- if (is.null(offset)) rep(0,sum(.include)) else offset[.include]
+    if (copula && delayed)
+        stop("Copulas not currently defined for delayed entry")
     ## setup for initial values
     if (!interval) {
         ## Cox regression
@@ -911,7 +918,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                         } else  link$link(pmin(1-control$eps.init,
                                                pmax(control$eps.init,Shat(coxph.obj)/
                                                                      exp(-control$bhazinit*bhazard*time))))
-        if (frailty && is.null(logtheta)) {
+        if ((frailty || copula) && is.null(logtheta)) { # fudge for copulas
             coxph.data$.cluster <- as.vector(unclass(factor(cluster)))
             coxph.formula <- coxph.call$formula
             rhs(coxph.formula) <- rhs(coxph.formula) %call+%
@@ -935,7 +942,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                                        pmax(control$eps.init,
                                             pweibull(time,weibullShape,weibullScale,lower.tail=FALSE))))
         ##
-        if (frailty && is.null(logtheta)) {
+        if ((frailty || copula) && is.null(logtheta)) {
             logtheta <- -1
         }
     }
@@ -1064,7 +1071,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         X0 <- matrix(0,nrow(X),ncol(X))
         rm(data0)
     }
-    if (frailty) {
+    if (frailty || copula) {
         Z.formula <- Z
         Z <- model.matrix(Z, data)
         if (ncol(Z)>2) stop("Current implementation only allows for one or two random effects")
@@ -1092,6 +1099,8 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         control$mle2.control$parscale <- rep(control$mle2.control$parscale,length(init))
     if (is.null(names(control$mle2.control$parscale)))
         names(control$mle2.control$parscale) <- names(init)
+    if (control$use.gr == FALSE)
+        control$optimiser <- "NelderMead"
     args <- list(init=init,X=X,XD=XD,bhazard=bhazard,wt=wt,event=ifelse(event,1,0),time=time,
                  delayed=delayed, interval=interval, X0=X0, wt0=wt0, X1=X1,
                  parscale=control$mle2.control$parscale,
@@ -1100,19 +1109,19 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  sp=sp, reltol_search=control$reltol.search, reltol=control$reltol.final,
                  reltol_outer=control$reltol.outer, trace=control$trace,
                  alpha=alpha, criterion=switch(control$criterion,GCV=1,BIC=2),
-                 oldcluster=cluster, frailty=frailty,
+                 oldcluster=cluster, frailty=frailty, 
                  cluster=if(!is.null(cluster)) as.vector(unclass(factor(cluster))) else NULL,
                  map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L, link=link.type, ttype=ttype,
                  RandDist=RandDist, optimiser=control$optimiser, log.time.transform=log.time.transform,
                  type=if (frailty && RandDist=="Gamma") "stpm2_gamma_frailty" else if (frailty && RandDist=="LogN") "stpm2_normal_frailty" else "stpm2",
                  recurrent = recurrent, return_type="optim", transX=transX, transXD=transXD,
                  maxkappa=control$maxkappa, Z=Z, Z.formula = Z.formula, thetaAO = theta.AO,
-                 excess=excess, data=data,
+                 excess=excess, data=data, copula=copula,
                  robust_initial = control$robust_initial, .include=.include,
                  offset=as.vector(offset))
     ## checks on the parameters
     stopifnot(all(dim(args$X) == dim(args$XD)))
-    if (!frailty) {
+    if (!frailty && !copula) {
         stopifnot(length(args$init) == ncol(args$X))
     } else  {
         stopifnot(length(args$init) == ncol(args$X)+ncol(Z))
@@ -1120,7 +1129,8 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     if (penalised) args$type <- if (frailty && RandDist=="Gamma") "pstpm2_gamma_frailty"
                                 else if (frailty && RandDist=="LogN") "pstpm2_normal_frailty"
                                 else "pstpm2"
-    if (frailty) {
+    if (copula) args$type <- if (penalised) "pstpm2_clayton_copula" else "stpm2_clayton_copula"
+    if (frailty || copula) {
         rule <- fastGHQuad::gaussHermiteData(control$nodes)
         args$gauss_x <- rule$x
         args$gauss_w <- rule$w
@@ -1196,7 +1206,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                 }))
             }
             dpfun <- function(beta,sp) {
-                if (frailty) beta <- beta[-length(beta)]
+                if (frailty || copula) beta <- beta[-length(beta)]
                 deriv <- beta*0
                 for (i in 1:length(design)) {
                     obj <- design[[i]]
@@ -1259,7 +1269,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                 lm.obj <- eval(lm.call)
                 if(!is.null(lm.obj$full.sp)) lm.obj$sp <- lm.obj$full.sp
                 init <- coef(lm.obj)
-                if (frailty)
+                if (frailty || copula)
                     init <- c(init,logtheta=logtheta)
                 if (all(lm.obj$sp > 1e5)) break
                 ## stop("Initial values not valid and revised sp>1e5")
@@ -1316,9 +1326,9 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         parnames(negll) <- parnames(gradnegll) <- names(init)
     }
     ## MLE
-    if (frailty && !has.init) { # first fit without the frailty
+    if ((frailty || copula) && !has.init) { # first fit without the frailty
         args2 <- args
-        args2$frailty <- FALSE
+        args2$frailty <- args2$copula <- FALSE
         args2$cluster <- NULL
         args2$type <- if (penalised) "pstpm2" else "stpm2"
         localIndex <- 1:(length(args2$init)-1)
@@ -1926,7 +1936,7 @@ predict.stpm2.base <-
         beta <- coef(object)
         tt <- object@terms
         link <- object@link # cf. link for transformation of the predictions
-        if (object@frailty) {
+        if (object@frailty || args$copula) {
             theta <- exp(beta[length(beta)])
             beta <- beta[-length(beta)]
             if (object@args$RandDist=="LogN") {
@@ -2133,14 +2143,14 @@ predict.stpm2.base <-
                        }))
           if (type=="hazard" && link %in% c("I","log")) {
               ## Case: frailty model (assumes baseline hazard for frailty=1)
-              betastar <- if(args$frailty) beta[-length(beta)] else beta
+              betastar <- if(args$frailty || args$copula) beta[-length(beta)] else beta
               gd <- switch(link,
                            I=t(object@link$gradh(X %*% betastar, XD %*% betastar, list(X=X, XD=XD))),
                            log=t(object@link$gradh(X %*% betastar, XD %*% betastar, list(X=X, XD=XD))/
                                object@link$h(X %*% betastar, XD %*% betastar)))
           }
           if (type=="meanhaz" && !object@frailty && link %in% c("I","log")) {
-              betastar <- if(args$frailty) beta[-length(beta)] else beta
+              betastar <- if(args$frailty || args$copula) beta[-length(beta)] else beta
               h <- as.vector(object@link$h(X %*% betastar, XD %*% betastar))
               S <- as.vector(object@link$ilink(X %*% betastar))
               gradS <- object@link$gradS(X%*% betastar,X)
@@ -2149,7 +2159,7 @@ predict.stpm2.base <-
                                                                   collapse(gradh*S + h*gradS)/collapse1(h*S)-collapse(gradS)/collapse1(S)
           }
           if (type=="meanhr" && !object@frailty && link == "log") {
-              betastar <- if(args$frailty) beta[-length(beta)] else beta
+              betastar <- if(args$frailty|| args$copula) beta[-length(beta)] else beta
               h <- as.vector(object@link$h(X %*% betastar, XD %*% betastar))
               S <- as.vector(object@link$ilink(X %*% betastar))
               gradS <- object@link$gradS(X%*% betastar,X)

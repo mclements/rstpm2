@@ -1436,6 +1436,157 @@ namespace rstpm2 {
     bool recurrent;
   };
 
+  /** 
+      Extension of stpm2 and pstpm2 to include Clayton copula 
+  **/
+  template<class Base>
+  class ClaytonCopula : public Base {
+  public:
+    typedef std::vector<int> Index;
+    typedef std::map<int,Index> IndexMap;
+    typedef ClaytonCopula<Base> This;
+    ClaytonCopula(SEXP sexp) : Base(sexp) {
+      List list = as<List>(sexp);
+      ivec cluster = as<ivec>(list["cluster"]);
+      this->nbeta = this->n - 1;
+      // wragged array indexed by a map of vectors
+      for (size_t id=0; id<cluster.size(); ++id) {
+	clusters[cluster[id]].push_back(id);
+      }
+    }
+    /** 
+	Objective function for a Clayton copula
+	Assumes that weights == 1.
+    **/
+    double objective(vec beta) {
+      vec vbeta = beta;
+      vbeta.resize(this->nbeta);
+      // copy across to this->bfgs.coef?
+      li_constraint s = li(this->X * vbeta, this->XD * vbeta, this->X0 * vbeta, this->X1 * vbeta);
+      return -sum(s.li) + s.constraint;
+    }
+    vec getli(vec beta) {
+      vec vbeta = beta;
+      vbeta.resize(this->nbeta);
+      li_constraint lic = li(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta);
+      return lic.li;
+    }
+    mat getgradli(vec beta) { // WRONG - DO NOT USE!
+      vec vbeta = beta;
+      vbeta.resize(this->nbeta);
+      gradli_constraint gradlic = gradli(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, this->X, this->XD, this->X0, this->X1);
+      return gradlic.gradli;
+    }
+    li_constraint li(vec eta, vec etaD, vec eta0, vec eta1) {
+      vec ll(clusters.size(), fill::zeros);
+      vec beta = as<vec>(this->bfgs.coef);
+      int n = beta.size();
+      vec vbeta(beta); // logtheta is the last parameter in beta
+      vbeta.resize(this->nbeta);
+      double itheta = exp(-beta[n-1]); // NOTE: INVERSE OF THE VARIANCE
+      eta = this->X * vbeta + this->offset;
+      etaD = this->XD * vbeta;
+      vec h = this->link->h(eta,etaD) + this->bhazard;
+      vec H = this->link->H(eta);
+      double constraint = this->kappa/2.0 * (sum(h % h % (h<0)) + sum(H % H % (H<0)));
+      vec eps = h*0.0 + 1.0e-16; 
+      h = max(h,eps);
+      H = max(H,eps);
+      int i=0;
+      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it, ++i) {
+	uvec index = conv_to<uvec>::from(it->second);
+	int ni = (it->second).size();
+	int mi = sum(this->event(index));
+	double logScopula = -itheta*log(sum(exp(H(index)/itheta)) - ni + 1);
+	// Rprintf("ni=%i, mi=%i, log(Scopula)=%g\n",ni,mi,logScopula);
+	if (mi==0) {
+	  ll(i) = logScopula;
+	}
+	else {
+	  ll(i) = logScopula/itheta*(itheta+mi);
+	  // Rprintf("ll(i)=%g\n",ll(i));
+	  ll(i) += sum((log(h(index))+H(index)/itheta) % this->event(index));
+	  for (int k=1; k<=mi; ++k)
+	    ll(i) += log(itheta+k-1.0) - log(itheta);
+	} 
+      }
+      li_constraint out;
+      out.constraint=constraint;
+      out.li = ll;
+      return out;
+    }
+    vec gradient(vec beta) { // WRONG - DO NOT USE!
+      vec vbeta = beta;
+      vbeta.resize(this->nbeta);
+      gradli_constraint gc = gradli(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, this->X, this->XD, this->X0, this->X1);
+      rowvec dconstraint = sum(gc.constraint,0);
+      rowvec vgr = sum(gc.gradli,0);
+      vec gr(beta.size());
+      for (size_t i = 0; i<beta.size(); ++i) {
+	gr[i] = vgr[i];// - dconstraint[i];
+      }
+      return -gr;
+    }
+    gradli_constraint gradli(vec eta, vec etaD, vec eta0, vec eta1, mat X, mat XD, mat X0, mat X1) { // WRONG - DO NOT USE!
+      vec beta = as<vec>(this->bfgs.coef);
+      int n = beta.size();
+      mat gr = zeros<mat>(clusters.size(), n);
+      mat grconstraint = zeros<mat>(clusters.size(), n);
+      vec vbeta(beta); // theta is the last parameter in beta
+      vbeta.resize(n-1);
+      double theta = exp(beta[n-1]);
+      // eta = this->X * vbeta;
+      // etaD = this->XD * vbeta;
+      vec h = this->link->h(eta,etaD);
+      vec H = this->link->H(eta);
+      mat gradh = this->link->gradh(eta,etaD,this->X,this->XD);
+      mat gradH = this->link->gradH(eta,this->X);
+      vec eps = h*0.0 + 1.0e-16; 
+      h = max(h,eps);
+      H = max(H,eps);
+      int i=0;
+      for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it, ++i) {
+	int mi=0;
+	double sumH = 0.0, sumHenter = 0.0;
+	vec gradi = zeros<vec>(n-1);
+	vec gradHi = zeros<vec>(n-1);
+	vec gradH0i = zeros<vec>(n-1);
+	// vec grconstraint = zeros<vec>(n-1);
+	for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
+	  sumH += H(*j);
+	  gradHi += gradH.row(*j).t();
+	  if (this->event(*j)==1) {
+	    gradi += gradh.row(*j).t() / h(*j);
+	    mi++;
+	  }
+	  grconstraint(i,span(0,n-2)) += this->kappa * ((gradh.row(*j) * h(*j) * (h(*j)<0)) + (gradH.row(*j) * H(*j) * (H(*j)<0)));
+	}
+	for (int k=0; k<n-1; ++k) {
+	    gr(i,k) += gradi(k) - theta*(1.0/theta+mi)*gradHi(k)/(1+theta*sumH) + 1.0/(1+theta*sumHenter)*gradH0i(k) - grconstraint(k); // Rondeau et al
+	}
+	// axiom: D(-(1/exp(btheta)+mi)*log(1+exp(btheta)*H),btheta)
+	// axiom: D(1.0/exp(btheta)*log(1+exp(btheta)*H0),btheta)
+	gr(i,n-1) += ((1+sumH*theta)*log(1+sumH*theta)-sumH*mi*theta*theta-sumH*theta)/(sumH*theta*theta+theta);
+	gr(i,n-1) += (-(1+sumHenter*theta)*log(sumHenter*theta+1)+sumHenter*theta)/(sumHenter*theta*theta+theta); 
+	if (mi>0) {
+		for (int k=1; k<=mi; ++k)
+			// axiom: D(log(1+exp(btheta)*(mi-k)),btheta)
+			gr(i,n-1) += theta*(mi-k)/(1.0+theta*(mi-k));
+	}
+      }
+      gradli_constraint grli = {gr, grconstraint};
+      return grli;  
+    }
+    bool feasible(vec beta) {
+      vec coef(beta);
+      coef.resize(this->n-1);
+      return Base::feasible(coef);
+    }
+    OPTIM_FUNCTIONS;
+    IndexMap clusters;
+  };
+
+  
 
   /** @brief Wrapper for calling an objective_cluster method
    **/
@@ -2453,6 +2604,12 @@ namespace rstpm2 {
     else if (type=="pstpm2_normal_frailty_2d") {
       // order is important here
       return pstpm2_model_output_<Pstpm2<NormalSharedFrailty2D<Stpm2>,SmoothLogH> >(args);
+    }
+    else if (type=="stpm2_clayton_copula") {
+      return stpm2_model_output_<ClaytonCopula<Stpm2> >(args);
+    }
+    else if (type=="pstpm2_clayton_copula") {
+      return pstpm2_model_output_<Pstpm2<ClaytonCopula<Stpm2>,SmoothLogH> >(args);
     }
     else {
       REprintf("Unknown model type.\n");
