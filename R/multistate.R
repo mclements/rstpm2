@@ -86,8 +86,7 @@ markov_msm <-
             else if (inherits(object, "addModel"))
                 structure(lapply(object,replace,tmvar=tmvar), class="addModel")
             else makeSplineFun(object, newdata=newdata, tmvar=tmvar, min.tm=min.tm, tm=t,
-                               log=switch(class(object),aftreg=TRUE,flexsurvreg=TRUE,stpm2=TRUE,
-                                          pstpm2=TRUE,aft=TRUE,FALSE))
+                               log=inherits(object,c("aftreg","flexsurvreg","stpm2","pstpm2","aft")))
         }
         x <- mapply(replace, x, tmvar, SIMPLIFY=FALSE)
     }
@@ -503,7 +502,8 @@ predict.glm <- function (object, newdata=NULL, type=NULL, ...) {
         stop("Currently only implemented for a log link")
     ## stopifnot() # Poisson family with log link?
     ## assumes response is a rate
-    if(type=="haz") stats::predict.glm(object, newdata=newdata, type="response", ...) 
+    if(!is.na(pmatch(type,"hazard")))
+        stats::predict.glm(object, newdata=newdata, type="response", ...)
     else if (type=="gradh")
         stats::predict.glm(object, newdata=newdata, type="response", ...) *
             lpmatrix.lm(object, newdata=newdata)
@@ -1429,10 +1429,10 @@ makeSplineFun <- function(object,tm,newdata=data.frame(one=1),tmvar="", min.tm=1
     times <- data.frame(t=tm); if (tmvar != "") names(times) <- tmvar
     hazard <- lapply(1:nrow(newdata), function(i)
         splinefun(trans(tm),
-                  predict(object,type="hazard",newdata=merge(newdata[i,], times))))
+                  predict(object,type="hazard",newdata=merge(newdata[i,,drop=FALSE], times))))
     gradh <- lapply(1:nrow(newdata), function(i)
         vsplinefun(trans(tm),
-                   predict(object,type="gradh",newdata=merge(newdata[i,], times))))
+                   predict(object,type="gradh",newdata=merge(newdata[i,,drop=FALSE], times))))
     out <- list(
         object=object,
         hazard=function(t) sapply(hazard, function(obj) obj(trans(t))),
