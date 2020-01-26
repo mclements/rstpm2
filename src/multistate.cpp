@@ -2,9 +2,6 @@
 
 using namespace arma;
   
-// [[Rcpp::depends(RcppArmadillo)]]
-// [[Rcpp::export]]
-// Rcpp::List multistate_ddt(mat P, cube Pu, cube Q, cube Qu) {
 RcppExport SEXP multistate_ddt(SEXP P_, SEXP Pu_, SEXP Q_, SEXP Qu_) {
   // P(nstates,nobs), Pu(nstates,ncoef,nobs), Q(nstates,nstates,nobs), Qu(nstates*nstates,ncoef,nobs)
   mat P = Rcpp::as<mat>(P_);
