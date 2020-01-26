@@ -1,5 +1,11 @@
 # rstpm2
 
+# Version 1.5.2
+    - Add Clayton copulas with arbitrary cluster sizes to the
+      parametric GSMs (experimental)
+	- Add spline interpolation support in the Markov models (faster
+      for some models)
+
 # Version 1.5.1
     - Bug fix: mean predictions
 
