@@ -672,7 +672,7 @@ namespace rstpm2 {
       li_constraint out = {li, constraint};
       return out;
     }
-    li_constraint li(vec eta, vec etaD, vec eta0, vec eta1) {
+    li_constraint li(vec eta, vec etaD, vec eta0, vec eta1, vec beta) {
       if (interval) {
 	return li_interval(eta+offset, etaD, eta1+offset);
       }
@@ -692,20 +692,20 @@ namespace rstpm2 {
     vec getli(vec beta) {
       vec vbeta = beta;
       vbeta.resize(nbeta);
-      li_constraint lic = li(X*vbeta, XD*vbeta, X0*vbeta, X1*vbeta);
+      li_constraint lic = li(X*vbeta, XD*vbeta, X0*vbeta, X1*vbeta, beta);
       return lic.li;
     }
     mat getgradli(vec beta) {
       vec vbeta = beta;
       vbeta.resize(nbeta);
-      gradli_constraint gradlic = gradli(X*vbeta, XD*vbeta, X0*vbeta, X1*vbeta, X, XD, X0, X1);
+      gradli_constraint gradlic = gradli(X*vbeta, XD*vbeta, X0*vbeta, X1*vbeta, X, XD, X0, X1, beta);
       return gradlic.gradli;
     }
     // negative log-likelihood
     double objective(vec beta) {
       vec vbeta = beta;
       vbeta.resize(nbeta);
-      li_constraint s = li(X * vbeta, XD * vbeta, X0 * vbeta, X1 * vbeta);
+      li_constraint s = li(X * vbeta, XD * vbeta, X0 * vbeta, X1 * vbeta, beta);
       return -sum(s.li) + s.constraint;
     }
     // finite-differencing of the gradient for the objective
@@ -828,7 +828,7 @@ namespace rstpm2 {
       return out;
     }
     gradli_constraint gradli(vec eta, vec etaD, vec eta0, vec eta1,
-				     mat X, mat XD, mat X0, mat X1) {
+			     mat X, mat XD, mat X0, mat X1, vec beta) {
       if (interval) return gradli_interval_censored(eta, etaD, eta1, X, XD, X1);
       else {
 	gradli_constraint s = gradli_right_censored(eta, etaD, X, XD);
@@ -843,7 +843,7 @@ namespace rstpm2 {
     // gradient of the negative log-likelihood
     vec gradient(vec beta) {
       gradli_constraint gc = gradli(X * beta, XD * beta, X0 * beta, X1 * beta,
-				    X, XD, X0, X1);
+				    X, XD, X0, X1, beta);
       rowvec dconstraint = sum(gc.constraint,0);
       rowvec vgr = sum(gc.gradli,0);
       vec gr(n);
@@ -1674,13 +1674,13 @@ namespace rstpm2 {
 	  double bi = sqrt(2.0)*sigma*this->gauss_x(k);
 	  if (left_trunc_not_recurrent) {
 	    this->delayed = false; 
-	    lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
+	    lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,beta);
 	    this->delayed = true; 
 	    H0ik = Base::li_left_truncated(eta0+Z0*bi);
 	    L0j += exp(-sum(H0ik.li))*wstar(k);
 	    constraint += H0ik.constraint;
 	  } else {
-	    lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
+	    lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,beta);
 	  }
 	  Lj += exp(sum(lik.li))*wstar(k);
 	  constraint += lik.constraint;
@@ -1751,7 +1751,7 @@ namespace rstpm2 {
 	  if (left_trunc_not_recurrent) {
 	    // first: reset such that delayed is true and calculate the likelihood for right censoring
 	    this->delayed = false; 
-	    lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
+	    lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,beta);
 	    // second: reset for delayed is true and calculate the likelihood for left truncation
 	    this->delayed = true; 
 	    l0ik = Base::li_left_truncated(eta0+Z0*bi);
@@ -1759,7 +1759,7 @@ namespace rstpm2 {
 	    g0 = exp(sum(l0ik.li)+R::dnorm(bi,0.0,sigma,1));
 	    L0j += sqrt(2.0)*tau*g0*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
 	  } else {
-	    lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
+	    lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,beta);
 	  }
 	  g = exp(sum(lik.li)+R::dnorm(bi,0.0,sigma,1));
 	  Lj += sqrt(2.0)*tau*g*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
@@ -1825,7 +1825,7 @@ namespace rstpm2 {
 	eta0 = this->X0 * vbeta;
 	eta1 = this->X1 * vbeta;
       }
-      li_constraint lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
+      li_constraint lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,vbeta);
       double ll = sum(lik.li) + R::dnorm(bi,0.0,sigma,1);
       return -ll;
     }
@@ -1845,7 +1845,7 @@ namespace rstpm2 {
       mat XD = mat(this->XD.n_rows,1,fill::zeros);
       mat X0 = mat(Z0); // mat(this->X0.n_rows,1,fill::ones);
       mat X1 = mat(Z); // mat(this->X1.n_rows,1,fill::ones);
-      gradli_constraint gradlik = Base::gradli(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,X,XD,X0,X1);
+      gradli_constraint gradlik = Base::gradli(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,X,XD,X0,X1,vbeta);
       rowvec gradll = sum(gradlik.gradli,0) - bi/sigma/sigma;
       return -gradll(0);
     }
@@ -1907,9 +1907,9 @@ namespace rstpm2 {
 	  vec etaDstar = XDstar * betastar;
 	  vec eta0star = X0star * betastar;
 	  vec eta1star = X1star * betastar;
-	  li_constraint lik = Base::li(etastar,etaDstar,eta0star,eta1star);
+	  li_constraint lik = Base::li(etastar,etaDstar,eta0star,eta1star,beta);
 	  double g = exp(sum(lik.li) + R::dnorm(bi,0.0,sigma,1));
-	  gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star);
+	  gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star,beta);
 	  Lj += sqrt(2.0)*tau*g*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
 	  rowvec numeratorstar = sqrt(2.0)*tau*g*sum(gradlik.gradli,0)*gauss_w(k)*exp(gauss_x(k)*gauss_x(k));
 	  numerator(span(0,n-2)) += numeratorstar(span(0,n-2));
@@ -1953,8 +1953,8 @@ namespace rstpm2 {
 		vec etaDstar = XDstar * betastar;
 		vec eta0star = X0star * betastar;
 		vec eta1star = X1star * betastar;
-		li_constraint lik = Base::li(etastar, etaDstar, eta0star, eta1star);
-		gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star);
+		li_constraint lik = Base::li(etastar, etaDstar, eta0star, eta1star,beta);
+		gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star,beta);
 		// adjust the last column of the gradient to account for the variance components:
 			// chain rule: d lik/d bi * d bi/d nu where bi = sqrt(2)*exp(nu/2)*x_k
 		gradlik.gradli.col(gradlik.gradli.n_cols-1) *= bi*0.5;
@@ -2090,13 +2090,13 @@ namespace rstpm2 {
 	    bi = SqrtSigma * dk;
 	    if (left_trunc_not_recurrent) {
 	      this->delayed = false; 
-	      lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
+	      lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,beta);
 	      this->delayed = true; 
 	      H0ik = Base::li_left_truncated(eta0+Z0*bi);
 	      L0j += exp(-sum(H0ik.li))*wstar(k)*wstar(kk);
 	      constraint += H0ik.constraint;
 	    } else {
-	      lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
+	      lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,beta);
 	    }
 	    Lj += exp(sum(lik.li))*wstar(k)*wstar(kk);
 	    constraint += lik.constraint;
@@ -2120,7 +2120,7 @@ namespace rstpm2 {
 	eta0 = this->X0 * vbeta;
 	eta1 = this->X1 * vbeta;
       }
-      li_constraint lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
+      li_constraint lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,vbeta);
       vec zero(redim,fill::zeros);
       double ll = sum(lik.li) + dmvnrm_arma(bi,zero,this->Sigma,true);
       return -ll;
@@ -2140,7 +2140,7 @@ namespace rstpm2 {
       mat XD = mat(this->XD.n_rows,redim,fill::zeros);
       mat X0 = Z0; 
       mat X1 = Z; 
-      gradli_constraint gradlik = Base::gradli(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,X,XD,X0,X1);
+      gradli_constraint gradlik = Base::gradli(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,X,XD,X0,X1,vbeta);
       vec gradll = (sum(gradlik.gradli,0)).t() - invSigma*bi;
       return -gradll;
     }
@@ -2257,13 +2257,13 @@ namespace rstpm2 {
 	    li_constraint lik, l0ik;
 	    if (left_trunc_not_recurrent) {
 	      this->delayed = false; 
-	      lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
+	      lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,beta);
 	      this->delayed = true; 
 	      l0ik = Base::li_left_truncated(eta0+Z0*bi);
 	      g0 = exp(sum(l0ik.li)+dmvnrm_arma(bi,zero,Sigma,true));
 	      L0j += wstar(k)*wstar(kk)*g0*exp(dot(d,d)/2);
 	    } else {
-	      lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi);
+	      lik = Base::li(eta+Z*bi,etaD,eta0+Z0*bi,eta1+Z*bi,beta);
 	    }
 	    g = exp(sum(lik.li)+dmvnrm_arma(bi,zero,Sigma,true));
 	    Lj += wstar(k)*wstar(kk)*g*exp(dot(d,d)/2);
@@ -2321,8 +2321,8 @@ namespace rstpm2 {
 	    vec etaDstar = XDstar * betastar;
 	    vec eta0star = X0star * betastar;
 	    vec eta1star = X1star * betastar;
-	    li_constraint lik = Base::li(etastar, etaDstar, eta0star, eta1star);
-	    gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star);
+	    li_constraint lik = Base::li(etastar, etaDstar, eta0star, eta1star,beta);
+	    gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star,beta);
 	    // adjust the last columns of the gradient to account for the variance components:
 	    // chain rule: d lik/d bi * d bi/d nu
 	    int restart = gradlik.gradli.n_cols-redim, restop = gradlik.gradli.n_cols-1;
@@ -2381,8 +2381,8 @@ namespace rstpm2 {
 	    vec etaDstar = XDstar * betastar;
 	    vec eta0star = X0star * betastar;
 	    vec eta1star = X1star * betastar;
-	    li_constraint lik = Base::li(etastar, etaDstar, eta0star, eta1star);
-	    gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star);
+	    li_constraint lik = Base::li(etastar, etaDstar, eta0star, eta1star,beta);
+	    gradli_constraint gradlik = Base::gradli(etastar, etaDstar, eta0star, eta1star,Xstar, XDstar, X0star, X1star,beta);
 	    // adjust the last columns of the gradient to account for the variance components:
 	    // chain rule: d lik/d bi * d bi/d nu
 	    int restart = gradlik.gradli.n_cols-redim, restop = gradlik.gradli.n_cols-1;
