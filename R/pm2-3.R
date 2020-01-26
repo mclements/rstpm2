@@ -658,7 +658,6 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     options(na.action = "na.pass")
     on.exit(options(na.action = na.action.old))
     if (copula && control$use.gr) {
-        warning("Gradients not currently available for copulas: redefined control$use.gr=FALSE")
         control$use.gr <- FALSE
     }
     ##
@@ -1513,7 +1512,7 @@ setMethod("summary", "stpm2",
               newobj@args <- object@args
               newobj@frailty <- object@frailty
               newobj@call <- object@Call
-              if (object@frailty && !is.matrix(object@args$Z)) {
+              if ((object@frailty || object@args$copula) && !is.matrix(object@args$Z)) {
                   coef <- coef(newobj)
                   theta <- exp(coef[nrow(coef),1])
                   se.logtheta <- coef[nrow(coef),2]
@@ -1543,7 +1542,7 @@ setMethod("summary", "stpm2",
 setMethod("show", "summary.stpm2",
           function(object) {
               show(as(object,"summary.mle2"))
-              if (object@frailty) {
+              if (object@frailty || object@args$copula) {
                   if (is.matrix(object@args$Z)) {
                       cat("Random effects model: corr=(1-exp(-corrtrans))/(1+exp(-corrtrans))")
                       cat(sprintf("\ntheta1=%g\tse=%g\tp=%g\n",
