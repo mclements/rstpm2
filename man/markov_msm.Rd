@@ -47,7 +47,7 @@ markov_msm(x, trans, t = c(0,1), newdata = NULL, init=NULL,
               state.costs.sd=rep(0,nrow(trans)),
               discount.rate = 0,
               block.size=500,
-              spline.interpolation=TRUE,
+              spline.interpolation=FALSE,
               debug=FALSE,
               \dots)
 \method{vcov}{markov_msm}(object, \dots)
