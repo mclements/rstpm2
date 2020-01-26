@@ -323,7 +323,7 @@ namespace rstpm2 {
     double value = obj->objective(coef % obj->parscale);
     if (obj->bfgs.trace>1) {
       Rprintf("beta="); Rprint(coef);
-      Rprintf("objective=%g\n",value);
+      Rprintf("objective=%.10g\n",value);
     };
     // R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
     return value;
@@ -383,8 +383,9 @@ namespace rstpm2 {
   };
   class NelderMead2 : public NelderMead {
   public:
-    NumericMatrix calc_hessian(optimfn fn, void * ex) {
+    NumericMatrix calc_hessian(optimfn fn, void * ex, int debug = 0) {
       if (parscale.size()==0) REprintf("parscale is not defined for NelderMead2::calc_hessian.");
+      if (debug>1) Rprintf("In NelderMead2->calc_hessian()...\n");
       int n = coef.size();
       NumericMatrix hess(n,n);
       double tmpi,tmpj,f1,f0,fm1,hi,hj,fij,fimj,fmij,fmimj;
@@ -421,13 +422,14 @@ namespace rstpm2 {
 	  }
 	}
       }
+      if (debug>1) Rprint(hess);
       return hess;
     }
     vec parscale;
   };
   class Nlm2 : public Nlm {
   public:
-    NumericMatrix calc_hessian(fcn_p fn, void * ex) {
+    NumericMatrix calc_hessian(fcn_p fn, void * ex, int debug = 0) {
       if (parscale.size()==0) REprintf("parscale is not defined for Nlm2::calc_hessian.");
       int n = coef.size();
       NumericMatrix hess(n,n);
@@ -512,8 +514,9 @@ namespace rstpm2 {
 	vec vcoef(&nm.coef[0],this->n);					\
 	satisfied = this->feasible(vcoef % this->parscale);		\
 	if (!satisfied) this->kappa *= 2.0;				\
-      } while ((!satisfied) && this->kappa < this->maxkappa);			\
-      nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this); \
+      } while ((!satisfied) && this->kappa < this->maxkappa);		\
+      if (this->bfgs.trace > 1) Rprintf("Calculating hessian...\n");	\
+      nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this, this->bfgs.trace); \
       this->bfgs.coef = nm.coef;					\
       this->bfgs.hessian = nm.hessian;					\
     }									\
@@ -1275,24 +1278,23 @@ namespace rstpm2 {
       vec vbeta = beta;
       vbeta.resize(this->nbeta);
       // copy across to this->bfgs.coef?
-      li_constraint s = li(this->X * vbeta, this->XD * vbeta, this->X0 * vbeta, this->X1 * vbeta);
+      li_constraint s = li(this->X * vbeta, this->XD * vbeta, this->X0 * vbeta, this->X1 * vbeta, beta);
       return -sum(s.li) + s.constraint;
     }
     vec getli(vec beta) {
       vec vbeta = beta;
       vbeta.resize(this->nbeta);
-      li_constraint lic = li(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta);
+      li_constraint lic = li(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, beta);
       return lic.li;
     }
     mat getgradli(vec beta) {
       vec vbeta = beta;
       vbeta.resize(this->nbeta);
-      gradli_constraint gradlic = gradli(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, this->X, this->XD, this->X0, this->X1);
+      gradli_constraint gradlic = gradli(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, this->X, this->XD, this->X0, this->X1, beta);
       return gradlic.gradli;
     }
-    li_constraint li(vec eta, vec etaD, vec eta0, vec eta1) {
+    li_constraint li(vec eta, vec etaD, vec eta0, vec eta1, vec beta) {
       vec ll(clusters.size(), fill::zeros);
-      vec beta = as<vec>(this->bfgs.coef);
       int n = beta.size();
       vec vbeta(beta); // logtheta is the last parameter in beta
       vbeta.resize(this->nbeta);
@@ -1341,7 +1343,7 @@ namespace rstpm2 {
     vec gradient(vec beta) {
       vec vbeta = beta;
       vbeta.resize(this->nbeta);
-      gradli_constraint gc = gradli(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, this->X, this->XD, this->X0, this->X1);
+      gradli_constraint gc = gradli(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, this->X, this->XD, this->X0, this->X1, beta);
       rowvec dconstraint = sum(gc.constraint,0);
       rowvec vgr = sum(gc.gradli,0);
       vec gr(beta.size());
@@ -1350,8 +1352,8 @@ namespace rstpm2 {
       }
       return -gr;
     }
-    gradli_constraint gradli(vec eta, vec etaD, vec eta0, vec eta1, mat X, mat XD, mat X0, mat X1) { 
-      vec beta = as<vec>(this->bfgs.coef);
+    gradli_constraint gradli(vec eta, vec etaD, vec eta0, vec eta1, mat X, mat XD, mat X0, mat X1,
+			     vec beta) { 
       int n = beta.size();
       mat gr = zeros<mat>(clusters.size(), n);
       mat grconstraint = zeros<mat>(clusters.size(), n);
@@ -1462,24 +1464,23 @@ namespace rstpm2 {
       vec vbeta = beta;
       vbeta.resize(this->nbeta);
       // copy across to this->bfgs.coef?
-      li_constraint s = li(this->X * vbeta, this->XD * vbeta, this->X0 * vbeta, this->X1 * vbeta);
+      li_constraint s = li(this->X * vbeta, this->XD * vbeta, this->X0 * vbeta, this->X1 * vbeta, beta);
       return -sum(s.li) + s.constraint;
     }
     vec getli(vec beta) {
       vec vbeta = beta;
       vbeta.resize(this->nbeta);
-      li_constraint lic = li(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta);
+      li_constraint lic = li(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, beta);
       return lic.li;
     }
     mat getgradli(vec beta) { // WRONG - DO NOT USE!
       vec vbeta = beta;
       vbeta.resize(this->nbeta);
-      gradli_constraint gradlic = gradli(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, this->X, this->XD, this->X0, this->X1);
+      gradli_constraint gradlic = gradli(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, this->X, this->XD, this->X0, this->X1, beta);
       return gradlic.gradli;
     }
-    li_constraint li(vec eta, vec etaD, vec eta0, vec eta1) {
+    li_constraint li(vec eta, vec etaD, vec eta0, vec eta1, vec beta) {
       vec ll(clusters.size(), fill::zeros);
-      vec beta = as<vec>(this->bfgs.coef);
       int n = beta.size();
       vec vbeta(beta); // logtheta is the last parameter in beta
       vbeta.resize(this->nbeta);
@@ -1518,7 +1519,7 @@ namespace rstpm2 {
     vec gradient(vec beta) { // WRONG - DO NOT USE!
       vec vbeta = beta;
       vbeta.resize(this->nbeta);
-      gradli_constraint gc = gradli(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, this->X, this->XD, this->X0, this->X1);
+      gradli_constraint gc = gradli(this->X*vbeta, this->XD*vbeta, this->X0*vbeta, this->X1*vbeta, this->X, this->XD, this->X0, this->X1, beta);
       rowvec dconstraint = sum(gc.constraint,0);
       rowvec vgr = sum(gc.gradli,0);
       vec gr(beta.size());
@@ -1527,8 +1528,7 @@ namespace rstpm2 {
       }
       return -gr;
     }
-    gradli_constraint gradli(vec eta, vec etaD, vec eta0, vec eta1, mat X, mat XD, mat X0, mat X1) { // WRONG - DO NOT USE!
-      vec beta = as<vec>(this->bfgs.coef);
+    gradli_constraint gradli(vec eta, vec etaD, vec eta0, vec eta1, mat X, mat XD, mat X0, mat X1, vec beta) { // WRONG - DO NOT USE!
       int n = beta.size();
       mat gr = zeros<mat>(clusters.size(), n);
       mat grconstraint = zeros<mat>(clusters.size(), n);
