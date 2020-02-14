@@ -1534,7 +1534,7 @@ namespace rstpm2 {
       mat grconstraint = zeros<mat>(clusters.size(), n);
       vec vbeta(beta); // theta is the last parameter in beta
       vbeta.resize(n-1);
-      double theta = exp(beta[n-1]);
+      double itheta = exp(-beta[n-1]);
       // eta = this->X * vbeta;
       // etaD = this->XD * vbeta;
       vec h = this->link->h(eta,etaD);
@@ -1546,32 +1546,27 @@ namespace rstpm2 {
       H = max(H,eps);
       int i=0;
       for (IndexMap::iterator it=clusters.begin(); it!=clusters.end(); ++it, ++i) {
-	int mi=0;
-	double sumH = 0.0, sumHenter = 0.0;
-	vec gradi = zeros<vec>(n-1);
-	vec gradHi = zeros<vec>(n-1);
+	uvec index = conv_to<uvec>::from(it->second);
+	int ni = (it->second).size();
+	int mi = sum(this->event(index));
+	double Scopula0 = sum(exp(H(index)/itheta)) - ni + 1;
+	vec gradEi = zeros<vec>(n-1);
+	vec gradHexpHi = zeros<vec>(n-1);
 	vec gradH0i = zeros<vec>(n-1);
-	// vec grconstraint = zeros<vec>(n-1);
 	for (Index::iterator j=it->second.begin(); j!=it->second.end(); ++j) {
-	  sumH += H(*j);
-	  gradHi += gradH.row(*j).t();
+	  gradHexpHi += gradH.row(*j).t() * exp(H(*j)/itheta) / itheta;
 	  if (this->event(*j)==1) {
-	    gradi += gradh.row(*j).t() / h(*j);
-	    mi++;
+	    gradEi += gradH.row(*j).t() / itheta + gradh.row(*j)/h(*j);
 	  }
 	  grconstraint(i,span(0,n-2)) += this->kappa * ((gradh.row(*j) * h(*j) * (h(*j)<0)) + (gradH.row(*j) * H(*j) * (H(*j)<0)));
 	}
 	for (int k=0; k<n-1; ++k) {
-	    gr(i,k) += gradi(k) - theta*(1.0/theta+mi)*gradHi(k)/(1+theta*sumH) + 1.0/(1+theta*sumHenter)*gradH0i(k) - grconstraint(k); // Rondeau et al
+	  gr(i,k) += -(itheta+mi)*gradHexpHi(k)/Scopula0;
 	}
-	// axiom: D(-(1/exp(btheta)+mi)*log(1+exp(btheta)*H),btheta)
-	// axiom: D(1.0/exp(btheta)*log(1+exp(btheta)*H0),btheta)
-	gr(i,n-1) += ((1+sumH*theta)*log(1+sumH*theta)-sumH*mi*theta*theta-sumH*theta)/(sumH*theta*theta+theta);
-	gr(i,n-1) += (-(1+sumHenter*theta)*log(sumHenter*theta+1)+sumHenter*theta)/(sumHenter*theta*theta+theta); 
 	if (mi>0) {
-		for (int k=1; k<=mi; ++k)
-			// axiom: D(log(1+exp(btheta)*(mi-k)),btheta)
-			gr(i,n-1) += theta*(mi-k)/(1.0+theta*(mi-k));
+	  for (int k=0; k<n-1; ++k) {
+	    gr(i,k) += gradEi(k);
+	  }
 	}
       }
       gradli_constraint grli = {gr, grconstraint};

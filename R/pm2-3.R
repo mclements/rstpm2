@@ -1935,7 +1935,7 @@ predict.stpm2.base <-
         beta <- coef(object)
         tt <- object@terms
         link <- object@link # cf. link for transformation of the predictions
-        if (object@frailty || args$copula) {
+        if (object@frailty || object@args$copula) {
             theta <- exp(beta[length(beta)])
             beta <- beta[-length(beta)]
             if (object@args$RandDist=="LogN") {
