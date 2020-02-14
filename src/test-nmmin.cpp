@@ -3,6 +3,14 @@
 #include <map>
 #include "c_optim.h"
 
+#ifdef DO_PROF
+#include <gperftools/profiler.h>
+#include <iostream>
+#include <iomanip>
+#include <ctime>
+#include <sstream>
+#endif
+
 namespace rstpm2 {
 
   // import namespaces
@@ -26,13 +34,13 @@ namespace rstpm2 {
   // constants
   const double log2pi = std::log(2.0 * M_PI); // 
   // Hadamard element-wise multiplication for the _columns_ of a matrix with a vector
-  mat rmult(mat m, vec v) {
+  mat rmult(mat const &m, vec const &v) {
     mat out(m);
     out.each_col() %= v;
     return out;
   }
-  mat lmult(vec v, mat m) {
-    return rmult(m,v);
+  mat lmult(vec const &v, mat const &m) {
+    return rmult(m, v);
   }
   // print utilities
   void Rprint(NumericMatrix const & m) {
@@ -81,17 +89,51 @@ namespace rstpm2 {
     }
   }
   // vectorised functions
-  vec pnorm01(vec const & x) {
-    NumericVector x2(wrap(x));
-    return Rcpp::pnorm(x2);
+  vec pnorm01(vec const &x) {
+    vec out(x.size());
+    double const *xi = x.begin();
+    for(double &o : out)
+      o = R::pnorm5(*xi++, 0, 1, true, false);
+    return out;
   }
-  vec qnorm01(vec const & x) {
-    NumericVector x2(wrap(x));
-    return Rcpp::qnorm(x2);
+  vec pnorm01_log(vec const &x) {
+    vec out(x.size());
+    double const *xi = x.begin();
+    for(double &o : out)
+      o = R::pnorm5(*xi++, 0, 1, true, true);
+    return out;
   }
-  vec dnorm01(vec const & x) {
-    NumericVector x2(wrap(x));
-    return Rcpp::dnorm(x2);
+  /* \frac \partial{\partial x} \log \Phi(x) = \frac{\phi(x)}{\Phi(x)} */
+  vec dpnorm01_log(vec const &x) {
+    vec out(x.size());
+    double const *xi = x.begin();
+    for(double &o : out){
+      double const xv = *xi++; 
+      if(xv > -10){
+        double const dv     = R::dnorm4(xv, 0, 1    , 0L), 
+                     pv     = R::pnorm5(xv, 0, 1, 1L, 0L);
+        o = dv / pv;
+      } else {
+        double const log_dv = R::dnorm4(xv, 0, 1    , 1L), 
+                     log_pv = R::pnorm5(xv, 0, 1, 1L, 1L);
+        o = std::exp(log_dv - log_pv);
+      }
+    }
+    return out;
+  }
+  vec qnorm01(vec const &x) {
+    vec out(x.size());
+    double const *xi = x.begin();
+    for(double &o : out)
+      o = R::qnorm5(*xi++, 0, 1, true, false);
+    return out;
+  }
+  vec dnorm01(vec const &x) {
+    vec out(x.size());
+    double const *xi = x.begin();
+    for(double &o : out)
+      o = R::dnorm4(*xi++, 0, 1, false);
+    return out;
   }
   // we could use templates for the following...
   vec logit(vec const & p) {
@@ -117,113 +159,134 @@ namespace rstpm2 {
     }
     return wrap(out);
   }
-  // http://gallery.rcpp.org/articles/dmvnorm_arma/
-  arma::vec dmvnrm_arma(arma::mat x,  
-			arma::rowvec mean,  
-			arma::mat sigma, 
-			bool logd = false) { 
+  // https://github.com/RcppCore/rcpp-gallery/issues/123#issue-553642056
+  arma::vec dmvnrm_arma(arma::mat const &x,  
+                        arma::rowvec const &mean,  
+                        arma::mat const &sigma, 
+                        bool const logd = false) { 
     int n = x.n_rows;
     int xdim = x.n_cols;
     arma::vec out(n);
-    arma::mat rooti = arma::trans(arma::inv(trimatu(arma::chol(sigma))));
-    double rootisum = arma::sum(log(rooti.diag()));
-    double constants = -(static_cast<double>(xdim)/2.0) * log2pi;
+    arma::mat const rooti = arma::inv(trimatu(arma::chol(sigma)));
+    double const rootisum = arma::sum(log(rooti.diag())), 
+                constants = -xdim/2.0 * log2pi, 
+              other_terms = rootisum + constants;
+    
+    arma::rowvec z;
     for (int i=0; i < n; i++) {
-      arma::vec z = rooti * arma::trans( x.row(i) - mean) ;    
-      out(i)      = constants - 0.5 * arma::sum(z%z) + rootisum;     
+      z      = (x.row(i) - mean) * rooti;    
+      out(i) = other_terms - 0.5 * arma::dot(z, z);     
     }  
-    if (logd == false) {
+    
+    if (logd == false)
       out = exp(out);
-    }
     return(out);
   }
-  double dmvnrm_arma(arma::vec x,  
-		     arma::vec mean,  
-		     arma::mat sigma, 
-		     bool logd = false) { 
-    int xdim = x.n_rows;
-    arma::mat rooti = arma::trans(arma::inv(trimatu(arma::chol(sigma))));
-    double rootisum = arma::sum(log(rooti.diag()));
-    double constants = -(static_cast<double>(xdim)/2.0) * log2pi;
-    arma::vec z = rooti * (x - mean) ;    
-    double out = constants - 0.5 * arma::sum(z%z) + rootisum;     
-    if (logd == false) {
+  double dmvnrm_arma(arma::vec const &x,  
+                     arma::vec const &mean,  
+                     arma::mat const &sigma, 
+                     bool const logd = false) { 
+    int xdim = x.n_elem;
+    arma::mat const rooti = arma::inv(trimatu(arma::chol(sigma)));
+    double const rootisum = arma::sum(log(rooti.diag())), 
+                constants = -xdim/2.0 * log2pi, 
+              other_terms = rootisum + constants;
+    
+    auto z = (x - mean).t() * rooti;
+    double out = other_terms - 0.5 * arma::dot(z, z);
+    
+    if (logd == false)
       out = exp(out);
-    }
     return(out);
   }
   
   class Link {
   public:
-    virtual vec link(vec S) = 0;
-    virtual vec ilink(vec x) = 0;
-    virtual vec h(vec eta, vec etaD) = 0;
-    virtual vec H(vec eta) = 0;
-    virtual mat gradH(vec eta, mat X) = 0;
-    virtual mat gradh(vec eta, vec etaD, mat X, mat XD) = 0;
+    virtual vec link(vec const &S) const = 0;
+    virtual vec ilink(vec const &x) const = 0;
+    virtual vec h(vec const &eta, vec const &etaD) const  = 0;
+    virtual vec H(vec const &eta) const = 0;
+    virtual mat gradH(vec const &eta, mat const &X) const = 0;
+    virtual mat gradh(vec const &eta, vec const &etaD, mat const &X, 
+                      mat const &XD) const = 0;
     virtual ~Link() { }
   };
   // Various link objects
-  class LogLogLink : public Link {
+  class LogLogLink final : public Link {
   public:
-    vec link(vec S) { return log(-log(S)); }
-    vec ilink(vec x) { return exp(-exp(x)); }
-    vec h(vec eta, vec etaD) { return etaD % exp(eta); }
-    vec H(vec eta) { return exp(eta); }
-    mat gradH(vec eta, mat X) { return rmult(X,exp(eta)); }
-    mat gradh(vec eta, vec etaD, mat X, mat XD) { 
+    vec link(vec const &S) const  { 
+      return log(-log(S));
+    }
+    vec ilink(vec const &x) const { 
+      return exp(-exp(x)); 
+    }
+    vec h(vec const &eta, vec const &etaD) const { 
+      return etaD % exp(eta); 
+    }
+    vec H(vec const &eta) const { 
+      return exp(eta); 
+    }
+    mat gradH(vec const &eta, mat const &X) const { 
+      return rmult(X,exp(eta)); 
+    }
+    mat gradh(vec const &eta, vec const &etaD, mat const &X, 
+              mat const &XD) const { 
       return rmult(XD, exp(eta)) + rmult(X, etaD % exp(eta));
     }
-    cube hessianH(vec beta, mat X) { 
+    cube hessianH(vec const &beta, mat const &X) const { 
       cube c(beta.size(), beta.size(), X.n_rows);
       for (size_t i=0; i<X.n_rows; ++i) 
-	c.slice(i) = X.row(i).t()*X.row(i)*exp(dot(X.row(i),beta)); 
+        c.slice(i) = X.row(i).t()*X.row(i)*exp(dot(X.row(i),beta)); 
       return c;
     }
-    cube hessianh(vec beta, mat X, mat XD) {
+    cube hessianh(vec const &beta, mat const &X, mat const &XD) const {
       cube c(beta.size(), beta.size(), X.n_rows);
       for (size_t i=0; i<X.n_rows; ++i) {
-	rowvec Xi = X.row(i);
-	rowvec XDi = XD.row(i);
-	c.slice(i) = (XDi.t()*Xi + Xi.t()*XDi + dot(XDi,beta)*Xi.t()*Xi)*exp(dot(Xi,beta));
+	      rowvec Xi = X.row(i);
+	      rowvec XDi = XD.row(i);
+	      c.slice(i) = (XDi.t()*Xi + Xi.t()*XDi + dot(XDi,beta)*Xi.t()*Xi)*exp(dot(Xi,beta));
       }
       return c;
     }
+    
     LogLogLink(SEXP sexp) {}
   };
-  class ArandaOrdazLink : public Link {
+  class ArandaOrdazLink final : public Link {
   public:
-    vec link(vec S) {
+    vec link(vec const &S) const {
       if (thetaAO==0)
 	return log(-log(S));
       else return log((exp(log(S)*(-thetaAO))-1)/thetaAO);
     }
-    vec ilink(vec eta) {
+    vec ilink(vec const &eta) const {
       if (thetaAO==0)
-	return exp(-exp(eta));
-      else return exp(-log(thetaAO*exp(eta)+1)/thetaAO);
+        return exp(-exp(eta));
+      else 
+        return exp(-log(thetaAO*exp(eta)+1)/thetaAO);
     }
-    vec h(vec eta, vec etaD) {
+    vec h(vec const &eta, vec const &etaD) const {
       if (thetaAO==0)
 	return etaD % exp(eta);
       else return exp(eta) % etaD/(thetaAO*exp(eta)+1);
     }
-    vec H(vec eta) {
+    vec H(vec const &eta) const {
       if (thetaAO==0)
-	return exp(eta);
+	      return exp(eta);
       else return log(thetaAO*exp(eta)+1)/thetaAO;
     }
-    mat gradH(vec eta, mat X) {
+    mat gradH(vec const &eta, mat const &X) const {
       if (thetaAO==0)
-	return rmult(X,exp(eta));
-      else return rmult(X,exp(eta)/(1+thetaAO*exp(eta)));
+	       return rmult(X,exp(eta));
+      else 
+        return rmult(X,exp(eta)/(1+thetaAO*exp(eta)));
     }
-    mat gradh(vec eta, vec etaD, mat X, mat XD) { 
+    mat gradh(vec const &eta, vec const &etaD, mat const &X, 
+              mat const &XD) const { 
       if (thetaAO==0)
-	return rmult(XD, exp(eta)) + rmult(X, etaD % exp(eta));
+	      return rmult(XD, exp(eta)) + rmult(X, etaD % exp(eta));
       else {
-	vec denom = (thetaAO*exp(eta)+1) % (thetaAO*exp(eta)+1);
-	return rmult(XD,(thetaAO*exp(2*eta)+exp(eta))/denom)+rmult(X,exp(eta) % etaD/denom);
+	      vec denom = (thetaAO*exp(eta)+1) % (thetaAO*exp(eta)+1);
+	      return rmult(XD,(thetaAO*exp(2*eta)+exp(eta))/denom)+rmult(X,exp(eta) % etaD/denom);
       }
     }
     double thetaAO;
@@ -233,83 +296,115 @@ namespace rstpm2 {
     }
   };
   // Useful relationship: d/dx expit(x)=expit(x)*expit(-x) 
-  class LogitLink : public Link {
+  class LogitLink final : public Link {
   public:
-    vec link(vec S) { return -logit(S); }
-    vec ilink(vec x) { return expit(-x); }
+    vec link(vec const &S) const { 
+      return -logit(S); 
+    }
+    vec ilink(vec const &x) const { 
+      return expit(-x); 
+    }
     // vec h(vec eta, vec etaD) { return etaD % exp(eta) % expit(-eta); }
-    vec h(vec eta, vec etaD) { return etaD % expit(eta); }
-    vec H(vec eta) { return -log(expit(-eta)); }
-    mat gradH(vec eta, mat X) { 
+    vec h(vec const &eta, vec const &etaD) const { 
+      return etaD % expit(eta); 
+    }
+    vec H(vec const &eta) const { 
+      return -log(expit(-eta)); 
+    }
+    mat gradH(vec const &eta, mat const &X) const { 
       return rmult(X,expit(eta));
     }
-    mat gradh(vec eta, vec etaD, mat X, mat XD) { 
+    mat gradh(vec const &eta, vec const &etaD, mat const &X, 
+              mat const &XD) const { 
       // return rmult(X, etaD % exp(eta) % expit(-eta)) - 
       // 	rmult(X, exp(2*eta) % etaD % expit(-eta) % expit(-eta)) +
       // 	rmult(XD, exp(eta) % expit(-eta));
       return rmult(XD, expit(eta)) + 
-	rmult(X, expit(eta) % expit(-eta) % etaD);
+        rmult(X, expit(eta) % expit(-eta) % etaD);
     }
-    cube hessianH(vec beta, mat X) { 
+    cube hessianH(vec const &beta, mat const &X) const { 
       cube c(beta.size(), beta.size(), X.n_rows);
       for (size_t i=0; i<X.n_rows; ++i) {
-	colvec Xi = X.row(i);
-	double Xibeta = dot(Xi,beta);
-	c.slice(i) = Xi.t()*Xi*expit(Xibeta)*expit(-Xibeta); 
+        colvec Xi = X.row(i);
+        double Xibeta = dot(Xi,beta);
+        c.slice(i) = Xi.t()*Xi*expit(Xibeta)*expit(-Xibeta); 
       }
       return c;
     }
-    cube hessianh(vec beta, mat X, mat XD) { 
+    cube hessianh(vec const &beta, mat const &X, mat const &XD) const { 
       cube c(beta.size(), beta.size(), X.n_rows);
       for (size_t i=0; i<X.n_rows; ++i) {
-	colvec Xi = X.row(i);
-	colvec XDi = XD.row(i);
-	double Xibeta = dot(Xi,beta);
-	c.slice(i) = XDi.t()*Xi*expit(Xibeta) + Xi.t()*XDi*expit(-Xibeta)*expit(Xibeta); 
+	      colvec Xi = X.row(i);
+	      colvec XDi = XD.row(i);
+	      double Xibeta = dot(Xi,beta);
+	      c.slice(i) = XDi.t()*Xi*expit(Xibeta) + Xi.t()*XDi*expit(-Xibeta)*expit(Xibeta); 
       }
       return c;
     }
     LogitLink(SEXP sexp) {}
   };
-  class ProbitLink : public Link {
+  class ProbitLink final : public Link {
   public:
-    vec link(vec S) { return -qnorm01(S); }
-    vec ilink(vec eta) { return pnorm01(-eta); }
-    vec H(vec eta) { return -log(pnorm01(-eta)); }
-    vec h(vec eta, vec etaD) { return etaD % dnorm01(-eta) / pnorm01(-eta); }
-    mat gradH(vec eta, mat X) { 
-      return rmult(X, dnorm01(-eta) / pnorm01(-eta));
+    vec link(vec const &S) const { 
+      return -qnorm01(S); 
     }
-    mat gradh(vec eta, vec etaD, mat X, mat XD) { 
-      return rmult(X, -eta % dnorm01(eta) % etaD / pnorm01(-eta)) +
-	rmult(X, dnorm01(eta) % dnorm01(eta) / pnorm01(-eta) / pnorm01(-eta) % etaD) +
-	rmult(XD,dnorm01(eta) / pnorm01(-eta));
+    vec ilink(vec const &eta) const { 
+      return pnorm01(-eta); 
+    }
+    vec H(vec const &eta) const { 
+      return -pnorm01_log(-eta); 
+    }
+    vec h(vec const &eta, vec const &etaD) const {
+      return etaD % dpnorm01_log(-eta); 
+    }
+    mat gradH(vec const &eta, mat const &X) const {
+      return rmult(X, dpnorm01_log(-eta));
+    }
+    mat gradh(vec const &eta, vec const &etaD, mat const &X, 
+              mat const &XD) const {
+      vec const dpnrm_log = dpnorm01_log(-eta);
+      return rmult(X , -eta % etaD % dpnrm_log) +
+	      rmult     (X , etaD % dpnrm_log % dpnrm_log) +
+	      rmult     (XD, dpnrm_log);
     }
     // incomplete implementation
-    cube hessianh(vec beta, mat X, mat XD) { 
+    cube hessianh(vec const &beta, mat const &X, mat const &XD) const { 
       cube c(beta.size(), beta.size(), X.n_rows, fill::zeros);
       return c;
     }
     // incomplete implementation
-    cube hessianH(vec beta, mat X) { 
+    cube hessianH(vec const &beta, mat const &X) const { 
       cube c(beta.size(), beta.size(), X.n_rows, fill::zeros);
       return c;
     }
     ProbitLink(SEXP sexp) {}
   };
-  class LogLink : public Link {
+  class LogLink final : public Link {
   public:
-    vec link(vec S) { return -log(S); }
-    vec ilink(vec x) { return exp(-x); }
-    vec h(vec eta, vec etaD) { return etaD; }
-    vec H(vec eta) { return eta; }
-    mat gradh(vec eta, vec etaD, mat X, mat XD) { return XD; }
-    mat gradH(vec eta, mat X) { return X;  }
-    cube hessianh(vec beta, mat X, mat XD) { 
+    vec link(vec const &S) const { 
+      return -log(S); 
+    }
+    vec ilink(vec const &x) const { 
+      return exp(-x); 
+    }
+    vec h(vec const &eta, vec const &etaD) const { 
+      return etaD; 
+    }
+    vec H(vec const &eta) const { 
+      return eta; 
+    }
+    mat gradh(vec const &eta, vec const &etaD, mat const &X, 
+              mat const &XD) const { 
+      return XD; 
+    }
+    mat gradH(vec const &eta, mat const &X) const { 
+      return X;  
+    }
+    cube hessianh(vec const &beta, mat const &X, mat const &XD) const { 
       cube c(beta.size(), beta.size(), X.n_rows, fill::zeros);
       return c;
     }
-    cube hessianH(vec beta, mat X) { 
+    cube hessianH(vec const &beta, mat const &X) const { 
       cube c(beta.size(), beta.size(), X.n_rows, fill::zeros);
       return c;
     }
@@ -562,18 +657,18 @@ namespace rstpm2 {
       List list = as<List>(sexp);
       std::string linkType = as<std::string>(list["link"]);
       if (linkType=="PH")
-	link=new LogLogLink(sexp);
+	      link=new LogLogLink(sexp);
       else if (linkType=="PO")
-	link=new LogitLink(sexp);
+	      link=new LogitLink(sexp);
       else if (linkType=="probit")
-	link=new ProbitLink(sexp);
+	      link=new ProbitLink(sexp);
       else if (linkType=="AH")
-	link=new LogLink(sexp);
+	      link=new LogLink(sexp);
       else if (linkType=="AO")
-	link=new ArandaOrdazLink(sexp);
+	      link=new ArandaOrdazLink(sexp);
       else {
-	REprintf("No matching link.type");
-	return;
+	      REprintf("No matching link.type");
+	      return;
       }
       bfgs.coef = init = as<NumericVector>(list["init"]);
       X = as<mat>(list["X"]); 
@@ -2571,7 +2666,33 @@ namespace rstpm2 {
       return wrap(-1);
     }
   }
+  
+  class prof_class {
+  public:
+    prof_class(const std::string &name){
+#ifdef DO_PROF
+      std::stringstream ss;
+      auto t = std::time(nullptr);
+      auto tm = *std::localtime(&t);
+      ss << "profile-" << name 
+         << std::put_time(&tm, "-%d-%m-%Y-%H-%M-%S.log");
+      Rcpp::Rcout << "Saving profile output to '" << ss.str() << "'" 
+                  << std::endl;
+      const std::string s = ss.str();
+      ProfilerStart(s.c_str());
+#endif
+    }
+    
+#ifdef DO_PROF
+    ~prof_class(){
+      ProfilerStop();
+    }
+#endif
+  };
+  
   RcppExport SEXP model_output(SEXP args) {
+    prof_class prof("model_output");
+    
     List list = as<List>(args);
     std::string type = as<std::string>(list["type"]);
     if (type=="stpm2") {
