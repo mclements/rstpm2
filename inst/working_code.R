@@ -18,6 +18,12 @@
 ##   require(bbmle)
 ## }
 
+## bug in predict for meansurv
+library(rstpm2)
+fit.tvc <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3, tvc=list(hormon=3))
+out <- predict(fit.tvc, newdata=transform(brcancer,hormon=1),type="meansurv",grid=TRUE, se.fit=TRUE,
+               full=TRUE)
+
 ## bug in plot(..., xlab="Something")
 library(rstpm2)
 fit <- stpm2(Surv(rectime, censrec)~hormon, data=brcancer,df=3)

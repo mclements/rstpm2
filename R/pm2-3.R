@@ -2232,12 +2232,19 @@ predict.stpm2.base <-
           out <- data.frame(Estimate=out$Estimate,lower=out$upper,upper=out$lower)
       out <- invlinkf(out)
     }
-    if (keep.attributes)
-        attr(out,"newdata") <- newdata
-    if (full) {
+    if (keep.attributes || full) {
       if (type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure"))
-        newdata <- exposed(newdata)
-      out <- if(is.data.frame(out)) cbind(newdata,out) else cbind(newdata, data.frame(Estimate=out))
+          newdata <- exposed(newdata)
+      if (type %in% c("meansurv","meanhr","meansurvdiff","meanhaz","meanmargsurv")) {
+          newdata <- data.frame(time=unique(newdata[[object@timeVar]]))
+          names(newdata) <- object@timeVar
+      }
+      if (full) {
+          if (inherits(out, "AsIs"))
+              class(out) <- setdiff(class(out),"AsIs")
+          out <- if(is.data.frame(out)) cbind(newdata,out) else cbind(newdata, data.frame(Estimate=out))
+      }
+      else attr(out,"newdata") <- newdata
     }
     return(out)
 }
