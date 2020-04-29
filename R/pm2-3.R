@@ -2435,13 +2435,17 @@ setMethod("lines", signature(x="stpm2"), lines.stpm2)
 eform <- function (object, ...) 
   UseMethod("eform")
 setGeneric("eform")
-eform.stpm2 <- function (object, parm, level = 0.95, method = c("Profile"), 
+eform.stpm2 <- function (object, parm, level = 0.95, method = c("Profile","Delta"), 
                     name = "exp(beta)") 
           {
               method <- match.arg(method)
               if (missing(parm)) 
                   parm <- TRUE
-              estfun <- switch(method, Profile = confint)
+              if (object@robust) {
+                  warning("Profile likelihood not defined for robust variance: using delta method")
+                  method <- "Delta"
+              }
+              estfun <- switch(method, Profile = confint, Delta = stats::confint.default)
               val <- exp(cbind(coef = coef(object), estfun(object, level = level)))
               colnames(val) <- c(name, colnames(val)[-1])
               val[parm, ]
