@@ -81,12 +81,15 @@ markov_msm <-
     }
     if (spline.interpolation) {
         replace <- function(object,tmvar) {
-            t <- seq(max(c(min.tm,min(t))), max(t), length.out=1000)
+            logModels <- c("aftreg","flexsurvreg","stpm2","pstpm2","aft")
+            logModel <- inherits(object, logModels)
+            t <- if (logModel) exp(seq(log(max(c(min.tm,min(t)))), log(max(t)), length.out=1000))
+                 else seq(max(c(min.tm,min(t))), max(t), length.out=1000)
             if (inherits(object,"hazFun")) object
             else if (inherits(object, "addModel"))
                 structure(lapply(object,replace,tmvar=tmvar), class="addModel")
             else makeSplineFun(object, newdata=newdata, tmvar=tmvar, min.tm=min.tm, tm=t,
-                               log=inherits(object,c("aftreg","flexsurvreg","stpm2","pstpm2","aft")))
+                               log=logModel)
         }
         x <- mapply(replace, x, tmvar, SIMPLIFY=FALSE)
     }
@@ -1421,7 +1424,7 @@ vsplinefun <- function(x,y,...) {
     splinefuns <- lapply(1:ncol(y), function(j) stats::splinefun(x,y[,j],...))
     function(x) sapply(splinefuns, function(obj) obj(x))
 }
-makeSplineFun <- function(object,tm,newdata=data.frame(one=1),tmvar="", min.tm=1e-7, log=FALSE) {
+makeSplineFun <- function(object,tm,newdata=data.frame(one=1),tmvar="", min.tm=1e-8, log=FALSE) {
     tm <- pmax(tm,min.tm)
     trans <- if (log) base::log else base::identity
     ## itrans <- if (log) base::exp else base::identity
