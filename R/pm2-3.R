@@ -2442,7 +2442,7 @@ eform.stpm2 <- function (object, parm, level = 0.95, method = c("Profile","Delta
               if (missing(parm)) 
                   parm <- TRUE
               if (object@robust) {
-                  warning("Profile likelihood not defined for robust variance: using delta method")
+                  ## Profile likelihood not defined for robust variance: using delta method
                   method <- "Delta"
               }
               estfun <- switch(method, Profile = confint, Delta = stats::confint.default)
