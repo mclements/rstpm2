@@ -16,6 +16,9 @@ extern SEXP fitCureModel(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
 extern SEXP aft_model_output(SEXP);
 extern SEXP vunirootRcpp(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
 extern SEXP multistate_ddt(SEXP,SEXP,SEXP,SEXP);
+extern SEXP runMarkovODE(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
+extern SEXP call_P_by(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
+extern SEXP call_P_L_by(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
 
 /* .Fortran calls -- thanks to Gordon Smyth */
 extern void F77_NAME(gausq2)(void *, void *, void *, void *, void *);
@@ -28,6 +31,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"aft_model_output",   (DL_FUNC) &aft_model_output,   1},
     {"vunirootRcpp",       (DL_FUNC) &vunirootRcpp,       7},
     {"multistate_ddt",     (DL_FUNC) &multistate_ddt,     4},
+    {"runMarkovODE",       (DL_FUNC) &runMarkovODE,       9},
+    {"call_P_by",          (DL_FUNC) &call_P_by,          7},
+    {"call_P_L_by",        (DL_FUNC) &call_P_L_by,        10},
     {NULL, NULL, 0}
 };
 
