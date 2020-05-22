@@ -997,6 +997,10 @@ plot.markov_msm <- function(x, y, stacked=TRUE, which=c("P","L"),
             ylab <- if(which=='P') "Ratio of probabilities"
                     else "Ratio of lengths of stay"
     }
+    if (nrow(x$newdata)>1) {
+        warning("More than one set of covariates; covariates have been standardised")
+        x <- standardise(x)
+    }
     if (ggplot2)
         ggplot.markov_msm(x, which=which, stacked=stacked, xlab=xlab, ylab=ylab,
                           alpha=alpha, ...)
@@ -1004,20 +1008,18 @@ plot.markov_msm <- function(x, y, stacked=TRUE, which=c("P","L"),
         xyplot.markov_msm(x, which=which, stacked=stacked, xlab=xlab, ylab=ylab,
                           col=col, border=border, strata=strata, ...)
     else {
-        if (nrow(x$newdata)>1) {
-            warning("More than one set of covariates; covariates have been standardised")
-            x <- standardise(x)
-        }
         if (!missing(y)) warning("y argument is ignored")
         df <- as.data.frame(x)
         states <- unique(df$state)
         if (stacked) {
+            if (which == "L")
+                stop("Stacked plot is not sensible for length of stay")
             out <- graphics::plot(range(x$time),0:1, type="n", xlab=xlab, ylab=ylab, ...)
             lower <- 0
             for (i in length(states):1) { # put the last state at the bottom
                 df2 <- df[df$state==states[i],]
                 if (length(lower)==1) lower <- rep(0,nrow(df2))
-                upper <- lower+df2$P
+                upper <- lower+df2[[which]]
                 graphics::polygon(c(df2$time,rev(df2$time)), c(lower,rev(upper)),
                                   border=border[i], col=col[i])
                 lower <- upper
