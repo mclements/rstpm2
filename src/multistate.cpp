@@ -496,7 +496,7 @@ StateComponentsCombined run(Markov &model, arma::vec p0, arma::vec times) {
   return {times, P, L, gradP, gradL};
 }
 // Rcpp::List runMarkovODE(arma::vec y0, arma::vec times, arma::vec tlam, arma::mat lam, Rcpp::List gradients, arma::ivec from, arma::ivec to, Rcpp::LogicalVector use_logs, double minTm = 1.0e-8) {
-SEXP runMarkovODE(SEXP _y0, SEXP _times, SEXP _tlam, SEXP _lam, SEXP _gradients, SEXP _from, SEXP _to, SEXP _use_logs, SEXP _minTm) {
+RcppExport SEXP runMarkovODE(SEXP _y0, SEXP _times, SEXP _tlam, SEXP _lam, SEXP _gradients, SEXP _from, SEXP _to, SEXP _use_logs, SEXP _minTm) {
   using namespace Rcpp;
   arma::vec y0 = as<arma::vec>(_y0);
   arma::vec times = as<arma::vec>(_times);
