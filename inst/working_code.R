@@ -29,6 +29,24 @@ pred2 <- predict(fit,type="af",newdata=brcancer, grid=TRUE,
 with(pred2, matplot(rectime,cbind(Estimate,lower,upper),type="l",lty=c(1,2,2), col=1,
                     xlab="Time since treatment (days)", ylab="PAF", ylim=c(0,0.5)))
 
+## Bug report from Joshua
+# Loading rstpm2 package
+library(rstpm2)
+# Fit stmp2 model using breastcancer data set
+fpm_model <- stpm2(Surv(rectime, censrec) ~ hormon,
+                   data = brcancer,
+                   df = 3,
+                   tvc = list("hormon" = 3))
+# Predict hazard difference comparing hormon users and non-users
+# using full=TRUE option for obtaining a full data set for ggplot()
+predict(
+  fpm_model,
+  type = "hdiff",
+  newdata = data.frame(hormon = 0),
+  var = "hormon",
+  grid = TRUE,
+  se.fit = TRUE,
+  full = TRUE)
 
 ## test plots for PO models with random effects
 library(rstpm2)
