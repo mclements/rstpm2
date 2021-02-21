@@ -18,7 +18,7 @@ test_that("Missing event time - stpm2", {
     brcancer2$rectime[1] <- NA
     expect_warning(fit1 <<- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2),
                    "Some event times are NA")
-    expect_eps(coef(fit1),beta1, 1e-8)
+    expect_eps(coef(fit1),beta1, 1e-5)
     expect_length(predict(fit1), 685)
     })
 
@@ -27,7 +27,7 @@ test_that("Invalid event time - stpm2", {
     brcancer2$rectime[1] <- -1
     expect_warning(fit1 <<- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2),
                    "Some event times <= 0")
-    expect_eps(coef(fit1),beta1, 1e-8)
+    expect_eps(coef(fit1),beta1, 1e-5)
     expect_length(predict(fit1), 685)
 })
 
@@ -35,7 +35,7 @@ test_that("Missing covariate - stpm2", {
     brcancer2 <- rstpm2::brcancer
     brcancer2$hormon[1] <- NA
     fit1 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2)
-    expect_eps(coef(fit1),beta1, 1e-8)
+    expect_eps(coef(fit1),beta1, 1e-5)
     expect_length(predict(fit1), 685)
 })
 
@@ -43,7 +43,7 @@ test_that("Missing weight - stpm2", {
     brcancer2 <- transform(rstpm2::brcancer, w=1)
     brcancer2$w[1] <- NA
     fit1 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w)
-    expect_eps(coef(fit1),beta1, 1e-8)
+    expect_eps(coef(fit1),beta1, 1e-5)
     expect_length(predict(fit1), 685)
 })
 
