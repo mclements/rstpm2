@@ -350,10 +350,35 @@ Mark Clements
 }
 \examples{
 \dontrun{
-## Crowther and Lambert (2019)
 library(readstata13)
 library(mstate)
 library(ggplot2)
+library(survival)
+## Two states: Initial -> Final
+two_states <- function(model, ...) {
+    transmat = matrix(c(NA,1,NA,NA),2,2,byrow=TRUE)
+    rownames(transmat) <- colnames(transmat) <- c("Initial","Final")
+    rstpm2::markov_msm(list(model), ..., trans = transmat)
+}
+death = gsm(Surv(time,status)~factor(rx), data=survival::colon, subset=(etype==2), df=3)
+cr = two_states(death, newdata=data.frame(rx="Obs"), t = seq(0,2500, length=301))
+plot(cr,ggplot=TRUE)
+
+## Competing risks
+competing_risks <- function(listOfModels, ...) {
+    nRisks = length(listOfModels)
+    transmat = matrix(NA,nRisks+1,nRisks+1)
+    transmat[1,1+(1:nRisks)] = 1:nRisks
+    rownames(transmat) <- colnames(transmat) <- c("Initial",names(listOfModels))
+    rstpm2::markov_msm(listOfModels, ..., trans = transmat)
+}
+recurrence = gsm(Surv(time,status)~factor(rx), data=survival::colon, subset=(etype==1), df=3)
+death = gsm(Surv(time,status)~factor(rx), data=survival::colon, subset=(etype==2), df=3)
+cr = competing_risks(list(recurrence,Death=death), newdata=data.frame(rx="Obs"),
+                     t = seq(0,2500, length=301))
+plot(cr,ggplot=TRUE)
+
+## Extended example: Crowther and Lambert (2019)
 mex.1 <- read.dta13("http://fmwww.bc.edu/repec/bocode/m/multistate_example.dta")
 transmat <- rbind("Post-surgery"=c(NA,1,2), 
                   "Relapsed"=c(NA,NA,3),
