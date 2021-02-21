@@ -197,6 +197,30 @@ hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta
   The default smoothers for time on the linear predictor scale are
   \code{nsxs(log(time),df=3)} for the parametric model and
   \code{s(log(time))} for the penalised model.
+
+  A frequently asked question is: why does rstpm2 give different spline
+  estimates to flexsurv and Stata's stpm2? The short answer is that
+  rstpm2 uses a different natural spline basis compared with flexsurv
+  and Stata's stpm2 and slightly different
+  knot placement than Stata's stpm2. If the knot
+  placement is the same, then the predictions and other coefficients are
+  expected to be very similar. As a longer answer, the default smoother
+  in rstpm2 is to use an extension of the \copde{splines::ns} function
+  (\code{rstpm2::nsx}), which uses a QR projection of B-splines for
+  natural splines. In contrast, flexsurv and Stata's stpm2 use truncated
+  power splines for the natural spline basis (also termed 'restricted
+  cubic splines'). The B-splines are known to
+  have good numerical properties, while Stata's stpm2 implementation
+  defaults to using matrix orthogonalisation to account for any
+  numerical instability in the truncated power basis. Furthermore,
+  rstpm2 allows for any smooth parametric function to be used as a
+  smoother in \code{stpm2}/\code{gsm}, which is an extension over
+  flexsurv and Stata's stpm2. Finally, it may be difficult to get rstpm2 and
+  Stata's stpm2 to return the same estimates: although
+  \code{nsx} includes an argument \code{stata.stpm2.compatible = FALSE} (change to \code{TRUE} for
+  compatibility), the design matrix for rstpm2 is based on individuals
+  with events, while Stata's stpm2 determines the spline knots from the
+  individuals with events and the design matrix is otherwise based on all individuals.
 }
 \value{
 Either a \code{stpm2-class} or \code{pstpm2-class} object. 
@@ -210,7 +234,7 @@ Either a \code{stpm2-class} or \code{pstpm2-class} object.
 %% %% ~put references to the literature/web site here ~
 %% }
 \author{
-  Mark Clements, Xing-Rong Liu.
+  Mark Clements, Xing-Rong Liu, Benjamin Christoffersen.
 }
 %% \note{
 %% %%  ~~further notes~~
@@ -233,12 +257,7 @@ Either a \code{stpm2-class} or \code{pstpm2-class} object.
     ## some plots
     plot(fit,newdata=data.frame(hormon=0),type="hazard")
     plot(fit,newdata=data.frame(hormon=0),type="surv")
-    
-    ## the same model using logH.formula
-    summary(stpm2(Surv(rectime,censrec==1)~hormon,
-                  data=brcancer,logH.formula=~ns(log(rectime),df=3)))
-    
-    
+
     ## time-varying coefficient
     summary(fit.tvc <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3,
                              tvc=list(hormon=3)))
@@ -246,16 +265,21 @@ Either a \code{stpm2-class} or \code{pstpm2-class} object.
     
     ## some more plots
     plot(fit.tvc,newdata=data.frame(hormon=0),type="hr",var="hormon", ylim=c(0,2))
-                                        # no lines method: use add=TRUE
-    plot(fit.tvc,newdata=data.frame(hormon=1),type="hr",var="hormon",
-     add=TRUE,ci=FALSE,line.col=2)
+    lines(fit.tvc,newdata=data.frame(hormon=1),type="hr",var="hormon",
+          col=2)
 
     plot(fit.tvc,newdata=data.frame(hormon=0),type="sdiff",var="hormon")
     
     plot(fit.tvc,newdata=data.frame(hormon=0),type="hdiff",var="hormon")
-    
-    plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard")
-    plot(fit.tvc,newdata=data.frame(hormon=1),type="hazard",line.col=2,ci=FALSE,add=TRUE)
+
+    library(scales)
+    cols <- c(alpha("red",alpha=0.2), alpha("blue",alpha=0.2))
+    plot(fit.tvc,newdata=data.frame(hormon=0),type="hazard",ci.col=cols[1])
+    lines(fit.tvc,newdata=data.frame(hormon=1),type="hazard",lty=2,ci.col=cols[2],
+          ci=TRUE)
+    legend("topright",legend=c("No hormonal treatment", "(95% CI)", "Hormonal treatment", "(95% CI)"),
+           lty=c(1,1,2,1), lwd=c(1,10,1,10), col=c("black",cols[1],"black",cols[2]), bty="n")
+
     
     ## compare number of knots
     hormon0 <- data.frame(hormon=0)
@@ -266,6 +290,14 @@ Either a \code{stpm2-class} or \code{pstpm2-class} object.
         plot(fit.new,type="hazard",newdata=hormon0,add=TRUE,ci=FALSE,line.col=df)
         print(AIC(fit.new))
     }
+
+    ## compatibility with Stata's stpm2 using the smooth.formula argument (see Details)
+    summary(stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
+                  smooth.formula=~nsx(log(rectime),df=3,stata.stpm2.compatible=TRUE)))
+    summary(stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
+                  smooth.formula=~nsx(log(rectime),df=3,stata=TRUE)+
+                  hormon:nsx(log(rectime),df=3,stata=TRUE)))
+
     }
 }
 \keyword{ survival }
