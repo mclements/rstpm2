@@ -32,8 +32,9 @@ gsm(formula, data, smooth.formula = NULL, smooth.args = NULL,
                 robust_initial=NULL,
                 coxph.strata = NULL, coxph.formula = NULL,
                 logH.formula = NULL, logH.args = NULL,
-                bhazard = NULL, bhazinit=NULL,
-                frailty = !is.null(cluster) & !robust, cluster = NULL, logtheta=NULL,
+                bhazard = NULL, bhazinit=NULL, copula=FALSE,
+                frailty = !is.null(cluster) & !robust & !copula,
+                cluster = NULL, logtheta=NULL,
                 nodes=NULL, RandDist=c("Gamma","LogN"), recurrent = FALSE,
                 adaptive = NULL, maxkappa = NULL,
                 sp=NULL, criterion=NULL, penalty=NULL,
@@ -115,6 +116,7 @@ scalar used to adjust the background cumulative hazards for calculating
 initial values. Default=0.1. Deprecated argument: use of the
 \code{control} argument is preferred.
 }
+\item{copula}{logical to indicate whether to use a copula model (experimental)}
 \item{timeVar}{variable defining the time variable. By default, this is
 determined from the survival object, however this may be ambiguous if
 two variables define the time}
@@ -205,7 +207,7 @@ hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta
   knot placement than Stata's stpm2. If the knot
   placement is the same, then the predictions and other coefficients are
   expected to be very similar. As a longer answer, the default smoother
-  in rstpm2 is to use an extension of the \copde{splines::ns} function
+  in rstpm2 is to use an extension of the \code{splines::ns} function
   (\code{rstpm2::nsx}), which uses a QR projection of B-splines for
   natural splines. In contrast, flexsurv and Stata's stpm2 use truncated
   power splines for the natural spline basis (also termed 'restricted
