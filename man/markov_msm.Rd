@@ -57,6 +57,7 @@ markov_msm(x, trans, t = c(0,1), newdata = NULL, init=NULL,
 				   C.conf.type="log",
                                    P.range=c(0,1), L.range=c(0,Inf),
 				   C.range=c(0,Inf),
+                                   state.weights=NULL, obs.weights=NULL,
                                    \dots)
 \method{as.data.frame}{markov_msm_diff}(x, row.names=NULL, optional=FALSE,
                                    P.conf.type="plain", L.conf.type="plain",
@@ -221,6 +222,8 @@ calculation for the length of stay calculation. Default: log transformation. Thi
 \code{\link{diff}} and \code{\link{ratio_markov_msm}} objects}
 \item{C.range}{valid values for the state occupancy probabilities. Default: (0,Inf). This is changed for
 \code{\link{diff}} and \code{\link{ratio_markov_msm}} objects}
+\item{state.weights}{Not currently documented}
+\item{obs.weights}{Not currently documented}
 
 For \code{standardise.markov_msm}:
 
@@ -355,8 +358,8 @@ library(mstate)
 library(ggplot2)
 library(survival)
 ## Two states: Initial -> Final
-## Note: this shows how to use markov_msm to estimate survival and risk probabilities based on smooth
-## hazard models.
+## Note: this shows how to use markov_msm to estimate survival and risk probabilities based on
+## smooth hazard models.
 two_states <- function(model, ...) {
     transmat = matrix(c(NA,1,NA,NA),2,2,byrow=TRUE)
     rownames(transmat) <- colnames(transmat) <- c("Initial","Final")
