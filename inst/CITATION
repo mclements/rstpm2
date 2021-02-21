@@ -39,8 +39,8 @@ bibentry(
     title="Generalized survival models applied to interval censored data",
     year="2018",
     author=personList(as.person("A. N. Printz")),
-    institution="Stockholm University",
-    url="http://176.58.113.51/resources/thesis.pdf"
+    school="Stockholm University",
+    url="https://kurser.math.su.se/pluginfile.php/20130/mod_folder/content/0/Kandidat/2018/2018_10_report.pdf"
 )
 
 bibentry(
