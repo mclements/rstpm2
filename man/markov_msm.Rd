@@ -355,16 +355,21 @@ library(mstate)
 library(ggplot2)
 library(survival)
 ## Two states: Initial -> Final
+## Note: this shows how to use markov_msm to estimate survival and risk probabilities based on smooth
+## hazard models.
 two_states <- function(model, ...) {
     transmat = matrix(c(NA,1,NA,NA),2,2,byrow=TRUE)
     rownames(transmat) <- colnames(transmat) <- c("Initial","Final")
     rstpm2::markov_msm(list(model), ..., trans = transmat)
 }
+## Note: the first argument is the hazard model. The other arguments are arguments to the
+## markov_msm function, except for the transition matrix, which is defined by the new function.
 death = gsm(Surv(time,status)~factor(rx), data=survival::colon, subset=(etype==2), df=3)
 cr = two_states(death, newdata=data.frame(rx="Obs"), t = seq(0,2500, length=301))
 plot(cr,ggplot=TRUE)
 
 ## Competing risks
+## Note: this shows how to adapt the markov_msm model for competing risks.
 competing_risks <- function(listOfModels, ...) {
     nRisks = length(listOfModels)
     transmat = matrix(NA,nRisks+1,nRisks+1)
@@ -372,11 +377,19 @@ competing_risks <- function(listOfModels, ...) {
     rownames(transmat) <- colnames(transmat) <- c("Initial",names(listOfModels))
     rstpm2::markov_msm(listOfModels, ..., trans = transmat)
 }
+## Note: The first argument for competing_risks is a list of models. Names from that list are
+## used for labelling the states. The other arguments are as per the markov_msm function,
+## except for the transition matrix, which is defined by the competing_risks function.
 recurrence = gsm(Surv(time,status)~factor(rx), data=survival::colon, subset=(etype==1), df=3)
 death = gsm(Surv(time,status)~factor(rx), data=survival::colon, subset=(etype==2), df=3)
-cr = competing_risks(list(recurrence,Death=death), newdata=data.frame(rx="Obs"),
+cr = competing_risks(list(Recurrence=recurrence,Death=death),
+                     newdata=data.frame(rx=levels(survival::colon$rx)),
                      t = seq(0,2500, length=301))
-plot(cr,ggplot=TRUE)
+## Plot the probabilities for each state for three different treatment arms
+plot(cr, ggplot=TRUE) + facet_grid(~ rx)
+## And: differences in probabilities
+cr_diff = diff(subset(cr,rx=="Lev+5FU"),subset(cr,rx=="Obs"))
+plot(cr_diff, ggplot=TRUE, stacked=FALSE)
 
 ## Extended example: Crowther and Lambert (2019)
 mex.1 <- read.dta13("http://fmwww.bc.edu/repec/bocode/m/multistate_example.dta")
