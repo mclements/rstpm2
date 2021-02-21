@@ -260,6 +260,7 @@ pluginEstimateDiscrete(int n, mat hazMatrix,
     variance.col(i) = Vnew.diag();
     Xn = Xnew;
     Vn = Vnew;
+    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
   }
   PluginEstimateDiscrete out = {X,variance/n,covariance/n,vcov,n,Y,varY};
   return out;
@@ -356,32 +357,17 @@ pluginEstimateCts(int n, mat hazMatrix, std::function<mat(vec)> f, std::function
     }
     Xn = Xnew;
     Vn = Vnew;
+    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
   }
   PluginEstimateCts out = {X,variance/n,covariance/n,vcov,n,subTimes,Y,varY};
   return out;
 }
 
-// // [[Rcpp::depends(RcppArmadillo)]]
-// //  [[Rcpp::export]]
-// PluginEstimateDiscrete
-// calc_P(int n, mat hazMatrix, 
-//       vec X0, imat tmat, bool vcov=false) {
-//   int nStates = X0.n_elem;
-//   std::function<mat(vec)> F = Fprob(nStates, tmat);
-//   std::function<cube(vec)> Fgrad = Fjac(nStates,F);
-//   mat V0 = zeros(nStates,nStates);
-//   return pluginEstimateDiscrete(n, hazMatrix, F, Fgrad, X0, V0, zeros(1,1), vcov);
-// }
-
-// Issue: X0 may be the same for all newdata, but it could also vary by newdata
-
-// // [[Rcpp::depends(RcppArmadillo)]]
-// //  [[Rcpp::export]]
 // PluginEstimateDiscrete
 // calc_P_by(int n, int nNewdata, mat hazMatrix, 
 // 	  vec X0, imat tmat, vec weights, bool vcov=false) {
-SEXP calc_P_by(SEXP _n, SEXP _nNewdata, SEXP _hazMatrix, 
-	  SEXP _X0, SEXP _tmat, SEXP _weights, SEXP _vcov) {
+RcppExport SEXP plugin_P_by(SEXP _n, SEXP _nNewdata, SEXP _hazMatrix, 
+			  SEXP _X0, SEXP _tmat, SEXP _weights, SEXP _vcov) {
   int n = Rcpp::as<int>(_n);
   size_t nNewdata = Rcpp::as<size_t>(_nNewdata);
   mat hazMatrix = Rcpp::as<mat>(_hazMatrix);
@@ -398,26 +384,12 @@ SEXP calc_P_by(SEXP _n, SEXP _nNewdata, SEXP _hazMatrix,
   return Rcpp::wrap(pluginEstimateDiscrete(n, hazMatrix, F, Fgrad, X0, V0, W, vcov));
 }
 
-// // [[Rcpp::depends(RcppArmadillo)]]
-// //  [[Rcpp::export]]
-// PluginEstimateCts
-// calc_P_L(int n, mat hazMatrix, 
-// 	 vec X0, imat tmat, vec time, int nOut=300, bool vcov=false, int nLebesgue=10001) {
-//   int m = X0.n_elem;
-//   vec X1 = join_cols(X0,zeros(m));
-//   std::function<mat(vec)> F = addFlos(Fprob(m, tmat));
-//   std::function<cube(vec)> Fgrad = Fjac(2*m,F);
-//   mat V1 = zeros(2*m,2*m);
-//   return pluginEstimateCts(n, hazMatrix, F, Fgrad, X1, V1, time, nOut, zeros(1,1), vcov, nLebesgue);
-// }
-
-// // [[Rcpp::depends(RcppArmadillo)]]
-// //  [[Rcpp::export]]
 // PluginEstimateCts
 // calc_P_L_by(int n, int nNewdata, mat hazMatrix, 
 // 	    vec X0, imat tmat, vec time, vec weights, int nOut=300, bool vcov=false, int nLebesgue=10001) {
-SEXP calc_P_L_by(SEXP _n, SEXP _nNewdata, SEXP _hazMatrix, 
-	       SEXP _X0, SEXP _tmat, SEXP _time, SEXP _weights, SEXP _nOut, SEXP _vcov, SEXP _nLebesgue) {
+RcppExport SEXP plugin_P_L_by(SEXP _n, SEXP _nNewdata, SEXP _hazMatrix, 
+			    SEXP _X0, SEXP _tmat, SEXP _time, SEXP _weights, SEXP _nOut,
+			    SEXP _vcov, SEXP _nLebesgue) {
   int n = Rcpp::as<int>(_n);
   size_t nNewdata = Rcpp::as<size_t>(_nNewdata);
   mat hazMatrix = Rcpp::as<mat>(_hazMatrix);
@@ -438,3 +410,27 @@ SEXP calc_P_L_by(SEXP _n, SEXP _nNewdata, SEXP _hazMatrix,
   mat W = (weights.n_elem == nNewdata) ? makeW(nStates, weights, 2) : zeros(1,1);
   return Rcpp::wrap(pluginEstimateCts(n, hazMatrix, F, Fgrad, X1, V1, time, nOut, W, vcov, nLebesgue));
 }
+
+// // [[Rcpp::depends(RcppArmadillo)]]
+// //  [[Rcpp::export]]
+// PluginEstimateDiscrete
+// plugin_P(int n, mat hazMatrix, 
+//       vec X0, imat tmat, bool vcov=false) {
+//   int nStates = X0.n_elem;
+//   std::function<mat(vec)> F = Fprob(nStates, tmat);
+//   std::function<cube(vec)> Fgrad = Fjac(nStates,F);
+//   mat V0 = zeros(nStates,nStates);
+//   return pluginEstimateDiscrete(n, hazMatrix, F, Fgrad, X0, V0, zeros(1,1), vcov);
+// }
+// // [[Rcpp::depends(RcppArmadillo)]]
+// //  [[Rcpp::export]]
+// PluginEstimateCts
+// plugin_P_L(int n, mat hazMatrix, 
+// 	 vec X0, imat tmat, vec time, int nOut=300, bool vcov=false, int nLebesgue=10001) {
+//   int m = X0.n_elem;
+//   vec X1 = join_cols(X0,zeros(m));
+//   std::function<mat(vec)> F = addFlos(Fprob(m, tmat));
+//   std::function<cube(vec)> Fgrad = Fjac(2*m,F);
+//   mat V1 = zeros(2*m,2*m);
+//   return pluginEstimateCts(n, hazMatrix, F, Fgrad, X1, V1, time, nOut, zeros(1,1), vcov, nLebesgue);
+// }

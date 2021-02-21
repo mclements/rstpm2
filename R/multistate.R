@@ -1453,3 +1453,86 @@ predict.SplineFun <- function(object, newdata, type=c("hazard","gradh"), tmvar="
 }
 vcov.SplineFun <- function(object) vcov(object$object)
 coef.SplineFun <- function(object) coef(object$object)
+
+markov_msm3 <- function(models, trans, newdata, init=NULL, nLebesgue=1e4+1, los=FALSE, nOut=300,
+                        weights=0) {
+    transfun <- function(tmat) {
+        indices <- sort(as.vector(tmat)); indices <- setdiff(indices,NA)
+        nStates <- nrow(tmat)
+        out <- do.call(rbind,
+                lapply(indices, function(i) {
+                    index2 <- which(tmat == i)
+                    from <- (index2-1) %% nStates +1
+                    to <- (index2-1) %/% nStates + 1
+                    data.frame(from=from,to=to)
+                }))
+        matrix(as.integer(as.matrix(out)),nrow(out))-1L
+    }
+    ## TODO check parameters
+    nStates <- nrow(trans)
+    nTrans <- sum(!is.na(trans))
+    if (is.null(init)) {
+        init <- c(1,rep(0,nStates-1))
+    }
+    stopifnot(length(init)==nStates)
+    ## init <- rep(init,nrow(newdata))
+    n <- sum(sapply(models,attr,"orig.max.clust"))
+    cumHazList <- lapply(models, function(object)
+        -t(log(predict(object, newdata=newdata, se=FALSE)$S0)))
+    timesList <- lapply(models, function(model) model$cum[,1])
+    eventTimes <- times <- sort(unique(unlist(timesList)))
+    hazList <- lapply(1:nrow(newdata), function(i) {
+        hazMatrix <- matrix(0,nrow=nTrans,ncol=length(times))
+        for (j in 1:nTrans) {
+            hazMatrix[j,match(timesList[[j]],times)] <- diff(c(0,cumHazList[[j]][,i]))
+        }
+        hazMatrix
+    })
+    hazMatrix <- do.call(rbind,hazList)
+    if (length(weights)==1 && weights != 0)
+        weights <- rep(weights,nrow(newdata))/(weights*nrow(newdata))
+    if (!los) {
+        out <- .Call("plugin_calc_P_by", n, nrow(newdata), hazMatrix, init, transfun(trans), weights,
+                    PACKAGE="rstpm2")
+        out$P <- out$X
+        out$P.se <- sqrt(out$variance)
+    } else {
+        out <- .Call("plugin_P_L_by",
+                     n, nrow(newdata), hazMatrix, init, transfun(trans), times, weights, nOut,
+                     PACKAGE="rstpm2")
+        PIndex <- 1:(nrow(out$X)/2)
+        tr <- function(x) array(as.vector(x), dim=c(nStates,nrow(newdata),ncol(x)))
+        out$P <- tr(out$X[PIndex,])
+        out$L <- tr(out$X[-PIndex,])
+        out$P.se <- sqrt(tr(out$variance[PIndex,]))
+        out$L.se <- sqrt(tr(out$variance[-PIndex,]))
+    }
+    out$n <- n
+    out$times <- if (los) out$time else times
+    out$newdata <- newdata
+    out$trans <- trans
+    out$los <- los
+    out$init <- init
+    out$weights <- weights
+    class(out) <- "markov_msm3"
+    if (!all(weights==0)) {
+        stand <- out # copy! This may be a bad idea...
+        if (!los) {
+            stand$P <- stand$Y
+            stand$P.se <- sqrt(stand$varY)
+        } else {
+            PIndex <- 1:(nrow(out$Y)/2)
+            stand$P <- stand$Y[PIndex,]
+            stand$L <- stand$Y[-PIndex,]
+            stand$P.se <- sqrt(stand$varY[PIndex,])
+            stand$L.se <- sqrt(stand$varY[-PIndex,])
+        }
+        ## tidy up
+        stand$X <- stand$Y
+        stand$variance <- stand$varY
+        out$X <- out$variance <- out$Y <- out$varY <- stand$Y <- stand$varY <- NULL
+        stand$newdata <- stand$newdata[1,]
+        out$stand <- stand
+    }
+    out
+}
