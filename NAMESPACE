@@ -64,7 +64,8 @@ importFrom(stats, quantile, lm, as.formula, coef, makepredictcall, na.fail, pred
            contrasts,delete.response, get_all_vars, model.extract, model.frame, 
            model.matrix, model.weights, na.pass, optimHess, pweibull, 
            terms, terms.formula, .checkMFClasses, .getXlevels, pchisq, printCoefmat,
-           anova, var, residuals, confint, qnorm, complete.cases, reformulate)
+           anova, var, residuals, confint, qnorm, complete.cases, reformulate,
+           splinefun)
 importFrom(mgcv,gam,s)
 importFrom(Rcpp,sourceCpp)
 importFrom(deSolve,ode)
