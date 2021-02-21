@@ -18,15 +18,16 @@
 ##   require(bbmle)
 ## }
 
-
 ## type="af"
 library(rstpm2)
 fit = gsm(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3)
-plot(fit,newdata=data.frame(hormon=1))
+plot(fit,type="af",newdata=brcancer,
+    exposed=function(data) transform(data,hormon=1))
 pred2 <- predict(fit,type="af",newdata=brcancer, grid=TRUE,
     exposed=function(data) transform(data,hormon=1),
     se.fit=TRUE,full=TRUE)
-with(pred2, matplot(rectime,cbind(Estimate,lower,upper),type="l",lty=c(1,2,2)))
+with(pred2, matplot(rectime,cbind(Estimate,lower,upper),type="l",lty=c(1,2,2), col=1,
+                    xlab="Time since treatment (days)", ylab="PAF", ylim=c(0,0.5)))
 
 
 ## test plots for PO models with random effects
