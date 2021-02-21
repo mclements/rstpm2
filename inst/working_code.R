@@ -18,7 +18,100 @@
 ##   require(bbmle)
 ## }
 
+
+## type="af"
+library(rstpm2)
+fit = gsm(Surv(rectime,censrec==1)~hormon+I((x6>=20)+0),data=brcancer,df=3)
+pred2 <- predict(fit,newdata=brcancer,type="af",exposed=function(data) transform(data,hormon=0),
+                 se.fit=TRUE, full=TRUE)
+
+
+## test plots for PO models with random effects
+library(rstpm2)
+set.seed(12345)
+logit <- binomial()$linkfun
+expit <- binomial()$linkinv
+Spo <- function(eta) expit(eta)
+eta <- function(t) {}
+rPOgamma <- function(n,eta,theta,eps=1e-16) {
+    ## U <- pmin(runif(n),1-eps)
+    U <- runif(n)
+    ## solve_t(U=expit(-eta(t))^theta), where eta(0)=-Inf and eta(Inf)=Inf
+    V <- -logit(U^(1/theta))
+    if (any(is.na(V))) browser()
+    c(list(U=U),vuniroot(function(t) eta(t)-V, lower=rep(1e-50,n), upper=rep(1e100,n)))
+}
+t0 <- rPOgamma(1e5, function(t) log(t), 1)
+with(t0,plot(U,root,log="y"))
+t1 <- rPOgamma(n=1e5, function(t) log(t), rgamma(10,1))
+range(t0$root)
+range(t1$root)
+plot(density(log(t0$root)))
+
+## Plots with three levels
+library(rstpm2)
+table(brcancer$x4) # cancer stage
+## define indicators for the "exposed" levels (*R* needs these to be numeric)
+d <- transform(brcancer, x4.2=(x4==2)+0, x4.3=(x4==3)+0)
+## fit the model with the indicators as main effects and with tvc
+fit <- stpm2(Surv(rectime,censrec==1)~x4.2+x4.3,data=d,df=3,tvc=list(x4.2=2,x4.3=2))
+## predict for each exposure level
+pred2 <- predict(fit,newdata=data.frame(x4.2=0,x4.3=0),type="hr",var="x4.2", grid=TRUE, full=TRUE,
+                 se.fit=TRUE)
+pred3 <- predict(fit,newdata=data.frame(x4.2=0,x4.3=0),type="hr",var="x4.3", grid=TRUE, full=TRUE,
+                 se.fit=TRUE)
+pred <- transform(rbind(pred2,pred3), x4=factor(ifelse(x4.2,2,3)))
+library(ggplot2)
+ggplot(pred, aes(x=rectime, y=Estimate, ymin=lower, ymax=upper, fill=x4, col=x4)) +
+    geom_line() + coord_cartesian(ylim=c(0,10)) + geom_ribbon(alpha=0.3, col=NA)
+
+
+
+## how to extract the design information
+library(rstpm2)
+fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3)
+names(fit@model.frame)
+attributes(fit@model.frame[[3]])
+fit@lm$terms
+fit@x <- matrix()
+ls(environment(fit@model.frame))
+##
+withEnvs <-  sapply(slotNames(fit),function(nm) !is.null(environment(slot(fit,nm))))
+slotNames(fit)[withEnvs]
+lapply(slotNames(fit)[withEnvs],function(nm) ls(environment(slot(fit,nm))))
+##
+withEnvs <-  sapply(fit@args,function(obj) !is.null(environment(obj)))
+names(fit@args)[withEnvs]
+lapply(fit@args[withEnvs],function(obj) ls(environment(obj)))
+
+
 ## bug in predict for meansurv
+library(rstpm2)
+library(ggplot2)
+fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3)
+## Easy to use plot and lines functions
+plot(fit, newdata=transform(brcancer, hormon=0), type="meansurv")
+lines(fit, newdata=transform(brcancer, hormon=1), type="meansurv",lty=2)
+## More tedious to do for different covariate patterns with ggplot2
+pred0 <- predict(fit, newdata=transform(brcancer, hormon=0), type="meansurv", full=TRUE, se.fit=TRUE,
+                 grid=TRUE)
+pred1 <- predict(fit, newdata=transform(brcancer, hormon=1), type="meansurv", full=TRUE, se.fit=TRUE,
+                 grid=TRUE)
+## bug with values returned AsIs - I'll try to fix this
+unAsIs <- function(object)
+    if (inherits(object,"AsIs")) "class<-"(object, setdiff(class(object), "AsIs")) else object
+pred <- rbind(transform(unAsIs(pred1),hormon=1),transform(unAsIs(pred0),hormon=0))
+pred <- transform(pred, Hormone=ifelse(hormon==1,"Yes","No"))
+ggplot(pred, aes(x=rectime,y=Estimate,ymin=lower,ymax=upper,fill=Hormone)) +
+    xlab("Time since diagnosis (years)") +
+    ylab("Standardised survival") +
+    geom_ribbon(alpha=0.6) +
+    geom_line()
+
+
+## bug in predict for meansurv
+library(devtools)
+install_github("mclements/rstpm2", ref="develop")
 library(rstpm2)
 fit.tvc <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3, tvc=list(hormon=3))
 out <- predict(fit.tvc, newdata=transform(brcancer,hormon=1),type="meansurv",grid=TRUE, se.fit=TRUE,
