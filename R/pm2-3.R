@@ -2441,7 +2441,7 @@ eform.stpm2 <- function (object, parm, level = 0.95, method = c("Profile","Delta
               method <- match.arg(method)
               if (missing(parm)) 
                   parm <- TRUE
-              if (object@robust) {
+              if (object@args$robust) {
                   ## Profile likelihood not defined for robust variance: using delta method
                   method <- "Delta"
               }
