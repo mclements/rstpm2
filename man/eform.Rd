@@ -9,7 +9,7 @@ S3 method for to provide exponentiated coefficents with confidence intervals.
 }
 \usage{
 eform(object, ...)
-\method{eform}{stpm2}(object, parm, level = 0.95, method = c("Profile"), name = "exp(beta)")
+\method{eform}{stpm2}(object, parm, level = 0.95, method = c("Profile","Delta"), name = "exp(beta)")
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
