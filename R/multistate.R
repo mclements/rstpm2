@@ -762,40 +762,44 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
 
 surv.confint <- function(p, se, conf.type=c("log","log-log","plain","logit","arcsin"),
                          conf.int=0.95, min.value=0, max.value=1) {
+    stopifnot(length(p) == length(se))
     conf.type <- match.arg(conf.type)
     zval <- qnorm(1 - (1 - conf.int)/2)
-    selog <- se/p # transform to selog
-    if (conf.type == "plain") {
-        se2 <- se * zval
-        list(lower = pmax(p - se2, min.value), upper = pmin(p + se2, max.value))
-    }
-    else if (conf.type == "log") {
-        xx <- ifelse(p == 0, NA, p)
-        selog2 <- zval * selog
-        temp1 <- exp(log(xx) - selog2)
-        temp2 <- exp(log(xx) + selog2)
-        list(lower = temp1, upper = pmin(temp2, max.value))
-    }
-    else if (conf.type == "log-log") {
-        xx <- ifelse(p == 0 | p == 1, NA, p)
-        selog2 <- zval * selog/log(xx)
-        temp1 <- exp(-exp(log(-log(xx)) - selog2))
-        temp2 <- exp(-exp(log(-log(xx)) + selog2))
-        list(lower = temp1, upper = temp2)
-    }
-    else if (conf.type == "logit") {
-        xx <- ifelse(p == 0, NA, p)
-        selog2 <- zval * selog * (1 + xx/(1 - xx))
-        temp1 <- 1 - 1/(1 + exp(log(p/(1 - p)) - selog2))
-        temp2 <- 1 - 1/(1 + exp(log(p/(1 - p)) + selog2))
-        list(lower = temp1, upper = temp2)
-    }
-    else if (conf.type == "arcsin") {
-        xx <- ifelse(p == 0, NA, p)
-        selog2 <- 0.5 * zval * selog * sqrt(xx/(1 - xx))
-        list(lower = (sin(pmax(0, asin(sqrt(xx)) - selog2)))^2, 
-             upper = (sin(pmin(pi/2, asin(sqrt(xx)) + selog2)))^2)
-    }
+    selog <- ifelse(p==0, NaN, se/p) # transform to selog
+    out <- if (conf.type == "plain") {
+               se2 <- se * zval
+               list(lower = pmax(p - se2, min.value), upper = pmin(p + se2, max.value))
+           }
+           else if (conf.type == "log") {
+               xx <- ifelse(p == 0, NaN, p)
+               selog2 <- zval * selog
+               temp1 <- exp(log(xx) - selog2)
+               temp2 <- exp(log(xx) + selog2)
+               list(lower = temp1, upper = pmin(temp2, max.value))
+           }
+           else if (conf.type == "log-log") {
+               xx <- ifelse(p == 0, NaN, p)
+               selog2 <- zval * selog/log(xx)
+               temp1 <- exp(-exp(log(-log(xx)) - selog2))
+               temp2 <- exp(-exp(log(-log(xx)) + selog2))
+               list(lower = temp1, upper = temp2)
+           }
+           else if (conf.type == "logit") {
+               xx <- ifelse(p == 0 | p == 1, NaN, p)
+               selog2 <- zval * selog * (1 + xx/(1 - xx))
+               temp1 <- 1 - 1/(1 + exp(log(xx/(1 - xx)) - selog2))
+               temp2 <- 1 - 1/(1 + exp(log(xx/(1 - xx)) + selog2))
+               list(lower = temp1, upper = temp2)
+           }
+           else if (conf.type == "arcsin") {
+               xx <- ifelse(p == 1, NaN, p)
+               selog2 <- 0.5 * zval * selog * sqrt(xx/(1 - xx))
+               list(lower = (sin(pmax(0, asin(sqrt(xx)) - selog2)))^2,
+                    upper = (sin(pmin(pi/2, asin(sqrt(xx)) + selog2)))^2)
+           }
+    if (any(index <- is.na(p) | is.na(se)))
+        out$lower[index] <- out$upper[index] <- NA
+    out
 }
 print.markov_msm <- function(x, 
                              digits=5,
