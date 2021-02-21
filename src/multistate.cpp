@@ -515,7 +515,7 @@ RcppExport SEXP runMarkovODE(SEXP _y0, SEXP _times, SEXP _tlam, SEXP _lam, SEXP 
     for (int j=0; j<gradients.size(); j++)
       vgradients.push_back(SplineCoef(tlam, g.col(j)));
     flows.push_back({size_t(from(i)), size_t(to(i)), coef, vgradients,
-                     use_logs[i]});
+                     bool(use_logs[i])});
   }
   Markov markov(flows, minTm);
   auto report = run(markov, y0, times);
