@@ -317,7 +317,7 @@ as.data.frame.markov_msm <- function(x, row.names=NULL, optional=FALSE,
     if (!is.null(state.weights))
         return(state_weights(x=x, row.names=row.names,
                              optional=optional, ci=ci,
-                             P.conf.type=P.conf.type, L.cont.type=L.cont.type,
+                             P.conf.type=P.conf.type, L.conf.type=L.conf.type,
                              C.conf.type=C.conf.type,
                              P.range=P.range, L.range=L.range, C.range=C.range,
                              state.weights=state.weights, ...))
