@@ -1935,7 +1935,7 @@ predict.stpm2.base <-
         beta <- coef(object)
         tt <- object@terms
         link <- object@link # cf. link for transformation of the predictions
-        if (object@frailty || object@args$copula) {
+        if (object@frailty || (is.logical(object@args$copula) && object@args$copula)) {
             theta <- exp(beta[length(beta)])
             beta <- beta[-length(beta)]
             if (object@args$RandDist=="LogN") {
@@ -2235,7 +2235,7 @@ predict.stpm2.base <-
     if (keep.attributes || full) {
       if (type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure"))
           newdata <- exposed(newdata)
-      if (type %in% c("meansurv","meanhr","meansurvdiff","meanhaz","meanmargsurv")) {
+      if (type %in% c("meansurv","meanhr","meansurvdiff","meanhaz","meanmargsurv","af")) {
           newdata <- data.frame(time=unique(newdata[[object@timeVar]]))
           names(newdata) <- object@timeVar
       }
