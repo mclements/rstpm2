@@ -6,7 +6,7 @@
 German breast cancer data from Stata.
 }
 \description{
-See \url{http://www.stata-press.com/data/r11/brcancer.dta}.
+See \url{https://www.stata-press.com/data/r11/brcancer.dta}.
 }
 \usage{data(brcancer)}
 \format{
