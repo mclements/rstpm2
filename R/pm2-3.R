@@ -250,7 +250,7 @@ numDeltaMethod <- function(object, fun, gd=NULL, ...) {
   se.fit <- as.vector(sqrt(colSums(gd* (Sigma %*% gd))))
   if (!is.null(names(fit)))
       names(se.fit) <- names(fit)
-  if(all(se.fit==0)) warning("Zero variance estimated. Do you need to pass a newdata argument to fun()?")
+  if(all(se.fit==0 | is.na(se.fit))) warning("Zero variance estimated. Do you need to pass a newdata argument to fun()?")
   df <- data.frame(fit = as.numeric(fit), se.fit = as.numeric(se.fit),
                    Estimate = as.numeric(fit), SE = as.numeric(se.fit))
   row.names(df) <- names(fit)
