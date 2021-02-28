@@ -6,6 +6,7 @@ export(stpm2, pstpm2, aft, gsm,
        cox.tvc, # experimental --- don't export?
        markov_msm, ratio_markov_msm,
        zeroModel, hrModel, aftModel, addModel, # stratifiedModel,
+       ## markov_sde,
        hazFun, splineFun,
        standardise,
        incrVar, nsx, nsxD, "coef<-",
@@ -32,12 +33,15 @@ S3method(coef, pstpm2)
 S3method(vcov, pstpm2)
 
 S3method(as.data.frame, markov_msm)
+## S3method(as.data.frame, markov_sde)
 S3method(as.data.frame, markov_msm_diff)
 S3method(as.data.frame, markov_msm_ratio)
 S3method(vcov, markov_msm)
 S3method(standardise, markov_msm)
+## S3method(standardise, markov_sde)
 S3method(print, markov_msm)
 S3method(plot, markov_msm)
+## S3method(plot, markov_sde)
 S3method(subset, markov_msm)
 S3method(rbind, markov_msm)
 S3method(transform, markov_msm)
