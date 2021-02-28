@@ -18,6 +18,292 @@
 ##   require(bbmle)
 ## }
 
+library(rstpm2)
+library(survival)
+library(timereg)
+library(ggplot2)
+library(lattice)
+## Two states: Initial -> Final
+## Note: this shows how to use markov_msm to estimate survival and risk probabilities based on
+## smooth hazard models.
+two_states <- function(model, ...) {
+    transmat = matrix(c(NA,1,NA,NA),2,2,byrow=TRUE)
+    rownames(transmat) <- colnames(transmat) <- c("Initial","Final")
+    markov_sde(list(model), ..., trans = transmat)
+}
+## Note: the first argument is the hazard model. The other arguments are arguments to the
+## markov_msm function, except for the transition matrix, which is defined by the new function.
+colon2 <- transform(survival::colon, Obs=(rx=="Obs"), Lev=(rx=="Lev"),Lev_5FU=(rx=="Lev+5FU"))
+death = aalen(Surv(time,status)~Obs, data=subset(colon2,etype==2))
+## cr = two_states(death, newdata=data.frame(rx="Obs")) # fails
+## cr = two_states(death, newdata=data.frame(rx=levels(survival::colon$rx)))
+
+death = aalen(Surv(time,status)~factor(rx), data=subset(survival::colon,etype==2))
+cr = two_states(death, newdata=data.frame(rx=factor("Obs",levels(survival::colon$rx)))) # fails
+
+
+## Non-parametric baseline: SDE approach due to Ryalen and colleagues
+markov_sde <- function(models, trans, newdata, init=NULL, nLebesgue=1e4+1, los=FALSE, nOut=300,
+                        weights=1) {
+    transfun <- function(tmat) {
+        indices <- sort(as.vector(tmat)); indices <- setdiff(indices,NA)
+        nStates <- nrow(tmat)
+        out <- do.call(rbind,
+                lapply(indices, function(i) {
+                    index2 <- which(tmat == i)
+                    from <- (index2-1) %% nStates +1
+                    to <- (index2-1) %/% nStates + 1
+                    data.frame(from=from,to=to)
+                }))
+        matrix(as.integer(as.matrix(out)),nrow(out))-1L
+    }
+    ## TODO check parameters
+    nStates <- nrow(trans)
+    nTrans <- sum(!is.na(trans))
+    if (is.null(init)) {
+        init <- c(1,rep(0,nStates-1))
+    }
+    stopifnot(length(init)==nStates)
+    ## init <- rep(init,nrow(newdata))
+    n <- sum(sapply(models,attr,"orig.max.clust"))
+    cumHazList <- lapply(models, function(object)
+        -t(log(predict(object, newdata=newdata, se=FALSE)$S0)))
+    timesList <- lapply(models, function(model) model$cum[,1])
+    eventTimes <- times <- sort(unique(unlist(timesList)))
+    hazList <- lapply(1:nrow(newdata), function(i) {
+        hazMatrix <- matrix(0,nrow=nTrans,ncol=length(times))
+        for (j in 1:nTrans) {
+            hazMatrix[j,match(timesList[[j]],times)] <- diff(c(0,cumHazList[[j]][,i]))
+        }
+        hazMatrix
+    })
+    hazMatrix <- do.call(rbind,hazList)
+    if (length(weights)==1 && weights != 0)
+        weights <- rep(weights,nrow(newdata))/(weights*nrow(newdata))
+    vcov <- matrix(1,1,1)
+    if (!los) {
+        out <- .Call("plugin_P_by", n, nrow(newdata), hazMatrix, init, transfun(trans), weights,
+                     vcov,
+                     PACKAGE="rstpm2")
+        out$P <- out$X
+        out$P.se <- sqrt(out$variance)
+    } else {
+        out <- .Call("plugin_P_L_by",
+                     n, nrow(newdata), hazMatrix, init, transfun(trans), times, weights, nOut,
+                     vcov, nLebesgue,
+                     PACKAGE="rstpm2")
+        PIndex <- 1:(nrow(out$X)/2)
+        tr <- function(x) array(as.vector(x), dim=c(nStates,nrow(newdata),ncol(x)))
+        out$P <- tr(out$X[PIndex,])
+        out$L <- tr(out$X[-PIndex,])
+        out$P.se <- sqrt(tr(out$variance[PIndex,]))
+        out$L.se <- sqrt(tr(out$variance[-PIndex,]))
+    }
+    out$n <- n
+    out$times <- if (los) out$time else times
+    out$newdata <- newdata
+    out$trans <- trans
+    out$los <- los
+    out$init <- init
+    out$weights <- weights
+    class(out) <- "markov_sde"
+    if (!all(weights==0)) {
+        stand <- out # Warning: copy! This may be a bad idea...
+        if (!los) {
+            stand$P <- stand$Y
+            stand$P.se <- sqrt(stand$varY)
+        } else {
+            PIndex <- 1:(nrow(out$Y)/2)
+            stand$P <- stand$Y[PIndex,]
+            stand$L <- stand$Y[-PIndex,]
+            stand$P.se <- sqrt(stand$varY[PIndex,])
+            stand$L.se <- sqrt(stand$varY[-PIndex,])
+        }
+        ## tidy up
+        stand$X <- stand$Y
+        stand$variance <- stand$varY
+        ## out$X <- out$variance <- out$Y <- out$varY <- stand$Y <- stand$varY <- NULL
+        stand$newdata <- stand$newdata[1,,drop=FALSE]
+        class(stand) <- "markov_sde"
+        out$stand <- stand
+    }
+    out
+}
+standardise.markov_sde <- function(object) {
+    structure(object$stand, class="markov_sde")
+}
+cr = two_states(death, newdata=data.frame(rx=levels(survival::colon$rx)))
+
+cr = two_states(death, newdata=data.frame(Obs=1))
+
+
+plot.markov_sde <- function(x, y, stacked=TRUE, which=c("P","L"), 
+                            xlab="Time", ylab=NULL, col=2:6, border=col,
+                            ggplot2=FALSE, lattice=FALSE, alpha=0.2,
+                            strata=NULL,
+                            ...) {
+    stopifnot(inherits(x,"markov_sde"))
+    which <- match.arg(which)
+    if (!missing(y)) warning("y argument is ignored")
+    ## ylab defaults
+    if (is.null(ylab))
+        ylab <- if(which=='P') "Probability" else "Length of stay"
+    if (ggplot2)
+        rstpm2:::ggplot.markov_msm(x, which=which, stacked=stacked, xlab=xlab, ylab=ylab,
+                          alpha=alpha, ...)
+    else if (lattice)
+        rstpm2:::xyplot.markov_msm(x, which=which, stacked=stacked, xlab=xlab, ylab=ylab,
+                          col=col, border=border, strata=strata, ...)
+    else {
+        if (is.null(index) && nrow(x$newdata)>1) {
+            warning("More than one set of covariates; defaults to weighted estimator")
+            x <- x$stand # Warning: replacement
+            index <- 1
+        }
+        browser()
+        if (is.null(index)) index <- 1
+        df <- merge(x$newdata[index,,drop=FALSE], as.data.frame(x))
+        states <- unique(df$state)
+        if (stacked) {
+            out <- graphics::plot(range(x$times, na.rm=TRUE),0:1, type="n", xlab=xlab, ylab=ylab, ...)
+            lower <- 0
+            for (i in length(states):1) { # put the last state at the bottom
+                df2 <- df[df$state==states[i],]
+                if (length(lower)==1) lower <- rep(0,nrow(df2))
+                upper <- lower+df2[[which]]
+                graphics::polygon(c(df2$time,rev(df2$time)), c(lower,rev(upper)),
+                                  border=border[i], col=col[i])
+                lower <- upper
+            }
+            graphics::box()
+            invisible(out)
+        }
+        else stop('Unstacked plot not implemented in base graphics; use ggplot2=TRUE or lattice=TRUE')
+    }
+}
+
+plot(standardise(cr)) # ok (no legend)
+plot(standardise(cr), ggplot=TRUE) # ok (includes legend)
+plot(standardise(cr), lattice=TRUE) # ok (no legend)
+plot(cr, ggplot=TRUE) + facet_grid(~ rx) # ok
+
+plot(cr, index=1) # incorrect
+plot(cr, ggplot=TRUE, index=1) # incorrect
+plot(cr, lattice=TRUE, index=1) # incorrect
+plot(standardise(cr), ggplot=TRUE, stacked=FALSE) # incorrect: wrong CIs for standardised estimates
+plot(cr, ggplot=TRUE, stacked=FALSE) + facet_grid(~ rx) # incorrect
+
+
+as.data.frame.markov_sde <- function(x, row.names=NULL, ci=TRUE,
+                                      P.conf.type="logit", L.conf.type="log",
+                                      P.range=c(0,1), L.range=c(0,Inf),
+                                      ...) {
+    if (any(x$weights<0))
+        P.conf.type <- L.conf.type <- "plain"
+    .id. <- 1:nrow(x$newdata)
+    nStates <- nrow(x$trans)
+    state.names <- rownames(x$trans)
+    stateNames <- if (!is.null(rownames(x$trans))) rownames(x$trans) else 1:nrow(x$trans)
+    out <- expand.grid(state=stateNames, .id.=.id., time=x$times)
+    out <- cbind(x$newdata[out$.id.,],out)
+    names(out)[1:ncol(x$newdata)] <- colnames(x$newdata)
+    out$P <- as.vector(x$P)
+    out$P.se <- as.vector(x$P.se)
+    out <- out[order(out$.id.,out$state,out$time),]
+    out$.id. <- NULL
+    if (ci) {
+        tmp <- rstpm2:::surv.confint(out$P,out$P.se, conf.type=P.conf.type, min.value=P.range[1], max.value=P.range[2])
+        out$P.lower <- tmp$lower
+        out$P.upper <- tmp$upper
+    }
+    if (x$los) {
+        out$L <- as.vector(x$L)
+        out$L.se <- as.vector(x$L.se)
+        if (ci) {
+            tmp <- rstpm2:::surv.confint(out$L,out$L.se, conf.type=L.conf.type, min.value=L.range[1], max.value=L.range[2])
+            out$L.lower <- tmp$lower
+            out$L.upper <- tmp$upper
+        }
+    }
+    if(!is.null(row.names)) rownames(out) <- row.names
+    out
+}
+temp = as.data.frame(cr)
+head(temp)
+ggplot(temp,aes(x=time,y=P,fill=rx,ymin=P.lower,ymax=P.upper)) + geom_line() +
+    geom_ribbon(alpha=0.5) + facet_grid(state~rx) # ok
+rstpm2:::ggplot.markov_msm(temp) + facet_grid(~rx) # ok
+
+
+## Competing risks
+## Note: this shows how to adapt the markov_msm model for competing risks.
+competing_risks <- function(listOfModels, ...) {
+    nRisks = length(listOfModels)
+    transmat = matrix(NA,nRisks+1,nRisks+1)
+    transmat[1,1+(1:nRisks)] = 1:nRisks
+    rownames(transmat) <- colnames(transmat) <- c("Initial",names(listOfModels))
+    rstpm2::markov_msm(listOfModels, ..., trans = transmat)
+}
+## Note: The first argument for competing_risks is a list of models. Names from that list are
+## used for labelling the states. The other arguments are as per the markov_msm function,
+## except for the transition matrix, which is defined by the competing_risks function.
+recurrence = gsm(Surv(time,status)~factor(rx), data=survival::colon, subset=(etype==1), df=3)
+death = gsm(Surv(time,status)~factor(rx), data=survival::colon, subset=(etype==2), df=3)
+cr = competing_risks(list(Recurrence=recurrence,Death=death),
+                     newdata=data.frame(rx=levels(survival::colon$rx)),
+                     t = seq(0,2500, length=301))
+## Plot the probabilities for each state for three different treatment arms
+plot(cr, ggplot=TRUE) + facet_grid(~ rx)
+## And: differences in probabilities
+cr_diff = diff(subset(cr,rx=="Lev+5FU"),subset(cr,rx=="Obs"))
+plot(cr_diff, ggplot=TRUE, stacked=FALSE)
+
+
+## Example using Crowther and Lambert (2018)
+library(readstata13)
+library(transform.hazards)
+library(timereg)
+library(rstpm2) # standardise
+mex.1 <- read.dta13("https://fmwww.bc.edu/repec/bocode/m/multistate_example.dta")
+transmat <- rbind("Post-surgery"=c(NA,1,2), 
+                  "Relapsed"=c(NA,NA,3),
+                  "Died"=c(NA,NA,NA))
+colnames(transmat) <- rownames(transmat)
+mex.2 <- transform(mex.1,osi=(osi=="deceased")+0)
+levels(mex.2$size)[2] <- ">20-50 mm" # fix typo
+mex <- mstate::msprep(time=c(NA,"rf","os"),status=c(NA,"rfi","osi"),
+                      data=mex.2,trans=transmat,id="pid",
+                      keep=c("age","size","nodes","pr_1","hormon"))
+mex <- transform(mex,
+                 size2=(unclass(size)==2)+0, # avoids issues with TRUE/FALSE
+                 size3=(unclass(size)==3)+0,
+                 hormon=(hormon=="yes")+0,
+                 Tstart=Tstart/12,
+                 Tstop=Tstop/12)
+## Slow fitting...
+c.ar <- aalen(Surv(Tstart,Tstop,status) ~ const(age) + size2 + size3 + const(nodes) + pr_1 + const(hormon),
+              data = subset(mex, trans==1))
+c.ad <- aalen(Surv(Tstart, Tstop, status) ~ const(age) + const(size) + const(nodes) + const(pr_1) + const(hormon),
+              data = subset(mex, trans==2))
+c.rd <- aalen( Surv(Tstart,Tstop,status) ~ const(age) + const(size) + const(nodes) + pr_1 + const(hormon),
+              data=subset(mex, trans==3))
+##
+nd <- expand.grid(nodes=seq(0,20,10), size=levels(mex$size))
+nd <- transform(nd, age=54, pr_1=3, hormon=0, size2=(unclass(size)==2)+0, size3=(unclass(size)==3)+0)
+system.time(fit1 <- markov_sde(list(c.ar,c.ad,c.rd), trans=transmat, newdata=nd[c(1,2),], los=TRUE))
+system.time(fit0 <- markov_sde(list(c.ar,c.ad,c.rd), trans=transmat, newdata=nd[c(1,2),]))
+plot(fit1)
+plot(fit1, ggplot=TRUE)
+plot(fit1, lattice=TRUE, stacked=FALSE, which="L")
+## plot(fit1,which="L",xlim=NULL) # does this make sense?
+df1 <- as.data.frame(fit1) 
+fit2 <- standardise(fit1)
+plot(fit2,ggplot=TRUE)
+df2 <- as.data.frame(fit2)
+diff1 <- diff(fit1)
+plot(diff1)
+
+
 ## type="af"
 library(rstpm2)
 fit = gsm(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3)
