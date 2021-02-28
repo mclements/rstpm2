@@ -11,7 +11,7 @@ check: build
 	R-devel CMD check --as-cran rstpm2_`grep Version DESCRIPTION | cut -b 10-15`.tar.gz
 
 build:
-	R-devel CMD build --compact-vignettes .
+	R-devel CMD build --compact-vignettes=both .
 
 build-base:
 	R CMD build .
