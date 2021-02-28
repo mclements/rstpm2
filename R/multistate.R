@@ -1458,8 +1458,9 @@ predict.SplineFun <- function(object, newdata, type=c("hazard","gradh"), tmvar="
 vcov.SplineFun <- function(object) vcov(object$object)
 coef.SplineFun <- function(object) coef(object$object)
 
-markov_msm3 <- function(models, trans, newdata, init=NULL, nLebesgue=1e4+1, los=FALSE, nOut=300,
-                        weights=0) {
+## Non-parametric baseline: SDE approach due to Ryalen and colleagues
+markov_sde <- function(models, trans, newdata, init=NULL, nLebesgue=1e4+1, los=FALSE, nOut=300,
+                        weights=1) {
     transfun <- function(tmat) {
         indices <- sort(as.vector(tmat)); indices <- setdiff(indices,NA)
         nStates <- nrow(tmat)
@@ -1495,14 +1496,17 @@ markov_msm3 <- function(models, trans, newdata, init=NULL, nLebesgue=1e4+1, los=
     hazMatrix <- do.call(rbind,hazList)
     if (length(weights)==1 && weights != 0)
         weights <- rep(weights,nrow(newdata))/(weights*nrow(newdata))
+    vcov <- matrix(1,1,1)
     if (!los) {
-        out <- .Call("plugin_calc_P_by", n, nrow(newdata), hazMatrix, init, transfun(trans), weights,
-                    PACKAGE="rstpm2")
+        out <- .Call("plugin_P_by", n, nrow(newdata), hazMatrix, init, transfun(trans), weights,
+                     vcov,
+                     PACKAGE="rstpm2")
         out$P <- out$X
         out$P.se <- sqrt(out$variance)
     } else {
         out <- .Call("plugin_P_L_by",
                      n, nrow(newdata), hazMatrix, init, transfun(trans), times, weights, nOut,
+                     vcov, nLebesgue,
                      PACKAGE="rstpm2")
         PIndex <- 1:(nrow(out$X)/2)
         tr <- function(x) array(as.vector(x), dim=c(nStates,nrow(newdata),ncol(x)))
@@ -1518,9 +1522,10 @@ markov_msm3 <- function(models, trans, newdata, init=NULL, nLebesgue=1e4+1, los=
     out$los <- los
     out$init <- init
     out$weights <- weights
-    class(out) <- "markov_msm3"
+    class(out) <- "markov_sde"
     if (!all(weights==0)) {
         stand <- out # copy! This may be a bad idea...
+        stand$newdata <- newdata
         if (!los) {
             stand$P <- stand$Y
             stand$P.se <- sqrt(stand$varY)
@@ -1535,8 +1540,91 @@ markov_msm3 <- function(models, trans, newdata, init=NULL, nLebesgue=1e4+1, los=
         stand$X <- stand$Y
         stand$variance <- stand$varY
         out$X <- out$variance <- out$Y <- out$varY <- stand$Y <- stand$varY <- NULL
-        stand$newdata <- stand$newdata[1,]
+        stand$newdata <- stand$newdata[1,,drop=FALSE]
+        class(stand) <- "markov_sde"
         out$stand <- stand
     }
+    out
+}
+standardise.markov_sde <- function(object) {
+    object$stand
+}
+
+plot.markov_sde <- function(x, y, stacked=TRUE, which=c("P","L"), index=NULL,
+                            xlab="Time", ylab=NULL, col=2:6, border=col,
+                            ggplot2=FALSE, lattice=FALSE, alpha=0.2,
+                            strata=NULL,
+                            ...) {
+    stopifnot(inherits(x,"markov_sde"))
+    which <- match.arg(which)
+    if (!missing(y)) warning("y argument is ignored")
+    ## ylab defaults
+    if (is.null(ylab))
+        ylab <- if(which=='P') "Probability" else "Length of stay"
+    if (ggplot2)
+        ggplot.markov_msm(x, which=which, stacked=stacked, xlab=xlab, ylab=ylab,
+                          alpha=alpha, ...)
+    else if (lattice)
+        xyplot.markov_msm(x, which=which, stacked=stacked, xlab=xlab, ylab=ylab,
+                          col=col, border=border, strata=strata, ...)
+    else {
+        if (is.null(index) && nrow(x$newdata)>1) {
+            warning("More than one set of covariates; defaults to weighted estimator")
+            x <- x$stand # Warning: replacement
+            index <- 1
+        }
+        if (is.null(index)) index <- 1
+        df <- merge(x$newdata[index,,drop=FALSE], as.data.frame(x))
+        states <- unique(df$state)
+        if (stacked) {
+            out <- graphics::plot(range(x$times, na.rm=TRUE),0:1, type="n", xlab=xlab, ylab=ylab, ...)
+            lower <- 0
+            for (i in length(states):1) { # put the last state at the bottom
+                df2 <- df[df$state==states[i],]
+                if (length(lower)==1) lower <- rep(0,nrow(df2))
+                upper <- lower+df2[[which]]
+                graphics::polygon(c(df2$time,rev(df2$time)), c(lower,rev(upper)),
+                                  border=border[i], col=col[i])
+                lower <- upper
+            }
+            graphics::box()
+            invisible(out)
+        }
+        else stop('Unstacked plot not implemented in base graphics; use ggplot2=TRUE or lattice=TRUE')
+    }
+}
+
+as.data.frame.markov_sde <- function(x, row.names=NULL, ci=TRUE,
+                                      P.conf.type="logit", L.conf.type="log",
+                                      P.range=c(0,1), L.range=c(0,Inf),
+                                      ...) {
+    if (any(x$weights<0))
+        P.conf.type <- L.conf.type <- "plain"
+    .id. <- 1:nrow(x$newdata)
+    nStates <- nrow(x$trans)
+    state.names <- rownames(x$trans)
+    stateNames <- if (!is.null(rownames(x$trans))) rownames(x$trans) else 1:nrow(x$trans)
+    out <- expand.grid(state=stateNames, .id.=.id., time=x$times)
+    out <- cbind(x$newdata[out$.id.,],out)
+    names(out)[1:ncol(x$newdata)] <- colnames(x$newdata)
+    out$P <- as.vector(x$P)
+    out$P.se <- as.vector(x$P.se)
+    out <- out[order(out$.id.,out$state,out$time),]
+    out$.id. <- NULL
+    if (ci) {
+        tmp <- surv.confint(out$P,out$P.se, conf.type=P.conf.type, min.value=P.range[1], max.value=P.range[2])
+        out$P.lower <- tmp$lower
+        out$P.upper <- tmp$upper
+    }
+    if (x$los) {
+        out$L <- as.vector(x$L)
+        out$L.se <- as.vector(x$L.se)
+        if (ci) {
+            tmp <- surv.confint(out$L,out$L.se, conf.type=L.conf.type, min.value=L.range[1], max.value=L.range[2])
+            out$L.lower <- tmp$lower
+            out$L.upper <- tmp$upper
+        }
+    }
+    if(!is.null(row.names)) rownames(out) <- row.names
     out
 }

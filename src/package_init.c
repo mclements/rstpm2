@@ -33,7 +33,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"multistate_ddt",     (DL_FUNC) &multistate_ddt,     4},
     {"runMarkovODE",       (DL_FUNC) &runMarkovODE,       9},
     {"plugin_P_by",        (DL_FUNC) &plugin_P_by,        7},
-    {"P_L_by",             (DL_FUNC) &plugin_P_L_by,     10},
+    {"plugin_P_L_by",      (DL_FUNC) &plugin_P_L_by,     10},
     {NULL, NULL, 0}
 };
 
