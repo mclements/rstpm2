@@ -18,6 +18,19 @@
 ##   require(bbmle)
 ## }
 
+set.seed(12345)
+n = 1000
+x = factor(rbinom(n,1,0.5))
+y = rnorm(n, x==1)
+fit = lm(y~x)
+predict(fit, newdata=data.frame(x=0)) # fails
+predict(fit, newdata=data.frame(x=1)) # fails
+predict(fit, newdata=data.frame(x=factor(0:1))) # okay
+predict(fit, newdata=data.frame(x=factor(0,0:1))) # okay
+
+
+
+
 library(rstpm2)
 library(survival)
 library(timereg)
