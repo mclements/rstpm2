@@ -2733,6 +2733,23 @@ namespace rstpm2 {
     }
   }
 
+  double OmegaCoef_helper(int q, int m, double alpha, Rcpp::NumericMatrix &qm) {
+    if (m==0) return(1.0);
+    if (qm(q,m)!=0.0) return(qm(q,m));
+    if (m==q-1) qm(q,m) = std::pow(alpha,1.0-q)*R::gammafn(q-alpha)/R::gammafn(1-alpha);
+    else qm(q,m) = OmegaCoef_helper(q-1,m,alpha,qm) + OmegaCoef_helper(q-1,m-1,alpha,qm)*((q-1)/alpha-(q-m));
+    return(qm(q,m));
+  }
+  RcppExport SEXP OmegaCoef(SEXP _q, SEXP _alpha) {
+    int q = as<int>(_q);
+    double alpha = as<double>(_alpha);
+    Rcpp::NumericMatrix qm(q+1,q);
+    Rcpp::NumericVector out(q);
+    for (int i=0; i<=q; i++) for (int j=0; j<=(q-1); j++) qm(i,j)=0.0;
+    for (int m=0; m<q; m++) out(m) = OmegaCoef_helper(q,m,alpha,qm);
+    return wrap(out);
+  }
+
   // Proof of concept for a Weibull cure model
   struct CureModel {
     int n0, n1, n2;
