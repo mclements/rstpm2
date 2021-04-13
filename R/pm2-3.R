@@ -1497,6 +1497,10 @@ pstpm2 <- function(formula, data, weights=NULL, subset=NULL, coxph.strata=NULL, 
     out
 }
 
+setMethod("update", "stpm2", function(object, ...) {
+    object@call = object@Call
+    update.default(object, ...)
+})
 setMethod("show", "stpm2",
           function(object) {
               object@call.orig <- object@Call
