@@ -12,7 +12,14 @@ context("stpm2")
 ##
 test_that("base", {
     fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)
+    expect_eps(coef(fit)[1], -7.256667, 1e-5)
     expect_eps(coef(fit)[2], -0.361403, 1e-5)
+})
+test_that("offset", {
+    brcancer2 = transform(brcancer, o=1)
+    fit <- stpm2(Surv(rectime,censrec==1)~hormon+offset(o),data=brcancer2)
+    expect_eps(coef(fit)[1], -6.6465454, 1e-5)
+    expect_eps(coef(fit)[2], -0.3601438, 1e-5)
 })
 test_that("NelderMead", {
     fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,

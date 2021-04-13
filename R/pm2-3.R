@@ -788,7 +788,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     lm.formula <- formula(full.formula)
     base.formula <- formula
     ## Specials:
-    specials.names <- c("cluster","bhazard")
+    specials.names <- c("cluster","bhazard","offset")
     specials <- attr(terms.formula(formula, specials.names), "specials")
     spcall <- mf
     spcall[[1]] <- quote(stats::model.frame)
@@ -800,21 +800,26 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         if (length(cluster.index)>0) {
             cluster <- mf2[, cluster.index]
             frailty = !is.null(cluster) && !robust && !copula
-            base.formula <- formula(stats::drop.terms(terms(mf2), cluster.index - 1, keep.response=TRUE))
             cluster.index2 <- attr(terms.formula(full.formula, "cluster"), "specials")$cluster
+            base.formula <- formula(stats::drop.terms(terms(mf2), cluster.index - 1, keep.response=TRUE))
             lm.formula <- formula(stats::drop.terms(terms(full.formula), cluster.index2 - 1))
+        } else {
+            cluster.index2 = NULL
         }
         if (length(bhazard.index)>0) {
             bhazard <- mf2[, bhazard.index]
-            base.formula <- formula(stats::drop.terms(terms(mf2), bhazard.index - 1, keep.response=TRUE))
             bhazard.index2 <- attr(terms.formula(full.formula, "bhazard"), "specials")$bhazard
+            base.formula <- formula(stats::drop.terms(terms(mf2), bhazard.index - 1, keep.response=TRUE))
             lm.formula <- formula(stats::drop.terms(terms(full.formula), bhazard.index2 - 1))
+        } else {
+            bhazard.index2 = NULL
         }
         if (length(cluster.index)>0 && length(bhazard.index)>0) {
-            base.formula <- formula(stats::drop.terms(terms(mf2), c(cluster.index,bhazard.index) - 1,
-                                               keep.response=TRUE))
+            base.formula <- formula(stats::drop.terms(terms(mf2),
+                                                      c(cluster.index,bhazard.index) - 1,
+                                                      keep.response=TRUE))
             lm.formula <- formula(stats::drop.terms(terms(full.formula),
-                                             c(cluster.index2,bhazard.index2) - 1))
+                                                    c(cluster.index2,bhazard.index2) - 1))
         }
         ## rm(mf2,spcall)
     }
