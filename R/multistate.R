@@ -501,14 +501,16 @@ predict.survPenWrap <- function(object, newdata, type=NULL, min.eps=1e-6, ...) {
 }
 predict.glm <- function (object, newdata=NULL, type=NULL, ...) {
     if (is.null(type)) NextMethod("predict", object)
-    if(type=="gradh" && object$family$link != "log")
-        stop("Currently only implemented for a log link")
+    if(type=="gradh" && !(object$family$link %in% c("identity","log")))
+        stop("Currently only implemented for log and identity links")
     ## stopifnot() # Poisson family with log link?
     ## assumes response is a rate
     if(!is.na(pmatch(type,"hazard")))
         stats::predict.glm(object, newdata=newdata, type="response", ...)
-    else if (type=="gradh")
+    else if (type=="gradh" && object$family$link == "log")
         stats::predict.glm(object, newdata=newdata, type="response", ...) *
+            lpmatrix.lm(object, newdata=newdata)
+    else if (type=="gradh" && object$family$link == "identity")
             lpmatrix.lm(object, newdata=newdata)
     else NextMethod("predict", object)
 }
