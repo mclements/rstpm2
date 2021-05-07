@@ -18,6 +18,40 @@
 ##   require(bbmle)
 ## }
 
+## Constrained MLE
+
+
+
+## relative survival and LEL
+library(rstpm2)
+library(biostat3)
+head(melanoma)
+head(popmort)
+merged = merge(transform(melanoma, ye = floor(yexit), se=ifelse(sex=="Male",1,2), event=status != "Alive"),
+               popmort, by.x=c("age","ye","se"), by.y=c("_age","_year","sex"), all.x=TRUE) 
+merged = subset(merged, sex="Female")
+## sum(is.na(merged$rate))
+model1 = stpm2(Surv(surv_mm,event)~bhazard(rate),data=merged,df=3) # only intercept - was buggy
+## model2 = stpm2(Surv(surv_mm,event)~age+bhazard(rate)+cluster(age),data=merged,df=3)
+## model1 = stpm2(Surv(surv_mm,event)~1,data=merged,df=3,bhazard=merged$rate)
+
+## mean(subset(merged,event)$yexit)
+## We need event counts and person-time in the popmort data-frame
+library(dplyr)
+temp = cbind(filter(popmort,sex==1) %>% mutate(males=rate,rate=NULL,sex=NULL),
+             data.frame(females=filter(popmort,sex==2)$rate))
+plot(males~females,temp,log="xy")
+abline(0,1,col=2)
+
+##
+d = data.frame(y=c(1000,2000),sex=0:1,pt=1e5) # some data
+fit = glm(y~sex+offset(log(pt)),data=d, family=poisson) # Poisson regression
+pred = predict(fit,newdata=transform(d,pt=1),type="link",se.fit=TRUE)
+with(pred,
+     exp(data.frame(Estimate=fit,Lower=fit-1.96*se.fit,Upper=fit+1-96*se.fit)))
+library(rstpm2)
+exp(confint(predictnl(fit,predict,newdata=transform(d,pt=1),type="response")))
+
 set.seed(12345)
 n = 1000
 x = factor(rbinom(n,1,0.5))
@@ -28,7 +62,121 @@ predict(fit, newdata=data.frame(x=1)) # fails
 predict(fit, newdata=data.frame(x=factor(0:1))) # okay
 predict(fit, newdata=data.frame(x=factor(0,0:1))) # okay
 
+##
+library(expm)
+##
+K = 2
+Z = c(1,0,0)
+Y = c(1000,2000); N = 1e4; Sigma=diag(Y/N^2)
+lambda=Y/N
+##
+alpha=cbind(c(-sum(lambda),lambda),matrix(0,K+1,K))
+expm(alpha*10) # ok
+##
+Z = c(1,rep(0,(1+2)*3-1))
+alpha=cbind(c(-sum(lambda),lambda,-1,-1,1,0,0,1),matrix(0,length(Z),length(Z)-1))
+expm(alpha)
+m=matrix(expm(alpha)[4:9,1],2,3)
+t(m) %*% Sigma %*% m # includes covariance terms
+expm(alpha*10)
+m=matrix(expm(alpha*10)[4:9,1],2,3)
+sqrt(diag(t(m) %*% Sigma %*% m)) # includes covariance terms
 
+
+## This approach works!
+## We can add further differential equations for the covariance matrix for P (for a time-dependent covariance matrix for the parameters)
+library(deSolve)
+func <- function(t, y, parms, ...) {
+    ## browser()
+    index = findInterval(t,parms$t)
+    lambda = parms$lambda[index,] # length=K
+    K = length(lambda)
+    q = rbind(c(-sum(lambda),lambda),matrix(0,K,K+1)) # length=K+1
+    Qm = lapply(1:K,function(k) {
+        m = matrix(0,K+1,K+1)
+        m[1,1] = -1
+        m[1,k+1] = 1
+        m
+    })
+    Sigma = parms$Sigma[[index]] # dim=K^2
+    P = y[1:(K+1)] # K+1 rowvec
+    Pm = matrix(y[(2+K):(1+K+K*(K+1))],K+1,K) # (K+1)*K
+    dPdt = P %*% q
+    dPmdt = sapply(1:K, function(k) Pm[,k] %*% q + P %*% Qm[[k]]) # (K+1)*K
+    dphidt = dPmdt %*% (Sigma %*% t(Pm)) + Pm %*% (Sigma %*% t(dPmdt)) # (K+1)^2
+    list(c(dPdt, dPmdt, dphidt)) # length=1+K+(K+1)*K+(K+1)^2
+}
+Y = c(1000,2000); N = 1e4; Sigma=diag(Y/N^2); K=2
+lambda = Y/N
+y = c(1,rep(0,K+K*(K+1)+(K+1)^2))
+parms = list(t=c(0,Inf), lambda=rbind(lambda), Sigma=list(Sigma))
+ode1 = ode(y,seq(0,10),func,parms)
+ode1[11,2:4]
+sqrt(diag(matrix(ode1[11,11:19],3,3)))
+ode1
+
+## Using markov_msm (with an *identity* link for comparability)
+fit1=glm(rate~1, data=data.frame(rate=0.1,N=1e4), family=poisson(link="identity"), weight=N)
+fit2=glm(rate~1, data=data.frame(rate=0.2,N=1e4), family=poisson(link="identity"), weight=N)
+test=markov_msm(list(fit1,fit2),
+                trans=matrix(c(NA,1,2,NA,NA,NA,NA,NA,NA),3,3,TRUE), t=0:10, newdata=data.frame(N=1),
+                tmvar="t")
+print(test,se=TRUE)
+test$Pu
+
+## fit1=glm(rate~factor(findInterval(t,0:2))-1, data=data.frame(t=0:2,rate=c(0.1,0.2,0.3),N=1e4), family=poisson(link="identity"), weight=N)
+
+fit1=glm(Y~offset(log(N)), data=data.frame(Y=1000,N=1e4), family=poisson)
+fit2=glm(Y~offset(log(N)), data=data.frame(Y=2000,N=1e4), family=poisson)
+test=markov_msm(list(fit1,fit2),
+                trans=matrix(c(NA,1,2,NA,NA,NA,NA,NA,NA),3,3,TRUE), t=0:10, newdata=data.frame(N=1),
+                tmvar="t")
+print(test,se=TRUE)
+
+
+## Inquiry
+library(survival)
+library(rstpm2)
+m <- rstpm2::stpm2(Surv(time, status) ~ sex, data = lung)
+plot(m, newdata=data.frame(sex=2))
+predict(m, newdata = data.frame(sex = 2, time = 100), type = "rmst", se.fit=TRUE)
+## plot(m, newdata=data.frame(sex=2), type="rmst") # fails
+## predict(m, newdata = data.frame(sex = 1:2, time = 100), type = "rmst", se.fit=TRUE) # fails
+
+## Inquiry
+## Cross-validation with bias correction (Davison and Hinkley, 1997, p. 295)
+crossValidation = function(object,data,prediction,K = 10,correction=TRUE) {
+    N = nrow(data)
+    ndex = 1:N
+    part = as.factor(sample(1:K, N, replace = TRUE))
+    folds = split(ndex, part)
+    p = sapply(folds, length)/N
+    sum(sapply(1:K, function(k) {
+        training = data[unlist(folds[-k]), ]
+        validation = data[folds[[k]], ]
+        objectStar = update(object,data=training)
+        prediction(objectStar,validation) - p[k]*prediction(objectStar,data)*correction
+    })) + prediction(object,data)*correction
+}
+library(rstpm2)
+setMethod("update", "stpm2", function(object, ...) { # I have added this to rstpm2 on GitHub
+    object@call = object@Call
+    update.default(object, ...)
+})
+fit = gsm(Surv(rectime,censrec==1)~hormon+x1+x2+x3,data=brcancer,df=3)
+set.seed(420)
+## Currently, there is no simpler way to predict out-of-sample -2*log-likelihood for an stpm2 model
+predictDeviance = function(eventVar) function(object,newdata) {
+    events = newdata[[eventVar]]>0
+    -2*(sum(predict(object,newdata=newdata[events,,drop=FALSE],
+                    type="loghazard"))-
+        sum(predict(object,newdata=newdata,type="cumhaz")))
+}
+crossValidation(fit, brcancer,predictDeviance("censrec"))
+set.seed(420)
+crossValidation(fit, brcancer,predictDeviance("censrec"),correction=FALSE)
+AIC(fit)
+BIC(fit)
 
 
 library(rstpm2)
