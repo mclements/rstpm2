@@ -809,15 +809,19 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         if (length(bhazard.index)>0) {
             bhazard <- mf2[, bhazard.index]
             bhazard.index2 <- attr(terms.formula(full.formula, "bhazard"), "specials")$bhazard
-            base.formula <- formula(stats::drop.terms(terms(mf2), bhazard.index - 1, keep.response=TRUE))
+            termobj = terms(mf2)
+            dropped.terms = if(length(attr(termobj,"term.labels"))==1) reformulate("1", response=termobj[[2L]], intercept=TRUE, env=environment(termobj)) else stats::drop.terms(terms(mf2), bhazard.index - 1, keep.response=TRUE)
+            base.formula <- formula(dropped.terms)
             lm.formula <- formula(stats::drop.terms(terms(full.formula), bhazard.index2 - 1))
         } else {
             bhazard.index2 = NULL
         }
         if (length(cluster.index)>0 && length(bhazard.index)>0) {
-            base.formula <- formula(stats::drop.terms(terms(mf2),
-                                                      c(cluster.index,bhazard.index) - 1,
-                                                      keep.response=TRUE))
+            dropped.terms = if(length(attr(termobj,"term.labels"))==2) reformulate("1", response=termobj[[2L]], intercept=TRUE, env=environment(termobj)) else stats::drop.terms(terms(mf2), c(cluster.index,bhazard.index) - 1, keep.response=TRUE)
+            base.formula <- formula(dropped.terms)
+            ## base.formula <- formula(stats::drop.terms(terms(mf2),
+            ##                                           c(cluster.index,bhazard.index) - 1,
+            ##                                           keep.response=TRUE))
             lm.formula <- formula(stats::drop.terms(terms(full.formula),
                                                     c(cluster.index2,bhazard.index2) - 1))
         }
