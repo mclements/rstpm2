@@ -2464,6 +2464,16 @@ eform.stpm2 <- function (object, parm, level = 0.95, method = c("Profile","Delta
               val[parm, ]
           }
 setMethod("eform", signature(object="stpm2"), eform.stpm2)
+eform.default <- function(object, parm, level = 0.95, method=c("Delta","Profile"), name="exp(beta)", ...) {
+  method <- match.arg(method)
+  if (missing(parm))
+      parm <- TRUE
+  if (method == "Profile") class(object) <- c(class(object),"glm")
+  estfun <- switch(method, Profile = confint, Delta = stats::confint.default)
+  val <- exp(cbind(coef = coef(object), estfun(object, level = level)))
+  colnames(val) <- c(name,colnames(val)[-1])
+  val[parm, ]
+}
 
 derivativeDesign <- 
 function (functn, lower = -1, upper = 1, rule = NULL,

@@ -1,6 +1,7 @@
 \name{eform.stpm2}
 \alias{eform}
 \alias{eform.stpm2}
+\alias{eform.default}
 \title{
 S3 method for to provide exponentiated coefficents with confidence intervals. 
 }
@@ -10,6 +11,8 @@ S3 method for to provide exponentiated coefficents with confidence intervals.
 \usage{
 eform(object, ...)
 \method{eform}{stpm2}(object, parm, level = 0.95, method = c("Profile","Delta"), name = "exp(beta)")
+\method{eform}{default}(object, parm, level = 0.95, method =
+c("Delta","Profile"), name = "exp(beta)", ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -23,7 +26,7 @@ not currently used
 significance level for the confidence interval
 }
   \item{method}{
-Currently only the profile method is available.
+method for confidence interval estimation
 }
   \item{name}{
 name for the fitted value
