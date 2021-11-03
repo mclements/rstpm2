@@ -1,3 +1,4 @@
+#include <cfloat>
 #include <Rcpp.h>
 
 namespace rstpm2 {
