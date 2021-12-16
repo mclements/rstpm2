@@ -684,7 +684,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
     counting <- attr(eventInstance,"type") == "counting"
     interval <- attr(eventInstance,"type") == "interval"
     timeExpr <- lhs(formula)[[if (delayed && !interval) 3 else 2]] # expression
-    eventExpr <- if (interval) lhs(formula)[[4]] else lhs(formula)[[length(lhs(formula))]]
+    eventExpr <- if (interval) lhs(formula)[[4]] else lhs(formula)[[if (delayed) 4 else 3]]
     if (interval)
         time2Expr <- lhs(formula)[[3]]
     if (timeVar == "")
