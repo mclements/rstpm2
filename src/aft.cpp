@@ -308,6 +308,13 @@ namespace rstpm2 {
       // fix bounds on etaD
       pen += dot(min(1/time-etaD,eps), min(1/time-etaD,eps));
       etaD = 1/time - max(1/time-etaD, eps);
+      // add penalty for monotone splines
+      vec betasStar = s.q_matrix.t() * betas;
+      for (size_t i=1; i<betasStar.size(); i++) {
+      	double delta = betasStar(i)-betasStar(i-1);
+      	if (delta<0.0)
+      	  pen += delta*delta;
+      }
       vec logh = etas + log(etaDs) + log(1/time -etaD);
       vec H = exp(etas);
       double f = pen - (dot(logh,event) - sum(H));
@@ -322,6 +329,17 @@ namespace rstpm2 {
 	f -= sum(H0);
       }
       return f;
+    }
+    vec gradientPenalty(mat Q, vec beta) { // Q: (nbeta+2) x nbeta
+      size_t n = Q.n_rows;
+      mat D = join_rows(zeros(n-1,1),eye(n-1,n-1)) - join_rows(eye(n-1,n-1),zeros(n-1,1)); // (nbeta+1) x (nbeta+2)
+      vec delta = D * Q * beta; // nbeta+1
+      mat M = Q.t() * D.row(0).t() * D.row(0) * Q * (delta(0)<0.0); // nbeta x nbeta
+      for(size_t j=1; j<delta.size(); j++) {
+	if (delta(j)<0.0)
+	  M += Q.t() * D.row(j).t() * D.row(j) * Q;
+      }
+      return 2*M*beta;
     }
     vec gradient(vec betafull)
     {
@@ -356,6 +374,7 @@ namespace rstpm2 {
       mat dloghdbeta = -rmult(X,etaDs % (1-pindexs) % (1-pindex)) - rmult(X,etaDDs/etaDs % (1-pindexs) % (1-pindex)) - rmult(XD, (1-pindexs) % (1-pindex)/(1/time-etaD));
       mat gradi = join_rows(-rmult(dloghdbeta,event)+dHdbeta, -rmult(dloghdbetas,event)+dHdbetas) + rmult(pgrad,pindex) + rmult(pgrads,pindexs);
       vec out = sum(gradi,0).t();
+      out += join_cols(beta*0.0, gradientPenalty(s.q_matrix.t(), betas));
       if (delayed) {
 	vec eta0 = X0 * beta;
 	vec etaD0 = XD0 * beta;
