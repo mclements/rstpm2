@@ -526,7 +526,6 @@ RcppExport SEXP runMarkovODE(SEXP _y0, SEXP _times, SEXP _tlam, SEXP _lam, SEXP 
 			   Named("gradL")=report.gradL));
 }
 
-
 RcppExport SEXP multistate_ddt(SEXP P_, SEXP Pu_, SEXP Q_, SEXP Qu_) {
   using namespace arma;
   // P(nstates,nobs), Pu(nstates,ncoef,nobs), Q(nstates,nstates,nobs), Qu(nstates*nstates,ncoef,nobs)
@@ -562,4 +561,40 @@ RcppExport SEXP multistate_ddt(SEXP P_, SEXP Pu_, SEXP Q_, SEXP Qu_) {
     }
   }
   return Rcpp::wrap(Rcpp::List::create(dPdt,dPudt));
+}
+
+
+class ExpM {
+public:
+  arma::mat Qmat;
+  ExpM(arma::mat _Qmat) : Qmat(_Qmat) { }
+  void operator() ( const state_type &x , state_type &dxdt , const double t )
+  {
+    dxdt = (x.t() * Qmat).t();
+  }
+};
+RcppExport SEXP runExpM(SEXP _y0, SEXP _times, SEXP _Qmat) {
+  using namespace Rcpp;
+  arma::vec y0 = as<arma::vec>(_y0);
+  arma::vec times = as<arma::vec>(_times);
+  arma::mat Qmat = as<arma::mat>(_Qmat);
+  ExpM model(Qmat);
+  using namespace boost::numeric::odeint;
+  vector_state_type states;
+  // times, outtimes and vtimes all have the same data
+  vector_times outtimes; // not strictly needed - we could use push_back_state()
+  vector_times vtimes = arma::conv_to< vector_times >::from(times);
+  BOOST_STATIC_ASSERT( is_resizeable<state_type>::value == true );
+  integrate_times(make_dense_output( 1.0e-10 , 1.0e-10 , runge_kutta_dopri5< state_type >() ),
+		  model, y0,
+		  vtimes.begin(),
+		  vtimes.end(),
+		  1.0,
+		  push_back_state_and_time(states, outtimes));
+  size_t nx = states[0].size(), nTimes = times.size();
+  // combine the results
+  arma::mat combined(nTimes,nx);
+  for (size_t i=0; i<nTimes; i++)
+    combined(arma::span(i,i),arma::span(0,nx-1)) = states[i].t();
+  return wrap(combined);
 }

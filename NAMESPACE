@@ -6,7 +6,7 @@ export(stpm2, pstpm2, aft, gsm,
        cox.tvc, # experimental --- don't export?
        markov_msm, ratio_markov_msm,
        zeroModel, hrModel, aftModel, addModel, # stratifiedModel,
-       ## markov_sde,
+       markov_sde,
        hazFun, splineFun,
        standardise,
        incrVar, nsx, nsxD, "coef<-",
