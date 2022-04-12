@@ -14,8 +14,8 @@ Authors@R: c(person("Mark", "Clements", role = c("aut", "cre"),
 	      person("Patrick","Alken", role="cph"),
 	      person("Simon","Wood", role="cph"),
 	      person("Rhys","Ulerich", role="cph"))
-Version: 1.5.4
-Date: 2021-11-03
+Version: 1.5.5
+Date: 2022-04-12
 Depends: R (>= 3.0.2), methods, survival, splines
 Imports: graphics, Rcpp (>= 0.10.2), stats, mgcv, bbmle (>= 1.0.20), fastGHQuad,
   deSolve, utils, parallel
