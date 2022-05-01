@@ -850,7 +850,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                       character=data[[bhazard]])
     ##
     subset.expr <- substitute(subset)
-    if(class(subset.expr)=="NULL") subset.expr <- TRUE
+    if(inherits(subset.expr,"NULL")) subset.expr <- TRUE
     .include <- complete.cases(model.matrix(formula, data)) &
         !is.na(eval(eventExpr,data,parent.frame())) &
         eval(subset.expr,data,parent.frame())

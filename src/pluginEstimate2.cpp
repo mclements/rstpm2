@@ -309,6 +309,10 @@ pluginEstimateCts(int n, mat hazMatrix, std::function<mat(vec)> f, std::function
   mat variance = zeros(V0.n_rows, numIncrements);
   mat Y = zeros(1,1); // default if W is not specified
   mat varY = zeros(1,1); // default if W is not specified
+  if (W.n_rows == X0.n_elem) {
+    Y = zeros(W.n_cols,numIncrements);
+    varY = zeros(W.n_cols,numIncrements);
+  }
   vec Xn = X0;
   mat Vn = V0;
   cube gradf0 = gradf(X0); // for dimensions

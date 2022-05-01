@@ -1548,8 +1548,8 @@ markov_sde <- function(models, trans, newdata, init=NULL, nLebesgue=1e4+1, los=F
     }
     out
 }
-standardise.markov_sde <- function(object) {
-    object$stand
+standardise.markov_sde <- function(x, ...) {
+    x$stand
 }
 
 plot.markov_sde <- function(x, y, stacked=TRUE, which=c("P","L"), index=NULL,
@@ -1596,12 +1596,14 @@ plot.markov_sde <- function(x, y, stacked=TRUE, which=c("P","L"), index=NULL,
     }
 }
 
-as.data.frame.markov_sde <- function(x, row.names=NULL, ci=TRUE,
+as.data.frame.markov_sde <- function(x, row.names=NULL, optional=NULL, ci=TRUE,
                                       P.conf.type="logit", L.conf.type="log",
                                       P.range=c(0,1), L.range=c(0,Inf),
                                       ...) {
-    if (any(x$weights<0))
+    if (any(x$weights<0)) {
         P.conf.type <- L.conf.type <- "plain"
+        P.range <- L.range <- c(-Inf,Inf)
+    }
     .id. <- 1:nrow(x$newdata)
     nStates <- nrow(x$trans)
     state.names <- rownames(x$trans)
@@ -1611,8 +1613,6 @@ as.data.frame.markov_sde <- function(x, row.names=NULL, ci=TRUE,
     names(out)[1:ncol(x$newdata)] <- colnames(x$newdata)
     out$P <- as.vector(x$P)
     out$P.se <- as.vector(x$P.se)
-    out <- out[order(out$.id.,out$state,out$time),]
-    out$.id. <- NULL
     if (ci) {
         tmp <- surv.confint(out$P,out$P.se, conf.type=P.conf.type, min.value=P.range[1], max.value=P.range[2])
         out$P.lower <- tmp$lower
@@ -1627,6 +1627,8 @@ as.data.frame.markov_sde <- function(x, row.names=NULL, ci=TRUE,
             out$L.upper <- tmp$upper
         }
     }
+    out <- out[order(out$.id.,out$state,out$time),]
+    out$.id. <- NULL
     if(!is.null(row.names)) rownames(out) <- row.names
     out
 }
