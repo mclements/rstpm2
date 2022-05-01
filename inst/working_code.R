@@ -18,6 +18,124 @@
 ##   require(bbmle)
 ## }
 
+
+
+## solve A x = b
+set.seed(12345)
+A = matrix(rnorm(18),3,byrow=TRUE)
+b = c(0,0,1)
+x = qr.solve(A,b) # under-determined system
+drop(A %*% x - b) # this is a solution -- noice!
+qmat = qr.Q(qr(t(A)), complete=TRUE)[, -(1:3), drop=FALSE]
+A %*% qmat %*% rnorm(3)  # should be close to zero...
+A %*% qmat
+
+library(rstpm2)
+library(splines)
+print(ns1 <- nsx(1:10,df=4,intercept=TRUE))
+## check how to calculate q.const
+Bstar <- splineDesign(sort(c(rep(1,4),attr(ns1,"knots"),rep(10,4))),
+                      x=c(1,10),derivs=c(2,2))
+qr.Q(qr(t(Bstar)), complete=TRUE)[,-(1:2), drop=FALSE] - attr(ns1, "q.const") # OK
+## Now, solve: Bstar x = c(0,0,1)
+Bstar <- splineDesign(sort(c(rep(1,4),attr(ns1,"knots"),rep(10,4))),
+                      x=c(1,10,10),derivs=c(2,2,1))
+b = c(0,0,1)
+x = qr.solve(Bstar,b) # magic sauce
+drop(Bstar %*% x) - b # OK
+qmat = qr.Q(qr(t(Bstar)), complete=TRUE)[,-(1:3), drop=FALSE]
+theta = rnorm(3)
+drop(Bstar %*% (drop(qmat %*% theta) + x)) - b # OK
+Bstar %*% qmat %*% theta + Bstar %*% x - b # OK
+## transformation: theta -> B %*% (drop(qmat %*% theta) + x) = B %*% qmat %*% theta + B %*% x
+## nsx(..., derivs, target=rep(0,length(derivs))) for target=b
+## returns an attribute for offset=x
+## For fixed design matrix, we get N = B %*% qmat and C = B %*% x, so that theta -> N %*% theta + C
+## How will this affect the linear predictor?
+## Rather than N(t)^T theta, we will have N(t)^T theta + C
+## For the derivative, we get N' = B' %*% qmat and C' = B' %*% x,
+## so that we have N'(t)^T theta + C'
+xs = seq(1,10,l=301)
+B <- splineDesign(sort(c(rep(1,4),attr(ns1,"knots"),rep(10,4))),
+                      x=xs)
+N = B %*% qmat
+C = B %*% x
+theta = rnorm(3)
+plot(xs, N %*% theta + C, type="l")
+## Plot of derivatives...
+B <- splineDesign(sort(c(rep(1,4),attr(ns1,"knots"),rep(10,4))),
+                      x=xs, derivs=1)
+N = B %*% qmat
+C = B %*% x
+theta = rnorm(3)
+plot(xs, N %*% theta + C, type="l")
+## How to predict outside of the boundaries?
+
+
+## Spline interpolation
+library(schumaker)
+d <- data.frame(x=(0:9)+0.5,y=((1:10)-5.5)^2)
+xs=seq(0,20,length=301)
+plot(xs,Schumaker(d$x,d$y,Extrapolation="Constant")$Spline(xs),type="l")
+points(y~x,data=d)
+library(splines)
+plot(xs,splinefun(d$x,d$y,method="natural")(xs),type="l")
+points(y~x,data=d)
+d2 <- rbind(d,transform(tail(d,1)[rep(1,2),],x=c(9.5+1e-7,9.5+2e-7)))
+xs=seq(9.5-1e-3,9.5+1e-3,length=301)
+plot(xs,splinefun(d2$x,d2$y,method="natural")(xs),type="l")
+points(y~x,data=d2)
+abline(h=20.25,lty=2)
+splinefun(d2$x,d2$y,method="natural")(15)-20.25
+splinefunx <- function(x, y, method="natural", constant.left=FALSE, constant.right=FALSE, ...) {
+    xstar <- x
+    ystar <- y
+    if (constant.right) {
+        xstar <- c(xstar,tail(x,1)+(1:10)*1e-7)
+        ystar <- c(ystar,rep(tail(y,1),10))
+    }
+    if (constant.left) {
+        xstar <- c(xstar,x[1]-(1:10)*1e-7)
+        ystar <- c(ystar,rep(y[1],10))
+    }
+    splinefun(xstar, ystar, ..., method=method)
+}
+splinefunx(d$x,d$y,constant.right=TRUE)(15)-20.25
+splinefunx(d$x,d$y,constant.right=TRUE)(15000)-20.25
+splinefunx(d$x,d$y)(9.5)-20.25
+##
+library(numDeriv)
+xs=seq(0,20,length=301)
+plot(xs, numDeriv::grad(splinefunx(d$x,d$y,constant.right=TRUE), xs), type="l")
+rug(d$x)
+xs=seq(9.5-1e-3,9.5+1e-3,length=301)
+plot(xs, numDeriv::grad(splinefunx(d$x,d$y,constant.right=TRUE), xs), type="l")
+
+## Rather than using mid-points, we could use intervals and then assume a monotone smoother...
+numdiff <- function(f,x,eps=1e-5) (f(x+eps)-f(x-eps))/2/eps
+d <- transform(data.frame(x0=0:9,x1=(0:9)+1,delta=1),
+               xmid=(x0+x1)/2,
+               yint=((x1-5)^3-(x0-5)^3)/3)
+set.seed(12345)
+d <- transform(d,
+               yint_ = yint*rgamma(NROW(d),10,10))
+xs=seq(0,20,length=301)
+## cumd <- transform(d, H=cumsum(c(0,diff(x0)*head(y0,-1))))
+cumd <- with(d, data.frame(x=c(x0,tail(x1,1)), H=cumsum(c(0,diff(c(x0,tail(x1,1)))*yint))))
+sf.natural <- splinefun(cumd$x,cumd$H, method="natural")
+sf.mono <- splinefun(cumd$x,cumd$H, method="hyman")
+plot(xs, numdiff(sf.natural,xs), type="l", ylim=c(0,25)) # constant from rhs of last interval
+lines(xs, splinefunx(d$xmid,d$yint,constant.right=TRUE)(xs), col="blue") # constant from mid-point
+curve((x-5)^2, col="green", add=TRUE)
+lines(xs, numdiff(sf.mono,xs), type="l", col="orange") # extrapolates nicely if quadratic
+
+## now with variation in the outcome
+cumd <- with(d, data.frame(x=c(x0,tail(x1,1)+1), H=cumsum(c(0,diff(c(x0,tail(x1,1)+1))*yint_))))
+sf <- splinefun(cumd$x,cumd$H, method="hyman")
+plot(xs, numdiff(sf,xs), type="l", ylim=c(0,35))
+lines(xs, splinefunx(d$xmid,d$yint_,constant.right=TRUE)(xs), col="blue")
+curve((x-5)^2, col="green", add=TRUE)
+
 ## gradient for penalty in the AFT model
 library(Rcpp)
 library(RcppArmadillo)
@@ -304,7 +422,6 @@ crossValidation(fit, brcancer,predictDeviance("censrec"),correction=FALSE)
 AIC(fit)
 BIC(fit)
 
-
 library(rstpm2)
 library(survival)
 library(timereg)
@@ -320,9 +437,15 @@ two_states <- function(model, ...) {
 }
 ## Note: the first argument is the hazard model. The other arguments are arguments to the
 ## markov_msm function, except for the transition matrix, which is defined by the new function.
-colon2 <- transform(survival::colon, Obs=(rx=="Obs"), Lev=(rx=="Lev"),Lev_5FU=(rx=="Lev+5FU"))
+colon2 <- transform(survival::colon, Obs=(rx=="Obs")+0, Lev=(rx=="Lev")+0,Lev_5FU=(rx=="Lev+5FU")+0)
 death = aalen(Surv(time,status)~Lev+Lev_5FU, data=subset(colon2,etype==2))
-cr = two_states(death, newdata=data.frame(Lev=FALSE,Lev_5FU=FALSE)) # fails
+cr = two_states(death, newdata=data.frame(Lev=0,Lev_5FU=0))
+plot(cr,ggplot=TRUE,stacked=FALSE,which="L") # ok
+plot(cr,ggplot=TRUE,which="L") # ok - is this sensible?
+plot(cr) # ok -- no legend
+plot(cr,ggplot=TRUE) # ok
+plot(cr,lattice=TRUE) # ok -- no legend
+plot(cr,ggplot=TRUE,stacked=FALSE) # ok
 ##
 competing_risks <- function(models, ...) {
     transmat = matrix(c(NA,1,2,
@@ -333,10 +456,10 @@ competing_risks <- function(models, ...) {
 }
 ## Note: the first argument is the hazard model. The other arguments are arguments to the
 ## markov_msm function, except for the transition matrix, which is defined by the new function.
-colon2 <- transform(survival::colon, Obs=(rx=="Obs"), Lev=(rx=="Lev"),Lev_5FU=(rx=="Lev+5FU"))
+colon2 <- transform(survival::colon, Obs=(rx=="Obs")+0, Lev=(rx=="Lev")+0,Lev_5FU=(rx=="Lev+5FU")+0)
 progression = aalen(Surv(time,status)~Lev+Lev_5FU, data=subset(colon2,etype==1))
 death = aalen(Surv(time,status)~Lev+Lev_5FU, data=subset(colon2,etype==2))
-cr = competing_risks(list(progression,death), newdata=data.frame(Lev=FALSE,Lev_5FU=FALSE)) # fails
+cr = competing_risks(list(progression,death), newdata=data.frame(Lev=0,Lev_5FU=0))
 plot(cr)
 ##
 illness_death <- function(models, ...) {
@@ -363,7 +486,7 @@ death2 = aalen(Surv(enter,time,status)~Lev+Lev_5FU, data=d23)
 cr = illness_death(list(progression,death1,death2), newdata=data.frame(Lev=FALSE,Lev_5FU=FALSE)) # fails
 plot(cr)
 ##
-illness_death2 <- function(models, ...) {
+illness_death = function(models, ...) {
     transmat = matrix(c(NA,1,2,NA,
                         NA,NA,NA,3,
                         NA,NA,NA,NA,
@@ -373,7 +496,7 @@ illness_death2 <- function(models, ...) {
 }
 ## Note: the first argument is the hazard model. The other arguments are arguments to the
 ## markov_msm function, except for the transition matrix, which is defined by the new function.
-colon2 <- transform(survival::colon, Obs=(rx=="Obs"), Lev=(rx=="Lev"),Lev_5FU=(rx=="Lev+5FU"))
+colon2 = transform(survival::colon, Obs=(rx=="Obs")+0, Lev=(rx=="Lev")+0, Lev_5FU=(rx=="Lev+5FU")+0)
 d1 = subset(colon2,etype==1)
 d2 = subset(colon2,etype==2)
 index = d1$time < d2$time & d1$status==1 # index for initial -> recurrence
@@ -385,8 +508,12 @@ d13 = transform(d2, # initial -> death
 progression = aalen(Surv(time,status)~Lev+Lev_5FU, data=d12)
 death1 = aalen(Surv(time,status)~Lev+Lev_5FU, data=d13)
 death2 = aalen(Surv(enter,time,status)~Lev+Lev_5FU, data=d23)
-cr = illness_death2(list(progression,death1,death2), newdata=data.frame(Lev=FALSE,Lev_5FU=FALSE)) # fails
-plot(cr,ggplot=TRUE)
+cr = illness_death(list(progression,death1,death2), newdata=data.frame(Lev=0,Lev_5FU=0:1),
+                   weights=c(-1,1), los=FALSE)
+plot(cr,ggplot=TRUE) + facet_grid(~Lev_5FU) # ok
+plot(cr,ggplot=TRUE,stacked=FALSE) + facet_grid(state~Lev_5FU) # ok
+plot(cr,ggplot=TRUE,stacked=FALSE,which="L") + facet_grid(state~Lev_5FU) # ok
+plot(standardise(cr),stacked=FALSE,ggplot=TRUE) # CIs are *very* wide -- error?
 
 ## Non-parametric baseline: SDE approach due to Ryalen and colleagues
 markov_sde <- function(models, trans, newdata, init=NULL, nLebesgue=1e4+1, los=FALSE, nOut=300,
