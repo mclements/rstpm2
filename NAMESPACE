@@ -70,7 +70,7 @@ importFrom(stats, quantile, lm, as.formula, coef, makepredictcall, na.fail, pred
            model.matrix, model.weights, na.pass, optimHess, pweibull, 
            terms, terms.formula, .checkMFClasses, .getXlevels, pchisq, printCoefmat,
            anova, var, residuals, confint, qnorm, complete.cases, reformulate,
-           splinefun)
+           splinefun, update.default)
 importFrom(mgcv,gam,s)
 importFrom(Rcpp,sourceCpp)
 importFrom(deSolve,ode)
