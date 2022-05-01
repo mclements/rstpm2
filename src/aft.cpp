@@ -265,6 +265,7 @@ namespace rstpm2 {
     mat q_matrix;
     ns s;
     bool delayed;
+    double kappa; // scale for the quadratic penalty for monotone splines
     aft(SEXP list) : args(as<List>(list)) {
       init = as<vec>(args["init"]);
       X = as<mat>(args["X"]);
@@ -281,6 +282,7 @@ namespace rstpm2 {
 	time0 = as<vec>(args["time0"]);
 	X0 = as<mat>(args["X0"]);
       }
+      kappa = 1.0e3;
     }
     mat rmult(mat m, vec v) {
       mat out(m);
@@ -313,7 +315,7 @@ namespace rstpm2 {
       for (size_t i=1; i<betasStar.size(); i++) {
       	double delta = betasStar(i)-betasStar(i-1);
       	if (delta<0.0)
-      	  pen += delta*delta;
+      	  pen += kappa*delta*delta;
       }
       vec logh = etas + log(etaDs) + log(1/time -etaD);
       vec H = exp(etas);
@@ -339,7 +341,7 @@ namespace rstpm2 {
 	if (delta(j)<0.0)
 	  M += Q.t() * D.row(j).t() * D.row(j) * Q;
       }
-      return 2*M*beta;
+      return 2*M*beta*kappa;
     }
     vec gradient(vec betafull)
     {
