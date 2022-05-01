@@ -71,7 +71,7 @@ function (x, df = NULL, knots = NULL, intercept = FALSE,
         basis <- basis[, -1, drop = FALSE]
     }
     qr.const <- qr(t(const))
-    q.const <- qr.Q(qr.const, complete=TRUE)[, -(1L:2L), drop = FALSE] # NEW
+    q.const <- qr.Q(qr.const, complete=TRUE)[, -(1L:(6-sum(derivs))), drop = FALSE] # NEW
     basis <- as.matrix((t(qr.qty(qr.const, t(basis))))[, -(1L:nrow(const)), drop = FALSE])
     n.col <- ncol(basis)
     if (nas) {
