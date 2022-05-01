@@ -304,6 +304,40 @@ predict.hazFun <- function(object, newdata, type=c("haz","gradh"), ...) {
 coef.hazFun <- function(object, ...) c(hazFun=0)
 vcov.hazFun <- function(object, ...) matrix(0,1,1,FALSE,list("hazFun","hazFun"))
 
+
+
+splinefunx <- function(x, y, method="natural", constant.left=FALSE, constant.right=FALSE, ...) {
+    xstar <- x
+    ystar <- y
+    if (constant.right) {
+        xstar <- c(xstar,tail(x,1)+(1:10)*1e-7)
+        ystar <- c(ystar,rep(tail(y,1),10))
+    }
+    if (constant.left) {
+        xstar <- c(x[1]-(10:1)*1e-7,xstar)
+        ystar <- c(rep(y[1],10),ystar)
+    }
+    splines::splinefun(xstar, ystar, ..., method=method)
+}
+smoothpwc <- function(midts, rates, tmvar="t", offsetvar="", ...) {
+    log.smoother <- splinefunx(midts, log(rates), constant.right=TRUE)
+    haz <- function(newdata) {
+        t <- newdata[[tmvar]] + (if (offsetvar!="") newdata[[offsetvar]] else 0)
+        exp(log.smoother(t))
+    }
+    structure(list(haz=haz), class="smoothpwc")
+}
+coef.smoothpwc <- function(object, ...) c(smoothpwc=0)
+vcov.smoothpwc <- function(object, ...) matrix(0,1,1,FALSE,list("pwc","pwc"))
+predict.smoothpwc <- function(object, newdata, type=c("haz","gradh"), ...) {
+    type <- match.arg(type)
+    val <- if (type=="haz") object$haz(newdata) else 0
+    if (length(val)==1 && length(val)<nrow(newdata))
+        val <- rep(val,nrow(newdata))
+    val
+}
+
+
 as.data.frame.markov_msm <- function(x, row.names=NULL, optional=FALSE,
                                      ci=TRUE,
                                      P.conf.type="logit", L.conf.type="log", C.conf.type="log",
