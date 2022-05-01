@@ -625,6 +625,8 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         ## browser()
         mle2@details$convergence <- fit$fail # fit$itrmcd
         vcov <- try(solve(hessian), silent=TRUE)
+        if (inherits(vcov, "try-error"))
+            vcov <- try(solve(hess+1e-6*diag(nrow(hess))), silent=TRUE)
         if (inherits(vcov, "try-error")) {
             if (!use.gr)
                 message("Non-invertible Hessian")
