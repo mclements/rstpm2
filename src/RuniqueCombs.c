@@ -112,7 +112,8 @@ matrix initmat(rows,cols) long rows,cols;
   { if (A.M)
     A.M[0]=(double *)calloc((size_t)(cols*rows+2*pad),sizeof(double));
     for (i=1L;i<rows+2*pad;i++)
-    A.M[i]=A.M[0]+i*cols;A.vec=1;
+      A.M[i]=A.M[0]+i*cols;
+    A.vec=1;
   } else
   { if (A.M)
     for (i=0L;i<rows+2*pad;i++)
