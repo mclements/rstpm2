@@ -9,4 +9,5 @@ log$
 ^.*\.blg$
 ^.*\.tex$
 jss\.bst
+jss\.cls
 ^.*\.dvi$
