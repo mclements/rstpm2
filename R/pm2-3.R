@@ -731,7 +731,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         tvc.formulas <-
             lapply(names(tvc), function(name)
                 call(":",
-                     as.name(name),
+                     call("as.numeric",as.name(name)), # is this a good idea?
                      as.call(c(smoother,
                                if (link.type=="AH") timeExpr else call("log",timeExpr),
                                if (penalised) vector2call(list(k=tvc[[name]]))

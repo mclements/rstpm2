@@ -78,8 +78,11 @@ the baseline time effect on the linear predictor scale (default=NULL).
 a list with the names of the time-varying coefficients. For a parametric
 model, this uses natural splines (e.g. \code{tvc=list(hormon=3)} is equivalent
 to
-\code{smooth.formula=~...+hormon:nsx(log(time),df=3)}), which by default
-does \emph{not} include an intercept (or main effect) term. For a penalised
+\code{smooth.formula=~...+as.numeric(hormon):nsx(log(time),df=3)}), which by default
+does \emph{not} include an intercept term, hence you
+should include a main effect. Note that
+this will convert a logical or factor variable to a numeric value, so
+the user should use indicators for factor terms. For a penalised
 model, this uses cubic splines
 (e.g. \code{tvc=list(hormon=-1)} is equivalent to
 \code{smooth.formula=~...+s(log(time),by=hormon,k=-1))}, which by
