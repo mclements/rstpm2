@@ -1037,10 +1037,10 @@ plot.markov_msm <- function(x, y, stacked=TRUE, which=c("P","L"),
             ylab <- if(which=='P') "Ratio of probabilities"
                     else "Ratio of lengths of stay"
     }
-    if (nrow(x$newdata)>1) {
-        warning("More than one set of covariates; covariates have been standardised")
-        x <- standardise(x)
-    }
+    ## if (nrow(x$newdata)>1) {
+    ##     warning("More than one set of covariates; covariates have been standardised")
+    ##     x <- standardise(x)
+    ## }
     if (ggplot2)
         ggplot.markov_msm(x, which=which, stacked=stacked, xlab=xlab, ylab=ylab,
                           alpha=alpha, ...)
@@ -1604,6 +1604,7 @@ plot.markov_sde <- function(x, y, stacked=TRUE, which=c("P","L"), index=NULL,
         xyplot.markov_msm(x, which=which, stacked=stacked, xlab=xlab, ylab=ylab,
                           col=col, border=border, strata=strata, ...)
     else {
+        ## Is the next statement correct??
         if (is.null(index) && nrow(x$newdata)>1) {
             warning("More than one set of covariates; defaults to weighted estimator")
             x <- x$stand # Warning: replacement
