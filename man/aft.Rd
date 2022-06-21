@@ -15,7 +15,7 @@ aft(formula, data, smooth.formula = NULL, df = 3,
     tvc = NULL, control = list(parscale = 1, maxit = 1000),
     init = NULL, weights = NULL, timeVar = "", time0Var = "",
     log.time.transform = TRUE,
-    reltol = 1e-08, trace = 0, contrasts = NULL, subset = NULL,
+    reltol = 1e-08, trace = 0, cure = FALSE, contrasts = NULL, subset = NULL,
     use.gr = TRUE, ...)
 }
 %- maybe also 'usage' for other objects documented here.
@@ -77,6 +77,9 @@ relative tolerance for the model convergence
 }
   \item{trace}{
 integer for whether to provide trace information from the optim procedure
+}
+  \item{cure}{
+logical for whether to model for cure (default=FALSE)
 }
   \item{contrasts}{
 an optional list. See the \code{contrasts.arg}

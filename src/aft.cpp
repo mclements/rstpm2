@@ -202,6 +202,7 @@ namespace rstpm2 {
   public:
     vec tl0, tl1, tr0, tr1;
     mat q_matrix;
+    int cure;
     ns() {} // default constructor
     // ns(vec boundary_knots, vec interior_knots, int intercept=0) :
     //   bs(boundary_knots, interior_knots, intercept) {
@@ -218,8 +219,8 @@ namespace rstpm2 {
     //   tr0 = q_matrix * bs::eval(boundary_knots(1), 0);
     //   tr1 = q_matrix * bs::eval(boundary_knots(1), 1);
     // }
-    ns(vec boundary_knots, vec interior_knots, mat _q_matrix, int intercept=0) :
-      bs(boundary_knots, interior_knots, intercept), q_matrix(_q_matrix) {
+    ns(vec boundary_knots, vec interior_knots, mat _q_matrix, int intercept=0, int cure=0) :
+      bs(boundary_knots, interior_knots, intercept), q_matrix(_q_matrix), cure(cure) {
       tl0 = q_matrix * bs::eval(boundary_knots(0), 0);
       tl1 = q_matrix * bs::eval(boundary_knots(0), 1);
       tr0 = q_matrix * bs::eval(boundary_knots(1), 0);
@@ -242,7 +243,7 @@ namespace rstpm2 {
       else return q_matrix * bs::eval(x,der);
     }
     mat basis(vec x, int ders=0) {
-      mat mat(x.size(), this->df-2);
+      mat mat(x.size(), this->df-2-cure);
       for (size_t i=0; i<x.size(); i++) {
 	vec vec = ns::eval(x(i), ders);
 	for  (size_t j=0; j<vec.size(); j++)
@@ -263,6 +264,7 @@ namespace rstpm2 {
     vec boundaryKnots;
     vec interiorKnots;
     mat q_matrix;
+    int cure;
     ns s;
     bool delayed;
     double kappa; // scale for the quadratic penalty for monotone splines
@@ -276,7 +278,8 @@ namespace rstpm2 {
       boundaryKnots = as<vec>(args["boundaryKnots"]);
       interiorKnots = as<vec>(args["interiorKnots"]);
       q_matrix = as<mat>(args["q.const"]);
-      s = ns(boundaryKnots, interiorKnots, q_matrix, 1);
+      cure = as<int>(args["cure"]);
+      s = ns(boundaryKnots, interiorKnots, q_matrix, 1, cure);
       delayed = as<bool>(args["delayed"]);
       if (delayed) {
 	time0 = as<vec>(args["time0"]);
