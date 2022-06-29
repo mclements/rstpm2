@@ -12,7 +12,8 @@ export(stpm2, pstpm2, aft, gsm,
        incrVar, nsx, nsxD, "coef<-",
        eform, predictnl, coef, confint, 
        predictnl.default, confint.predictnl,
-       vuniroot, bhazard)
+       vuniroot, bhazard,
+       smoothpwc)
 
 S3method(makepredictcall, nsx)
 S3method(makepredictcall, nsxD)
