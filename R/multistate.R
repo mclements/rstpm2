@@ -21,7 +21,7 @@ markov_msm <-
         base::inherits(x, ...) ||
             (base::inherits(x, c("hazFun","zeroModel","hrModel","stratifiedModel"))
                 && base::inherits(x$base, ...))
-    base.classes <- c("stpm2","pstpm2","glm","survPen","gam","aft","flexsurvreg","aftreg")
+    base.classes <- c("stpm2","pstpm2","glm","survPen","gam","aft","flexsurvreg","aftreg","smoothpwc")
     stopifnot(all(sapply(x, function(xi) inherits(xi,base.classes) | is.function(xi))))
     stopifnot(!is.null(newdata))
     stopifnot(sum(!is.na(trans)) == length(x))
@@ -59,7 +59,7 @@ markov_msm <-
         stop("number of times should be at least two")
     stopifnot(length(utility(t[2])) %in% c(1,nrow(trans)))
     if (is.null(tmvar) && all(sapply(x,inherits,c("stpm2","pstpm2","aft","survPen","flexsurvreg",
-                                                  "aftreg"))))
+                                                  "aftreg","smoothpwc"))))
         tmvar <- sapply(x,function(object)
             if(inherits(object,c("stpm2","pstpm2"))) object@timeVar
             else if (inherits(object,"aft")) object@args$timeVar
@@ -67,6 +67,7 @@ markov_msm <-
             else if (inherits(object,"aftreg"))
                 local({lhs <- object$call$formula[[2]]
                     deparse(if(length(lhs)==4) lhs[[4]] else lhs[[3]])})
+            else if (inherits(object,"smoothpwc")) "t"
             else object$t1.name)
     stopifnot(!is.null(tmvar))
     stopifnot(length(tmvar) %in% c(1,length(x)))
@@ -305,7 +306,6 @@ coef.hazFun <- function(object, ...) c(hazFun=0)
 vcov.hazFun <- function(object, ...) matrix(0,1,1,FALSE,list("hazFun","hazFun"))
 
 
-
 splinefunx <- function(x, y, method="natural", constant.left=FALSE, constant.right=FALSE, ...) {
     xstar <- x
     ystar <- y
@@ -317,7 +317,7 @@ splinefunx <- function(x, y, method="natural", constant.left=FALSE, constant.rig
         xstar <- c(x[1]-(10:1)*1e-7,xstar)
         ystar <- c(rep(y[1],10),ystar)
     }
-    splines::splinefun(xstar, ystar, ..., method=method)
+    stats::splinefun(xstar, ystar, ..., method=method)
 }
 smoothpwc <- function(midts, rates, tmvar="t", offsetvar="", ...) {
     log.smoother <- splinefunx(midts, log(rates), constant.right=TRUE)
@@ -1074,11 +1074,13 @@ plot.markov_msm <- function(x, y, stacked=TRUE, which=c("P","L"),
 ggplot.markov_msm <- function(data, mapping=NULL,
                               which=c("P","L"), 
                               stacked = TRUE, alpha=0.2,
-                              xlab=NULL, ylab=NULL,
+                              xlab=NULL, ylab=NULL, flipped = FALSE,
                               ..., environment=parent.frame()) {
     if (requireNamespace("ggplot2", quietly=TRUE)) {
         which <- match.arg(which)
         df <- as.data.frame(data, ci=!stacked)
+        if (flipped)
+            df <- transform(df, state = factor(state,levels=rev(levels(state))))
         if (stacked)
             ggplot2::ggplot(df, if(is.null(mapping))
                                     ggplot2::aes_string(x='time', y=which, fill='state')
