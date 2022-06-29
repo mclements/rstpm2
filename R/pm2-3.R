@@ -1681,11 +1681,16 @@ predict.stpm2.base <-
     invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
     linkf <- eval(parse(text=link))
     if (type %in% c("uncured","probcure") && is.null(exposed))
-        exposed <- function(data) data[[object@timeVar]] <- max(args$time[args$event])
+        exposed <- function(data) {
+            data[[object@timeVar]] <- max(args$time[which(args$event==1)])
+            data
+        }
     if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure"))
           stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure")')
       if (type %in% c('margsurv','marghaz','marghr','margfail','meanmargsurv') && !object@args$frailty)
           stop("Marginal prediction only for frailty models")
+    if (is.null(exposed) && !is.null(var))
+        exposed  <- incrVar(var)
     ## exposed is a function that takes newdata and returns the revised newdata
     ## var is a string for a variable that defines a unit change in exposure
     if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","uncured"))
@@ -1764,6 +1769,8 @@ predict.stpm2.base <-
         Hstar <- -log(Sstar)
       } 
     }
+    if (any(idx <- newdata[object@timeVar] == 0))
+        newdata[[object@timeVar]][idx] <- .Machine$double.xmin
     if (calcX)  {
       if (inherits(object, "stpm2")) {
           X <- object@args$transX(lpmatrix.lm(object@lm, newdata), newdata)
@@ -1788,6 +1795,7 @@ predict.stpm2.base <-
         time <- eval(object@timeExpr,newdata,parent.frame())
         ##
     }
+    ## if (any(time == 0)) time[time==0] <- .Machine$double.eps
     ## if (object@delayed && !object@interval) {
     ##   newdata0 <- newdata
     ##   newdata0[[object@timeVar]] <- newdata[[object@time0Var]]
@@ -2246,7 +2254,7 @@ predict.stpm2.base <-
       out <- invlinkf(out)
     }
     if (keep.attributes || full) {
-      if (type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure"))
+      if (type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af"))
           newdata <- exposed(newdata)
       if (type %in% c("meansurv","meanhr","meansurvdiff","meanhaz","meanmargsurv","af")) {
           newdata <- data.frame(time=unique(newdata[[object@timeVar]]))
@@ -2295,7 +2303,7 @@ setMethod("predict", "stpm2",
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH"),
                    grid=FALSE,seqLength=300,
                    type.relsurv=c("excess","total","other"), scale=365.24, rmap, ratetable=survival::survexp.us,
-                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,n.gauss.quad=100,full=FALSE,...) {
+                   se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,n.gauss.quad=100,full=FALSE,...) {
               type <- match.arg(type)
               type.relsurv <- match.arg(type.relsurv)
               predict.stpm2.base(object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
@@ -2379,7 +2387,7 @@ plot.stpm2.base <-
           function(x,y,newdata=NULL,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),log="",
                    add=FALSE,ci=!add,rug=!add,
-                   var=NULL,exposed=incrVar(var),times=NULL,
+                   var=NULL,exposed=NULL,times=NULL,
                    type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us, rmap, scale=365.24, ...) {
               if (type %in% c("meansurv","meansurvdiff","af","meanhaz","meanhr")) {
                   return(plot.meansurv(x,times=times,newdata=newdata,type=type,xlab=xlab,ylab=ylab,line.col=line.col,ci.col=ci.col,
@@ -2409,6 +2417,14 @@ plot.stpm2.base <-
                                  uncured="Uncured distribution")
               xx <- attr(y,"newdata")
               xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
+              ## remove NaN
+              if (any(is.nan(as.matrix(y)))) {
+                  idx <- is.nan(y[,1])
+                  for (j in 2:ncol(y))
+                      idx <- idx | is.nan(y[,j])
+                  y <- y[!idx,,drop=FALSE]
+                  xx <- xx[!idx]
+              }
               if (!add) matplot(xx, y, type="n", xlab=xlab, ylab=ylab, log=log, ...)
               if (ci) {
                   polygon(c(xx,rev(xx)), c(y[,2],rev(y[,3])), col=ci.col, border=ci.col)
@@ -2425,7 +2441,7 @@ setMethod("plot", signature(x="stpm2", y="missing"),
           function(x,y,newdata=NULL,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
                    add=FALSE,ci=!add,rug=!add,
-                   var=NULL,exposed=incrVar(var),times=NULL,
+                   var=NULL,exposed=NULL,times=NULL,
                    type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us, 
                    rmap, scale=365.24,...)
               plot.stpm2.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
@@ -2437,7 +2453,7 @@ lines.stpm2 <-
           function(x,newdata=NULL,type="surv",
                    col=1,ci.col="grey",lty=par("lty"),
                    ci=FALSE,rug=FALSE,
-                   var=NULL,exposed=incrVar(var),times=NULL,
+                   var=NULL,exposed=NULL,times=NULL,
                    type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us, 
                    rmap, scale=365.24, ...)
               plot.stpm2.base(x=x, newdata=newdata, type=type, 
@@ -2774,7 +2790,7 @@ setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
                    type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst","lpmatrix","gradh","gradH"),
                    grid=FALSE,seqLength=300,
-                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95, n.gauss.quad=100, full=FALSE, ...) {
+                   se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95, n.gauss.quad=100, full=FALSE, ...) {
               type <- match.arg(type)
               predict.stpm2.base(object=object, newdata=newdata, type=type, grid=grid, seqLength=seqLength, se.fit=se.fit,
                                  link=link, exposed=exposed, var=var, keep.attributes=keep.attributes, use.gr=use.gr, level=level, n.gauss.quad=n.gauss.quad, full=full, ...)
@@ -2800,7 +2816,7 @@ setMethod("plot", signature(x="pstpm2", y="missing"),
 lines.pstpm2 <- function(x,newdata=NULL,type="surv",
                    col=1,ci.col="grey",lty=par("lty"),
                    ci=FALSE,rug=FALSE,
-                   var=NULL,exposed=incrVar(var),times=NULL,...)
+                   var=NULL,exposed=NULL,times=NULL,...)
               plot.stpm2.base(x=x, newdata=newdata, type=type, 
                               line.col=col, ci.col=ci.col, lty=lty, add=TRUE,
                               ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
