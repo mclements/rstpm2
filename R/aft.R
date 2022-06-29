@@ -296,16 +296,12 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     ##
     ## get variables
     time <- eval(timeExpr, data, parent.frame())
-    if (any(time>0 & time<1e-4))
-        warning("Some event times < 1e-4: consider transforming time to avoid problems with finite differences")
     time0Expr <- NULL # initialise
     if (delayed) {
       time0Expr <- lhs(formula)[[2]]
       if (time0Var == "")
         time0Var <- all.vars(time0Expr)
       time0 <- eval(time0Expr, data, parent.frame())
-      if (any(time0>0 & time0<1e-4))
-          warning("Some entry times < 1e-4: consider transforming time to avoid problems with finite differences")
     } else {
         time0 <- NULL
     }
@@ -321,18 +317,6 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     y <- model.extract(model.frame(coxph.obj),"response")
     data$logHhat <- pmax(-18,log(-log(S0hat(coxph.obj))))
     ##
-    ## Weibull regression
-    if (delayed) {
-        if (requireNamespace("eha", quietly = TRUE)) {
-            survreg1 <- eha::aftreg(formula, data)
-            coef1 <- coef(survreg1)
-            coef1 <- coef1[1:(length(coef1)-2)]
-        } else coef1 <- rep(0,ncol(X))
-    } else {
-        survreg1 <- survival::survreg(formula, data)
-        coef1 <- coef(survreg1)
-        coef1 <- coef1[-1] # assumes intercept included in the formula; ignores smooth.formula
-    }
     ## pred1 <- predict(survreg1)
     data$logtstar <- log(time)    
     ## data$logtstar <- log(time/pred1)    
@@ -397,6 +381,18 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         XD0 <- grad1(lpfunc,data0[[timeVar]],lm.obj,data0,timeVar,log.transform=log.time.transform)
         XD0 <- matrix(XD0,nrow=nrow(X0))
         rm(data0)
+    }
+    ## Weibull regression
+    if (delayed) {
+        if (requireNamespace("eha", quietly = TRUE)) {
+            survreg1 <- eha::aftreg(formula, data)
+            coef1 <- coef(survreg1)
+            coef1 <- coef1[1:(length(coef1)-2)]
+        } else coef1 <- rep(0,ncol(X))
+    } else {
+        survreg1 <- survival::survreg(formula, data)
+        coef1 <- coef(survreg1)
+        coef1 <- coef1[-1] # assumes intercept included in the formula; ignores smooth.formula
     }
     if (ncol(X)>length(coef1)) {
         coef1 <- c(coef1,rep(0,ncol(X) - length(coef1)))
