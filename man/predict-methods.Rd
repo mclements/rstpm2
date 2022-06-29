@@ -23,7 +23,7 @@
                grid=FALSE,seqLength=300,
                type.relsurv=c("excess","total","other"), scale=365.24,
                rmap, ratetable=survival::survexp.us,
-               se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,
+               se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,
                keep.attributes=FALSE, use.gr=TRUE,level=0.95,
                n.gauss.quad=100,full=FALSE,...)
     \S4method{predict}{pstpm2}(object, newdata=NULL,
@@ -33,7 +33,7 @@
                "fail","margfail","meanmargsurv","rmst","lpmatrix",
                "gradh", "gradH"),
                grid=FALSE,seqLength=300,
-               se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,
+               se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,
                keep.attributes=FALSE, use.gr=TRUE,level=0.95,
                n.gauss.quad=100,full=FALSE,...)
 }
@@ -93,7 +93,8 @@
     hdiff="I",loghazard="I",link="I",odds="log",or="log",margsurv="cloglog",
     marghaz="log",marghr="log"))}
   \item{exposed}{a function that takes newdata and returns a transformed
-               data-frame for those exposed or the counterfactual (defaults to incrementing ``var'')}
+               data-frame for those exposed or the counterfactual. By default, this increments \code{var} (except for cure
+    models, where it defaults to the last event time).}
   \item{var}{specify the variable name or names for the
                exposed/unexposed (names are given as characters)}
   \item{keep.attributes}{Boolean to determine whether the output should

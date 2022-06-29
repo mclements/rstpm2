@@ -11,13 +11,13 @@ S3 methods for lines
 \usage{
 \method{lines}{stpm2}(x, newdata = NULL, type = "surv", col = 1, ci.col= "grey",
 lty = par("lty"), ci = FALSE, rug = FALSE, var = NULL,
-exposed = incrVar(var), times = NULL,
+exposed = NULL, times = NULL,
 type.relsurv = c("excess", "total", "other"),
 ratetable = survival::survexp.us, rmap, scale = 365.24, ...)
 \method{lines}{pstpm2}(x, newdata = NULL, type = "surv", col = 1,
 ci.col= "grey",
 lty = par("lty"), ci = FALSE, rug = FALSE, var = NULL,
-exposed = incrVar(var), times = NULL, ...)
+exposed = NULL, times = NULL, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -35,7 +35,8 @@ exposed = incrVar(var), times = NULL, ...)
   \item{var}{specify the variable name or names for the
     exposed/unexposed (names are given as characters)}
   \item{exposed}{function that takes newdata and returns the exposed
-    dataset. By default, this increments \code{var}}
+    dataset. By default, this increments \code{var} (except for cure
+    models, where it defaults to the last event time).}
   \item{times}{specifies the times. By default, this uses a span of the
                       observed times.}
   \item{type.relsurv}{type of predictions for relative survival models:

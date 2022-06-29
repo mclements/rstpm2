@@ -17,11 +17,11 @@ Given an \code{stpm2} fit, return a plot
     \S4method{plot}{stpm2}(x,y,newdata,type="surv",
                       xlab="Time",line.col=1,ci.col="grey",
                       add=FALSE,ci=TRUE,rug=TRUE,
-                      var=NULL,exposed=incrVar(var),times=NULL,...)
+                      var=NULL,exposed=NULL,times=NULL,...)
     \S4method{plot}{pstpm2}(x,y,newdata,type="surv",
                       xlab="Time",line.col=1,ci.col="grey",
                       add=FALSE,ci=TRUE,rug=TRUE,
-                      var=NULL,exposed=incrVar(var),times=NULL,...)
+                      var=NULL,exposed=NULL,times=NULL,...)
 }
 \arguments{
   \item{x}{an \code{stpm2} object}
@@ -41,7 +41,8 @@ Given an \code{stpm2} fit, return a plot
   \item{var}{specify the variable name or names for the
     exposed/unexposed (names are given as characters)}
   \item{exposed}{function that takes newdata and returns the exposed
-    dataset. By default, this increments \code{var}}
+    dataset. By default, this increments \code{var}  (except for cure
+    models, where it defaults to the last event time).}
   \item{times}{specifies the times. By default, this uses a span of the
                       observed times.}
   \item{\dots}{additional arguments (add to the \code{plot} command)}
