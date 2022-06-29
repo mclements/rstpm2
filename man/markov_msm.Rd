@@ -394,7 +394,8 @@ plot(cr, ggplot=TRUE) + facet_grid(~ rx)
 cr_diff = diff(subset(cr,rx=="Lev+5FU"),subset(cr,rx=="Obs"))
 plot(cr_diff, ggplot=TRUE, stacked=FALSE)
 
-## Extended example: Crowther and Lambert (2019)
+## Extended example: Crowther and Lambert (2017)
+## library(rstpm2); library(readstata13); library(ggplot2)
 mex.1 <- read.dta13("http://fmwww.bc.edu/repec/bocode/m/multistate_example.dta")
 transmat <- rbind("Post-surgery"=c(NA,1,2), 
                   "Relapsed"=c(NA,NA,3),
@@ -429,6 +430,8 @@ system.time(pred1 <- rstpm2::markov_msm(list(c.ar,c.ad,c.rd), t = seq(0,15,lengt
 pred1 <- transform(pred1, Nodes=paste("Nodes =",nodes), Size=paste("Size",size))
 ## Figure 3
 plot(pred1, ggplot=TRUE) + facet_grid(Nodes ~ Size) + xlab("Years since surgery")
+plot(pred1, ggplot=TRUE, flipped=TRUE) +
+    facet_grid(Nodes ~ Size) + xlab("Years since surgery")
 plot(pred1, strata=~nodes+size, xlab="Years since surgery", lattice=TRUE)
 ## Figure 4
 plot(subset(pred1, nodes==0 & size=="<=20 mm"), stacked=FALSE, ggplot=TRUE) +
