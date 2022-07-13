@@ -334,7 +334,8 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     ## if (is.null(init)) {
     ##   init <- coef(lm.obj)
     ## }
-    lm0.obj <- lm(logHhat~nsx(logtstar,df,intercept=TRUE,cure=cure)-1,dataEvents)
+    lm0.obj <- if (cure) lm(logHhat~nsx(logtstar,df,intercept=TRUE,cure=cure)-1,dataEvents)
+               else lm(logHhat~nsx(logtstar,df,intercept=TRUE)-1,dataEvents)
     ## lm0D.obj <- lm(logHhat~nsxD(logtstar,df,intercept=TRUE,cure=cure)-1,dataEvents)
     coef0 <- coef(lm0.obj) # log-log baseline
     ## design information for baseline survival
