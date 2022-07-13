@@ -2797,7 +2797,7 @@ setMethod("predictnl", "pstpm2",
 ##
 setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst","lpmatrix","gradh","gradH"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst","lpmatrix","gradh","gradH","rmstdiff"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95, n.gauss.quad=100, full=FALSE, ...) {
               type <- match.arg(type)

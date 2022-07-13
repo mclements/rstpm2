@@ -1080,7 +1080,7 @@ ggplot.markov_msm <- function(data, mapping=NULL,
         which <- match.arg(which)
         df <- as.data.frame(data, ci=!stacked)
         if (flipped)
-            df <- transform(df, state = factor(state,levels=rev(levels(state))))
+            df$state <- factor(df$state,levels=rev(levels(df$state)))
         if (stacked)
             ggplot2::ggplot(df, if(is.null(mapping))
                                     ggplot2::aes_string(x='time', y=which, fill='state')
