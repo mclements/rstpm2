@@ -1633,7 +1633,7 @@ setMethod("residuals", "stpm2",
 
 predict.stpm2.base <- 
           function(object, newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH","rmstdiff"),
                    grid=FALSE, seqLength=300,
                    type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us,
                    rmap, scale=365.24,
@@ -1665,7 +1665,7 @@ predict.stpm2.base <-
                            meansurvdiff = "I",
                            fail = "cloglog", uncured = "log", density = "log",
                            rmst = "I", probcure = "cloglog", lpmatrix="I", gradh="I",
-                           gradH="I")
+                           gradH="I", rmstdiff="I")
         } else {
             link <- switch(type, surv = "cloglog", cumhaz = "log",
                            hazard = "log", hr = "log", sdiff = "I", hdiff = "I",
@@ -1675,7 +1675,7 @@ predict.stpm2.base <-
                            meansurvdiff = "I",
                            fail = "cloglog", uncured = "cloglog", density = "log",
                            rmst = "I", probcure = "cloglog", lpmatrix="I", gradh="I",
-                           gradH="I")
+                           gradH="I", rmstdiff="I")
         }
     }
     invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
@@ -1685,7 +1685,7 @@ predict.stpm2.base <-
             data[[object@timeVar]] <- max(args$time[which(args$event==1)])
             data
         }
-    if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure"))
+    if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure","rmstdiff"))
           stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure")')
       if (type %in% c('margsurv','marghaz','marghr','margfail','meanmargsurv') && !object@args$frailty)
           stop("Marginal prediction only for frailty models")
@@ -1693,7 +1693,7 @@ predict.stpm2.base <-
         exposed  <- incrVar(var)
     ## exposed is a function that takes newdata and returns the revised newdata
     ## var is a string for a variable that defines a unit change in exposure
-    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","uncured"))
+    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","uncured","rmstdiff"))
         stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','meanhr','or','marghr','uncured','probcure') requires newdata to be specified.")
     calcX <- !is.null(newdata)
     time <- NULL
@@ -1737,16 +1737,17 @@ predict.stpm2.base <-
       newdata <- merge(newdata,data.x)
       calcX <- TRUE
     }
-    if (type=="rmst") {
-        if (nrow(newdata)>1) stop("rmst currently only for single value")
+    if (type %in% c("rmst","rmstdiff")) {
         stopifnot(object@timeVar %in% names(newdata))
         quad <- gauss.quad(n.gauss.quad)
         a <- 0
+        olddata = newdata
         b <- newdata[[object@timeVar]]
-        time <- (b-a)/2*quad$nodes + (a+b)/2
-        weights <- quad$weights*(b-a)/2
-        newdata <- newdata[rep(1,length(time)),]
-        newdata[[object@timeVar]] <- time
+        time <- t(outer((b-a)/2,quad$nodes) + (a+b)/2)
+        weights <- outer(quad$weights, (b-a)/2)
+        rowidx = rep(1:nrow(newdata),each=nrow(time))
+        newdata <- newdata[rowidx,,drop=FALSE]
+        newdata[[object@timeVar]] <- as.vector(time)
         calcX <- TRUE
     }
     if (args$excess) {
@@ -1803,7 +1804,7 @@ predict.stpm2.base <-
     ##   ## XD0 <- grad(lpfunc,0,object@lm,newdata,object@timeVar)
     ##   ## XD0 <- matrix(XD0,nrow=nrow(X0))
     ## }
-    if (type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure")) {
+    if (type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","uncured","probcure","rmstdiff")) {
         newdata2 <- exposed(newdata)
       if (inherits(object, "stpm2")) {
           X2 <- object@args$transX(lpmatrix.lm(object@lm, newdata2), newdata2)
@@ -2134,7 +2135,11 @@ predict.stpm2.base <-
             return(marghaz2/marghaz)
         }
         if (type=="rmst") {
-            return(sum(S*weights))
+            return(tapply(S*weights,rowidx,sum))
+        }
+        if (type=="rmstdiff") {
+            S2 <- link$ilink(as.vector(X2 %*% beta))
+            return(tapply(S*weights,rowidx,sum) - tapply(S2*weights,rowidx,sum))
         }
         if (type=="gradh")
             return(link$gradh(eta,etaD,list(X=X,XD=XD)))
@@ -2254,7 +2259,9 @@ predict.stpm2.base <-
       out <- invlinkf(out)
     }
     if (keep.attributes || full) {
-      if (type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af"))
+      if (type %in% c("rmst","rmstdiff"))
+          newdata = olddata
+      if (type %in% c("hr","sdiff","hdiff","meansurvdiff","meanhr","or","marghr","af","rmstdiff"))
           newdata <- exposed(newdata)
       if (type %in% c("meansurv","meanhr","meansurvdiff","meanhaz","meanmargsurv","af")) {
           newdata <- data.frame(time=unique(newdata[[object@timeVar]]))
@@ -2300,7 +2307,7 @@ predict.cumhaz <-
 
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH","rmstdiff"),
                    grid=FALSE,seqLength=300,
                    type.relsurv=c("excess","total","other"), scale=365.24, rmap, ratetable=survival::survexp.us,
                    se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,n.gauss.quad=100,full=FALSE,...) {
@@ -2414,7 +2421,9 @@ plot.stpm2.base <-
                                  odds="Odds",or="Odds ratio",
                                  margsurv="Marginal survival",marghaz="Marginal hazard",marghr="Marginal hazard ratio", haz="Hazard",fail="Failure",
                                  meanhaz="Mean hazard",margfail="Marginal failure",af="Attributable fraction",meanmargsurv="Mean marginal survival",
-                                 uncured="Uncured distribution")
+                                 uncured="Uncured distribution",
+                                 rmst="Restricted mean survival time",
+                                 rmstdiff="Restricted mean survival time difference")
               xx <- attr(y,"newdata")
               xx <- eval(x@timeExpr,xx) # xx[,ncol(xx)]
               ## remove NaN

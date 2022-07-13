@@ -19,7 +19,7 @@
                "hdiff","loghazard","link","meansurv","meansurvdiff","meanhr",
                "odds","or","margsurv","marghaz","marghr","meanhaz","af",
                "fail","margfail","meanmargsurv","uncured","rmst","probcure",
-               "lpmatrix", "gradh", "gradH"),
+               "lpmatrix", "gradh", "gradH","rmstdiff"),
                grid=FALSE,seqLength=300,
                type.relsurv=c("excess","total","other"), scale=365.24,
                rmap, ratetable=survival::survexp.us,
@@ -31,7 +31,7 @@
                "hdiff","loghazard","link","meansurv","meansurvdiff","meanhr",
                "odds","or","margsurv","marghaz","marghr","meanhaz","af",
                "fail","margfail","meanmargsurv","rmst","lpmatrix",
-               "gradh", "gradH"),
+               "gradh", "gradH","rmstdiff"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,
                keep.attributes=FALSE, use.gr=TRUE,level=0.95,
@@ -71,6 +71,7 @@
                frailty distribution}
       \item{"uncured"}{distribution for the uncured}
       \item{"rmst"}{restricted mean survival time}
+      \item{"rmstdiff"}{restricted mean survival time difference}
       \item{"probcure"}{probability of cure}
       \item{"lpmatrix"}{design matrix}
     }

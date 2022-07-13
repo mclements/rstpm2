@@ -18,6 +18,34 @@
 ##   require(bbmle)
 ## }
 
+##
+library(rstpm2)
+m <- rstpm2::stpm2(Surv(time, status) ~ sex, data = lung)
+predict(m, newdata = data.frame(sex = c(1,1), time = c(100,200)), type = "rmst", se.fit=TRUE) # ok
+plot(m, newdata = data.frame(sex = 1), type="rmst")
+plot(m, newdata = data.frame(sex = 1), var="sex", type="rmstdiff")
+
+
+## Predictions for differences
+## Can we return the predictions, gradients and covariance matrix and use those for differences?
+## preddiff = pred1 - pred0
+## graddiff = grad1 - grad0
+## vardiff = graddiff^T Sigma graddiff
+## Note that we can silently return attributes
+d = structure(data.frame(a=1), attr1=1:100, class=c("Test","data.frame"))
+print(d) # print.Test() does not exist, so this uses print.data.frame()
+## What about gradients on transformed scales,
+## with a transformation g and an inverse transformation G?
+## var(eta1) = grad_eta1^T Sigma grad_eta1
+## and pred1 = G(eta1)
+## => var(pred1) = var(G(eta1)) = grad(G(eta1))^T Sigma grad(G(eta1))
+## where grad1 = grad(G(eta1)) = G'(eta1) grad_eta1?? (chain rule)
+## preddiff = pred1 - pred0
+## graddiff = grad1 - grad0
+## vardiff = graddiff^T Sigma graddiff
+
+
+
 ## add cure for the AFT models
 library(rstpm2)
 fit0 = aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4)
