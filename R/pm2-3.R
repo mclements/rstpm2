@@ -1387,6 +1387,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         mle2@vcov <- vcov
     }
     mle2@details$conv <- mle2@details$convergence
+    args$gradnegll = gradnegll
     if (penalised) {
         out <- new("pstpm2",
                    call = mle2@call,
