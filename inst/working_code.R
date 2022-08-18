@@ -18,6 +18,19 @@
 ##   require(bbmle)
 ## }
 
+## Can we estimate the hessian externally?
+library(rstpm2)
+library(numDeriv)
+fit = stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4)
+summary(fit)
+fit@vcov = solve(numDeriv::hessian(fit@minuslogl, coef(fit)))
+summary(fit)
+## Can we also use the gradient?
+(solve(numDeriv::jacobian(fit@args$gradnegll, coef(fit))) - solve(numDeriv::hessian(fit@minuslogl, coef(fit)))) |> range()
+(solve(numDeriv::jacobian(fit@args$gradnegll, coef(fit))) - vcov(fit)) |> range()
+
+## Can we improve on accuracy using nsxD? This would also include predictions using C++ code.
+
 ##
 library(rstpm2)
 m <- rstpm2::stpm2(Surv(time, status) ~ sex, data = lung)
