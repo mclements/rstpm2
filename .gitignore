@@ -16,7 +16,6 @@ rstpm2.Rcheck
 *.Rnw.tex
 _region_.tex
 vignettes/*.tex
-vignettes/*.pdf
 
 NEWS.html
 rstpm2*.tar.gz
