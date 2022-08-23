@@ -2737,6 +2737,30 @@ setMethod("show", "pstpm2",
               show(as(object,"mle2"))
               })
 
+simulate.stpm2 <- function(object, nsim=1, seed=NULL,
+                           newdata=NULL, lower=1e-6, upper=1e5, ...) {
+    if (!is.null(seed)) set.seed(seed)
+    if (is.null(newdata)) newdata = as.data.frame(object@data)
+    ## assumes nsim replicates per row in newdata
+    n = nsim * nrow(newdata)
+    newdata = newdata[rep(1:nrow(newdata), each=nsim), , drop=FALSE]
+    e <- -log(runif(n))
+    objective <- function(time) {
+        newdata[[object@timeVar]] <- time
+        predict(object, type="cumhaz", newdata=newdata) - e
+    }
+    vuniroot(objective, lower=rep(lower,length=n), upper=rep(upper,length=n), tol=1e-10)$root
+}
+setGeneric("simulate", function(object, nsim=1, seed=NULL, ...) standardGeneric("simulate"))
+setMethod("simulate", signature(object="stpm2"),
+          function(object, nsim=1, seed=NULL,
+                   newdata=NULL, lower=1e-6, upper=1e5, ...)
+              simulate.stpm2(object, nsim, seed, newdata, lower,upper, ...))
+setMethod("simulate", signature(object="pstpm2"), 
+          function(object, nsim=1, seed=NULL,
+                   newdata=NULL, lower=1e-6, upper=1e5, ...)
+              simulate.stpm2(object, nsim, seed, newdata, lower,upper, ...))
+
 ## Revised from bbmle:
 ## changed the calculation of the degrees of freedom in the third statement of the .local function
 setMethod("anova", signature(object="pstpm2"),

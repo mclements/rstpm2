@@ -20,6 +20,7 @@ extern SEXP runMarkovODE(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
 extern SEXP runExpM(SEXP,SEXP,SEXP);
 extern SEXP plugin_P_by(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
 extern SEXP plugin_P_L_by(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
+extern SEXP call_rgsm(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
 
 /* .Fortran calls -- thanks to Gordon Smyth */
 extern void F77_NAME(gausq2)(void *, void *, void *, void *, void *);
@@ -37,6 +38,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"runExpM",            (DL_FUNC) &runExpM,            3},
     {"plugin_P_by",        (DL_FUNC) &plugin_P_by,        7},
     {"plugin_P_L_by",      (DL_FUNC) &plugin_P_L_by,     10},
+    {"call_rgsm",          (DL_FUNC) &call_rgsm,         11},
     {NULL, NULL, 0}
 };
 

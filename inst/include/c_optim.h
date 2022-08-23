@@ -155,21 +155,37 @@ double R_zeroin2_adaptor(double x, void * par) {
   Functor * functor = (Functor *) par;
   return functor->operator()(x);
 }
-  
+
 /** 
     Use R_zeroin2 with a function object (functor)
+    @return tuple<double,double,int> with (root, Tol, Maxit)
 **/
 template<class Functor>
-Rcpp::List R_zeroin2_functor(double a, double b, Functor functor, double eps = 1.0e-8) {
+std::tuple<double,double,int>
+R_zeroin2_functor(double a, double b, Functor functor, double eps = 1.0e-8) {
   double Tol = eps;
   int Maxit = 100;
   double root = R_zeroin2(a,b,functor(a),functor(b),&R_zeroin2_adaptor<Functor>,(void *) &functor,
 			  &Tol, &Maxit);
-  return Rcpp::List::create(Rcpp::_("root")=root,
-			    Rcpp::_("Tol")=functor(root),
-			    Rcpp::_("Maxit")=Maxit);
+  return std::make_tuple(root, Tol, Maxit);
 }
 
+/** 
+    Use R_zeroin2 with a function object pointer (functor)
+    @return tuple<double,double,int> with (root, Tol, Maxit)
+**/
+template<class Functor>
+std::tuple<double,double,int>
+R_zeroin2_functor_ptr(double a, double b, Functor *functor, double eps = 1.0e-8) {
+  double Tol = eps;
+  int Maxit = 100;
+  double root = R_zeroin2(a,b,(*functor)(a),(*functor)(b),
+			  &R_zeroin2_adaptor<Functor>,(void *) functor,
+			  &Tol, &Maxit);
+  return std::make_tuple(root, Tol, Maxit);
+}
+
+  
   
   /** 
       Adapt a function object (functor) to work with Brent_fmin()
