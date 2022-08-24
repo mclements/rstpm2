@@ -18,6 +18,41 @@
 ##   require(bbmle)
 ## }
 
+library(rstpm2)
+fit1 <- gsm(Surv(rectime,censrec==1)~hormon,data=brcancer)
+nd = data.frame(hormon=1)
+(design <- gsm_design(fit1,nd))
+set.seed(1002)
+simulate(fit1, nsim=10, newdata=nd)
+simulate(fit1, newdata=data.frame(hormon=0:1))
+set.seed(1002)
+replicate(10,.Call("test_read_gsm", design, PACKAGE="rstpm2"))
+set.seed(1002)
+range(replicate(10,.Call("test_read_gsm", gsm_design(fit1,nd), PACKAGE="rstpm2")) -
+      simulate(fit1, nsim=10, seed=1002, newdata=nd))
+library(microsimulation)
+set.seed(1002)
+replicate(10,.Call("test_read_gsm", gsm_design(fit1,nd), PACKAGE="microsimulation"))
+
+simulate.stpm2 <- function(object, nsim=1, seed=NULL,
+                           newdata=NULL, lower=1e-6, upper=1e5, ...) {
+    stopifnot(!is.null(newdata))
+    if (!is.null(seed)) set.seed(seed)
+    ## assumes nsim replicates per row in newdata
+    n = nsim * nrow(newdata)
+    newdata = newdata[rep(1:nrow(newdata), each=nsim), , drop=FALSE]
+    e <- rexp(n)
+    objective <- function(time) {
+        newdata[[object@timeVar]] <- time
+        predict(object, type="cumhaz", newdata=newdata) - e
+    }
+    vuniroot(objective, lower=rep(lower,length=n), upper=rep(upper,length=n))$root
+}
+setMethod("simulate", "stpm2", simulate.stpm2)
+setMethod("simulate", "pstpm2", simulate.stpm2)
+
+
+
 ## Can we estimate the hessian externally?
 library(rstpm2)
 library(numDeriv)

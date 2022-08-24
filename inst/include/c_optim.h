@@ -176,9 +176,9 @@ R_zeroin2_functor(double a, double b, Functor functor, double eps = 1.0e-8) {
 **/
 template<class Functor>
 std::tuple<double,double,int>
-R_zeroin2_functor_ptr(double a, double b, Functor *functor, double eps = 1.0e-8) {
-  double Tol = eps;
-  int Maxit = 100;
+R_zeroin2_functor_ptr(double a, double b, Functor *functor, double tol = 1.0e-8, int maxit = 100) {
+  double Tol = tol;
+  int Maxit = maxit;
   double root = R_zeroin2(a,b,(*functor)(a),(*functor)(b),
 			  &R_zeroin2_adaptor<Functor>,(void *) functor,
 			  &Tol, &Maxit);
