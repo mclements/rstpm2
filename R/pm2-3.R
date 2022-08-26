@@ -2738,28 +2738,43 @@ setMethod("show", "pstpm2",
               })
 
 simulate.stpm2 <- function(object, nsim=1, seed=NULL,
-                           newdata=NULL, lower=1e-6, upper=1e5, ...) {
+                           newdata=NULL, lower=1e-6, upper=1e5, t0=NULL, ...) {
     if (!is.null(seed)) set.seed(seed)
     if (is.null(newdata)) newdata = as.data.frame(object@data)
     ## assumes nsim replicates per row in newdata
     n = nsim * nrow(newdata)
+    if (!is.null(t0)) {
+        newdatap = newdata
+        newdatap[[object@timeVar]] = t0 # check if this is a sensible size?
+        Sentry = predict(object, newdata=newdatap)
+        if (length(t0)==1)
+            lower=rep(t0,n)
+        else if (length(t0)==nrow(newdata))
+            lower = rep(t0,each=nsim)
+        else if (length(t0==n))
+            lower = t0
+        else lower = rep(lower,n) # should not get here:(
+    } else {
+        Sentry = 1
+        lower = rep(lower, n)
+    }
     newdata = newdata[rep(1:nrow(newdata), each=nsim), , drop=FALSE]
-    e <- -log(runif(n))
+    U <- runif(n)
     objective <- function(time) {
         newdata[[object@timeVar]] <- time
-        predict(object, type="cumhaz", newdata=newdata) - e
+        predict(object, newdata=newdata)/Sentry - U
     }
-    vuniroot(objective, lower=rep(lower,length=n), upper=rep(upper,length=n), tol=1e-10)$root
+    vuniroot(objective, lower=lower, upper=rep(upper,length=n), tol=1e-10)$root
 }
 setGeneric("simulate", function(object, nsim=1, seed=NULL, ...) standardGeneric("simulate"))
 setMethod("simulate", signature(object="stpm2"),
           function(object, nsim=1, seed=NULL,
-                   newdata=NULL, lower=1e-6, upper=1e5, ...)
-              simulate.stpm2(object, nsim, seed, newdata, lower,upper, ...))
+                   newdata=NULL, lower=1e-6, upper=1e5, t0=NULL, ...)
+              simulate.stpm2(object, nsim, seed, newdata, lower,upper,t0, ...))
 setMethod("simulate", signature(object="pstpm2"), 
           function(object, nsim=1, seed=NULL,
-                   newdata=NULL, lower=1e-6, upper=1e5, ...)
-              simulate.stpm2(object, nsim, seed, newdata, lower,upper, ...))
+                   newdata=NULL, lower=1e-6, upper=1e5, t0=NULL, ...)
+              simulate.stpm2(object, nsim, seed, newdata, lower,upper,t0, ...))
 
 ## Revised from bbmle:
 ## changed the calculation of the degrees of freedom in the third statement of the .local function

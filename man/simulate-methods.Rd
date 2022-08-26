@@ -14,15 +14,16 @@
 }}
 \usage{
     \S4method{simulate}{stpm2}(object, nsim=1,
-                         seed, newdata=NULL, ...)
+                         seed, newdata=NULL, t0=NULL, ...)
     \S4method{simulate}{pstpm2}(object, nsim=1,
-                         seed, newdata=NULL, ...)
+                         seed, newdata=NULL, t0=NULL, ...)
 }
 \arguments{
   \item{object}{an stpm2 or pstpm2 object}
-  \item{newdata}{list of new data. If not specified, then defaults to object@data}
   \item{nsim}{number of simulations per row in newdata}
   \item{seed}{optional random number seed}
+  \item{newdata}{list of new data. If not specified, then defaults to object@data}
+  \item{t0}{left truncated entry time (assumed to be zero if NULL)}
   \item{\dots}{additional arguments (for generic compatibility)}
 }
 \examples{
