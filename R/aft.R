@@ -269,7 +269,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         tvc.formulas <-
             lapply(names(tvc), function(name)
                 call(":",
-                     as.name(name),
+                     call("as.numeric",as.name(name)),
                      as.call(c(quote(ns),
                                call("log",timeExpr),
                                 vector2call(list(df=tvc[[name]]))))))
