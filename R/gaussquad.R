@@ -62,7 +62,7 @@ gauss.quad <- function(n,kind="legendre",alpha=0,beta=0)
 }
 
 gauss.quad.prob <- function(n,dist="uniform",l=0,u=1,mu=0,sigma=1,alpha=1,beta=1)
-#	Calculate nodes and weights for Guassian quadrature using probability densities.
+#	Calculate nodes and weights for Gaussian quadrature using probability densities.
 #	Adapted from Netlib routine gaussq.f
 #	Gordon Smyth, Walter and Eliza Hall Institute
 #	Corrections for n=1 and n=2 by Spencer Graves, 28 Dec 2005

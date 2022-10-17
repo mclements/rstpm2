@@ -18,6 +18,31 @@
 ##   require(bbmle)
 ## }
 
+## Email for episig
+## install.packages("extRemes")
+library(extRemes)
+library(survival)
+set.seed(12345)
+n<-500000
+x1<-rnorm(n)
+x2<-rnorm(n)
+error<-revd(n, loc = 0, scale = 1)
+b0<- 1
+b1<-0.5
+b2<--1.2
+c<-1
+time<-exp(b0+b1*x1+b2*x2-c*error)
+status<-rep(1,n)
+survreg(Surv(time, status==1) ~ x1+x2,dist="exponential")
+
+
+library(rstpm2)
+object <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3,tvc=list(hormon=2))
+newdata = data.frame(hormon=0)
+simulate(object, newdata=newdata) # currently returns just the times -- this will later return a data-frame
+simulate(object, newdata=newdata, start=1500) # left-truncation
+plot(object, newdata=newdata)
+
 grep_call = function(name,x) {
     local_function = function(x)
         if(length(x)==1) x==name else any(sapply(x, local_function))

@@ -96,7 +96,7 @@ vuniroot(f, interval, \dots,
   was added in \R 3.1.0.  
 }
 \source{
-  Based on \file{zeroin.c} in \url{https://www.netlib.org/c/brent.shar}.
+  Based on \file{zeroin.c} in \url{https://netlib.org/c/brent.shar}.
 }
 \references{
   Brent, R. (1973)
