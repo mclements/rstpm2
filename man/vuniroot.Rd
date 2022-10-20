@@ -6,7 +6,8 @@ vuniroot(f, interval, \dots,
         lower, upper,
         f.lower = f(lower, \dots), f.upper = f(upper, \dots),
         extendInt = c("no", "yes", "downX", "upX"), check.conv = FALSE,
-        tol = .Machine$double.eps^0.25, maxiter = 1000, trace = 0)
+        tol = .Machine$double.eps^0.25, maxiter = 1000, trace = 0,
+        n = NULL)
 }
 \arguments{
   \item{f}{the function for which the root is sought.}
@@ -33,6 +34,8 @@ vuniroot(f, interval, \dots,
   \item{maxiter}{the maximum number of iterations.}
   \item{trace}{integer number; if positive, tracing information is
     produced.  Higher values giving more details.}
+  \item{n}{integer number; size of input vector to \code{f}
+    (only used if \code{lower} and \code{upper} are of length 1)}
 }
 \description{
   The function \code{vuniroot} searches the interval from \code{lower}
@@ -115,6 +118,8 @@ require(utils) # for str
 ## if so the estimated precision is 2/3.
 f <- function (x, a) x - a
 str(xmin <- vuniroot(f, lower=c(0, 0), upper=c(1,1), tol = 0.0001, a = c(1/3,2/3)))
+## same example with scalars for lower and upper -- using the n argument
+str(xmin <- vuniroot(f, lower=0, upper=1, tol = 0.0001, n=2, a = c(1/3,2/3)))
 
 ## handheld calculator example: fixed point of cos(.):
 vuniroot(function(x) cos(x) - x, lower = -pi, upper = pi, tol = 1e-9)$root
