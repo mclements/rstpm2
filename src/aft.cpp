@@ -174,7 +174,7 @@ namespace rstpm2 {
       return S;
     }
 
-    mat haz(vec time, mat X, mat XD)
+    vec haz(vec time, mat X, mat XD)
     {
       vec beta = init.subvec(0,X.n_cols-1);
       vec betas = init.subvec(X.n_cols,init.size()-1);
