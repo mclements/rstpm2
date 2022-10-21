@@ -640,8 +640,12 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     }
     out <- as(mle2, "aft")
     out@args <- args
+    attr(out,"nobs") <- length(out@args$event) # for logLik method
     return(out)
   }
+
+setMethod("nobs", "aft", function(object, ...) length(object@args$event))
+
 
 setMethod("predict", "aft",
           function(object,newdata=NULL,
