@@ -2764,7 +2764,7 @@ simulate.stpm2 <- function(object, nsim=1, seed=NULL,
         newdata[[object@timeVar]] <- time
         predict(object, newdata=newdata)/Sentry - U
     }
-    vuniroot(objective, lower=lower, upper=rep(upper,length=n), tol=1e-10)$root
+    vuniroot(objective, lower=rep(lower,length=n), upper=rep(upper,length=n), tol=1e-10, n=n)$root
 }
 setGeneric("simulate", function(object, nsim=1, seed=NULL, ...) standardGeneric("simulate"))
 setMethod("simulate", signature(object="stpm2"),

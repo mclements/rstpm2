@@ -32,6 +32,7 @@ namespace rstpm2 {
 	}
     }
     for (int n = 1; n<=numiter; n++) {
+      R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
       for(i=0; i<size; i++) {
 	if (!converged[i]) {
 	  double prev_step = b[i]-a[i];		/* Distance from the last but one

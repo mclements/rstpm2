@@ -11,7 +11,7 @@ vuniroot <-
     if (all(!is.numeric(lower) | !is.numeric(upper) | lower >= upper))
         stop("lower < upper  is not fulfilled")
     if (is.null(n) && length(lower) == 1 && length(upper) == 1)
-        stop("Bounds have length 1: replicate for the bounds to have the correct length")
+        warning("Bounds have length 1: possibly replicate for the bounds to have the correct length")
     if (!is.null(n) && length(lower) == 1 && length(upper) == 1) {
         lower = rep(lower,n)
         upper = rep(upper,n)
