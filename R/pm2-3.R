@@ -2167,6 +2167,7 @@ predict.stpm2.base <-
                            lower[i]=x[i]-eps
                            (f(upper)-f(lower))/2/eps
                        }))
+          div <- function(mat,v) t(t(mat)/v)
           if (type=="hazard" && link %in% c("I","log")) {
               ## Case: frailty model (assumes baseline hazard for frailty=1)
               betastar <- if(args$frailty || args$copula) beta[-length(beta)] else beta
@@ -2182,19 +2183,20 @@ predict.stpm2.base <-
               gradS <- object@link$gradS(X%*% betastar,X)
               gradh <- object@link$gradh(X %*% betastar,XD %*% betastar,list(X=X,XD=XD))
               gd <- if(link=="I") collapse(gradh*S + gradS*h) else
-                                                                  collapse(gradh*S + h*gradS)/collapse1(h*S)-collapse(gradS)/collapse1(S)
+                                                                  div(collapse(gradh*S + h*gradS),collapse1(h*S))-div(collapse(gradS),collapse1(S))
           }
           if (type=="meanhr" && !object@frailty && link == "log") {
               betastar <- if(args$frailty|| args$copula) beta[-length(beta)] else beta
               h <- as.vector(object@link$h(X %*% betastar, XD %*% betastar))
               S <- as.vector(object@link$ilink(X %*% betastar))
-              gradS <- object@link$gradS(X%*% betastar,X)
+              gradS <- object@link$gradS(X %*% betastar,X)
               gradh <- object@link$gradh(X %*% betastar,XD %*% betastar,list(X=X,XD=XD))
               h2 <- as.vector(object@link$h(X2 %*% betastar, XD2 %*% betastar))
               S2 <- as.vector(object@link$ilink(X2 %*% betastar))
-              gradS2 <- object@link$gradS(X2%*% betastar,X2)
+              gradS2 <- object@link$gradS(X2 %*% betastar,X2)
               gradh2 <- object@link$gradh(X2 %*% betastar,XD2 %*% betastar,list(X=X2,XD=XD2))
-              gd <- collapse(gradh*S + h*gradS)/collapse1(h*S) - collapse(gradS)/collapse1(S) - collapse(gradh2*S2 + h2*gradS2)/collapse1(h2*S2) + collapse(gradS2)/collapse1(S2)
+              gd <- div(collapse(gradh2*S2 + h2*gradS2),collapse1(h2*S2)) - div(collapse(gradS2),collapse1(S2)) - div(collapse(gradh*S + h*gradS),collapse1(h*S)) + div(collapse(gradS),collapse1(S))
+              ## fd(function(beta) {fit=object; fit@fullcoef = beta; log(predict(fit,type="meanhr",newdata=newdata, var=var, exposed=exposed))},betastar)
           }
           if (type=="meansurv" && !object@frailty && link=="I") {
               gd <- collapse(object@link$gradS(X%*% beta,X))
@@ -2304,7 +2306,6 @@ predict.cumhaz <-
     eta <- as.vector(X %*% beta)
     link$H(eta)
 }
-
 
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,

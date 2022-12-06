@@ -18,6 +18,33 @@
 ##   require(bbmle)
 ## }
 
+## Email from Paul S
+library(rstpm2)
+fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3,tvc=list(hormon=2))
+## Plot marginal HR
+## Straight from plot function
+plot(fit, type = "meanhr", newdata = transform(brcancer, hormon = 0), exposed = function(data) transform(data, hormon = 1))
+
+## Using ggplot (need to manually extract predictions and plot)
+library(ggplot2)
+## debugonce(rstpm2:::predict.stpm2.base)
+system.time(pred <- predict(fit,
+                            newdata = transform(brcancer, hormon = 0),
+                            grid = TRUE, full = TRUE, se.fit = TRUE, type = "meanhr", recent=TRUE,
+                            exposed = function(data) transform(data, hormon = 1)))
+system.time(pred2 <- predict(fit,
+                             newdata = transform(brcancer, hormon = 0),
+                             grid = TRUE, full = TRUE, se.fit = TRUE, type = "meanhr",
+                             exposed = function(data) transform(data, hormon = 1)))
+## Plot
+ggplot(pred, aes(x = rectime, y = Estimate)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.3) +
+  ylim(0,2) +
+  xlab('Time (days)') + ylab('HR') +
+  theme_bw(base_size = 15)
+
+
 ## Email for episig
 ## install.packages("extRemes")
 library(extRemes)
