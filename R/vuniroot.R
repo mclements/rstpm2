@@ -10,8 +10,9 @@ vuniroot <-
         stop("'interval' must be a matrix with two columns")
     if (all(!is.numeric(lower) | !is.numeric(upper) | lower >= upper))
         stop("lower < upper  is not fulfilled")
-    if (is.null(n) && length(lower) == 1 && length(upper) == 1)
-        warning("Bounds have length 1: possibly replicate for the bounds to have the correct length")
+    if (is.null(n) && length(lower) == 1 && length(upper) == 1 && length(f.lower) > 1)
+        n <- length(f.lower)
+    ## warning("Bounds have length 1: possibly replicate for the bounds to have the correct length")
     if (!is.null(n) && length(lower) == 1 && length(upper) == 1) {
         lower = rep(lower,n)
         upper = rep(upper,n)
