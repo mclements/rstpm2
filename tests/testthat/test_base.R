@@ -37,6 +37,7 @@ test_that("Comparison with Stata", {
     expect_eps(coef(fit)[2], -0.3614357, 1e-5)
 })
 test_that("Cure", {
+    ## skip_on_cran()
     fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
                  smooth.formula=~nsx(log(rectime),df=3,cure=TRUE))
     expect_eps(coef(fit)[2], -0.3564268, 1e-5)
