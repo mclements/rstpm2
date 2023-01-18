@@ -1,8 +1,8 @@
 test:
-	R --slave -e "devtools::test()"
-
-test-devel:
 	R-devel --slave -e "lev=0" -e "devtools::test()"
+
+test-base:
+	R --slave -e "devtools::test()"
 
 check-base: build-base
 	R CMD check --as-cran rstpm2_`grep Version DESCRIPTION | cut -b 10-15`.tar.gz
