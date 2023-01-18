@@ -80,7 +80,7 @@ function (x, df = NULL, knots = NULL, intercept = FALSE,
         basis <- nmat
     }
     dimnames(basis) <- list(nx, 1L:n.col)
-    if (centre) {
+    if (is.numeric(centre)) {
       centreBasis <- nsx(centre,
                          knots=if (is.null(knots)) numeric(0) else knots,
                          Boundary.knots=Boundary.knots, 
