@@ -120,8 +120,6 @@ f <- function (x, a) x - a
 str(xmin <- vuniroot(f, lower=c(0, 0), upper=c(1,1), tol = 0.0001, a = c(1/3,2/3)))
 ## same example with scalars for lower and upper -- using the n argument
 str(xmin <- vuniroot(f, lower=0, upper=1, tol = 0.0001, n=2, a = c(1/3,2/3)))
-tools::assertCondition(vuniroot(f, lower=0, upper=1, tol = 0.0001, a = c(1/3,2/3)),
-                       "error", verbose=TRUE)
 
 ## handheld calculator example: fixed point of cos(.):
 vuniroot(function(x) cos(x) - x, lower = -pi, upper = pi, tol = 1e-9)$root
