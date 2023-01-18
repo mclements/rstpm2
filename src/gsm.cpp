@@ -14,7 +14,7 @@ namespace rstpm2 {
   gsm::gsm() {}
   double gsm::eta(double y) {
     double eta = etap(index);
-    for (int i=0; i<terms.size(); i++)
+    for (std::vector<gsm_term>::size_type i=0; i<terms.size(); i++)
       if (terms[i].x(index) != 0.0)
 	eta += terms[i].x(index) * arma::sum(terms[i].ns1.eval(y,0) % terms[i].gamma);
     return eta;
