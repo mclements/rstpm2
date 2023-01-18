@@ -1,7 +1,7 @@
 #include <RcppArmadillo.h>
 #include <errno.h>
 #include <math.h>
-#include <boost/numeric/odeint.hpp>
+// #include <boost/numeric/odeint.hpp>
 #include <vector>
 #include <algorithm>
 
@@ -331,200 +331,201 @@ arma::vec SplineCoef::eval(double xout, std::vector<SplineCoef>& z)
       yout(i) = z[i].eval(xout);
     return yout;
   }
-namespace boost { namespace numeric { namespace odeint {
-      template <>
-      struct is_resizeable<arma::vec>
-      {
-	typedef boost::true_type type;
-	const static bool value = type::value;
-      };
-      template <>
-      struct same_size_impl<arma::vec, arma::vec>
-      {
-	static bool same_size(const arma::vec& x, const arma::vec& y)
-	{
-	  return x.size() == y.size();
-	}
-      };
-      template<>
-      struct resize_impl<arma::vec, arma::vec>
-      {
-	static void resize(arma::vec& v1, const arma::vec& v2)
-	{
-	  v1.resize(v2.size());
-	}
-      };
-    } } } // namespace boost::numeric::odeint
-typedef arma::vec state_type;
-typedef std::vector<state_type> vector_state_type;
-typedef std::vector<double> vector_times;
-struct push_back_state_and_time
-{
-    std::vector< state_type >& m_states;
-    std::vector< double >& m_times;
-    push_back_state_and_time( std::vector< state_type > &states , std::vector< double > &times )
-    : m_states( states ) , m_times( times ) { }
-    void operator()( const state_type &x , double t )
-    {
-        m_states.push_back( x );
-        m_times.push_back( t );
-    }
-};
-struct push_back_state
-{
-    std::vector< state_type >& m_states;
-    push_back_state( std::vector< state_type > &states)
-    : m_states( states ) { }
-    void operator()( const state_type &x , double t )
-    {
-        m_states.push_back( x );
-    }
-};
-struct Flow {
-  size_t from, to;
-  SplineCoef s;
-  std::vector<SplineCoef> gradients;
-  bool use_log;
-};
-// old version of libarmadillo-dev: mat.as_col() not available
-arma::vec flatten(arma::mat m) {
-  arma::vec v(m.n_cols*m.n_rows);
-  for (size_t j=0; j<m.n_cols; j++)
-    for (size_t i=0; i<m.n_rows; i++)
-      v(j*m.n_rows+i) = m(i,j);
-  return v;
-}
-struct StateComponents {
-  arma::vec P, L;
-  arma::mat gradP, gradL;
-};
-struct StateComponentsCombined {
-  arma::vec times;
-  arma::mat P, L;
-  arma::cube gradP, gradL;
-};
-// forward declaration
-class Markov {
-public:
-  typedef std::vector<Flow> Flows;
-  Flows& flows;
-  double minTm;
-  size_t nStates, nGradients;
-  StateComponents stateComponents(const state_type& x) {
-    arma::vec P = x(arma::span(0,nStates-1));
-    arma::vec L = x(arma::span(nStates,2*nStates-1));
-    arma::mat gradP(arma::vec(x(arma::span(2*nStates,2*nStates+nStates*nGradients-1))).memptr(),
-		    nStates, nGradients);
-    arma::mat gradL(arma::vec(x(arma::span(2*nStates+nStates*nGradients,
-					   2*nStates+2*nStates*nGradients-1))).memptr(),
-		    nStates, nGradients);
-    return {P, L, gradP, gradL};
-  }
-  Markov(Flows& flows, double minTm = 1.0e-8) : flows(flows), minTm(minTm) {
-    nGradients = nStates = 0;
-    for(size_t i=0; i<flows.size(); i++) {
-      nGradients += flows[i].gradients.size();
-      nStates = std::max(std::max(nStates,flows[i].from),flows[i].to);
-    }
-    nStates++;
-  }
-  void operator() ( const state_type &x , state_type &dxdt , const double t )
-  {
-    arma::vec rates(flows.size());
-    arma::vec dPdt(nStates,arma::fill::zeros);
-    arma::vec dLdt;
-    arma::mat dGradPdt(nStates,nGradients,arma::fill::zeros);
-    arma::mat dGradLdt;
-    // destructure the state vector
-    StateComponents c = stateComponents(x);
-    // P (transition probabilities)
-    for (size_t i=0; i<flows.size(); i++) {
-      rates(i) = flows[i].s.eval(flows[i].use_log ? log(t<minTm ? minTm : t) : t);
-      // if (flows[i].use_log) rates(i) = exp(rates(i));
-      double delta = c.P(flows[i].from)*rates(i);
-      dPdt(flows[i].to) += delta;
-      dPdt(flows[i].from) -= delta;
-    }
-    // L (length of stay)
-    dLdt = c.P;
-    // gradients for P
-    for (size_t i=0, start=0; i<flows.size(); start+=flows[i].gradients.size(), i++) {
-      for (size_t j=0; j<flows[i].gradients.size(); j++) {
-	double delta = c.gradP(flows[i].from,start+j)*rates(i)+
-	  c.P(flows[i].from)*flows[i].gradients[j].eval(t);
-	dGradPdt(flows[i].to,start+j) += delta;
-	dGradPdt(flows[i].from,start+j) -= delta;
-      }
-    }
-    // gradients for L
-    dGradLdt = c.gradP;
-    dxdt = arma::join_cols(dPdt,
-			   arma::join_cols(dLdt,
-					   arma::join_cols(flatten(dGradPdt),
-							   flatten(dGradLdt))));
-  }
-};
-StateComponentsCombined run(Markov &model, arma::vec p0, arma::vec times) {
-  using namespace boost::numeric::odeint;
-  vector_state_type states;
-  // times, outtimes and vtimes all have the same data
-  vector_times outtimes; // not strictly needed - we could use push_back_state()
-  vector_times vtimes = arma::conv_to< vector_times >::from(times);
-  state_type x = join_cols(p0, arma::zeros(model.nStates+2*model.nStates*model.nGradients));
-  BOOST_STATIC_ASSERT( is_resizeable<state_type>::value == true );
-  integrate_times(make_dense_output( 1.0e-10 , 1.0e-10 , runge_kutta_dopri5< state_type >() ),
-		  model, x,
-		  vtimes.begin(),
-		  vtimes.end(),
-		  1.0,
-		  push_back_state_and_time(states, outtimes));
-  size_t nx = states[0].size(), nTimes = times.size();
-  // combine the results
-  arma::mat combined(nTimes,nx);
-  for (size_t i=0; i<nTimes; i++)
-    combined(arma::span(i,i),arma::span(0,nx-1)) = states[i].t();
-  // destructure the combined matrix
-  arma::mat P = combined(arma::span::all,arma::span(0,model.nStates-1));
-  arma::mat L = combined(arma::span::all,arma::span(model.nStates,2*model.nStates-1));
-  arma::cube gradP(arma::mat(combined(arma::span::all,
-				      arma::span(2*model.nStates,2*model.nStates+model.nStates*model.nGradients-1))).memptr(),
-		   nTimes, model.nStates, model.nGradients);
-  arma::cube gradL(arma::mat(combined(arma::span::all,
-			    arma::span(2*model.nStates+model.nStates*model.nGradients,
-				       2*model.nStates+2*model.nStates*model.nGradients-1))).memptr(),
-		   nTimes, model.nStates, model.nGradients);
-  return {times, P, L, gradP, gradL};
-}
-// Rcpp::List runMarkovODE(arma::vec y0, arma::vec times, arma::vec tlam, arma::mat lam, Rcpp::List gradients, arma::ivec from, arma::ivec to, Rcpp::LogicalVector use_logs, double minTm = 1.0e-8) {
-RcppExport SEXP runMarkovODE(SEXP _y0, SEXP _times, SEXP _tlam, SEXP _lam, SEXP _gradients, SEXP _from, SEXP _to, SEXP _use_logs, SEXP _minTm) {
-  using namespace Rcpp;
-  arma::vec y0 = as<arma::vec>(_y0);
-  arma::vec times = as<arma::vec>(_times);
-  arma::vec tlam = as<arma::vec>(_tlam);
-  arma::mat lam = as<arma::mat>(_lam);
-  List gradients = as<List>(_gradients);
-  arma::ivec from = as<arma::ivec>(_from);
-  arma::ivec to = as<arma::ivec>(_to);
-  LogicalVector use_logs = as<LogicalVector>(_use_logs);
-  double minTm = as<double>(_minTm);
-  Markov::Flows flows;
-  for (size_t i=0; i<from.size(); i++) {
-    SplineCoef coef = SplineCoef(use_logs[i] ? log(tlam) : tlam, lam.col(i));
-    std::vector<SplineCoef> vgradients;
-    arma::mat g = Rcpp::as<arma::mat>(gradients[i]);
-    for (int j=0; j<gradients.size(); j++)
-      vgradients.push_back(SplineCoef(tlam, g.col(j)));
-    flows.push_back({size_t(from(i)), size_t(to(i)), coef, vgradients,
-                     bool(use_logs[i])});
-  }
-  Markov markov(flows, minTm);
-  auto report = run(markov, y0, times);
-  return wrap(List::create(Named("times")=report.times,
-			   Named("P")=report.P,
-			   Named("L")=report.L,
-			   Named("gradP")=report.gradP,
-			   Named("gradL")=report.gradL));
-}
+
+// namespace boost { namespace numeric { namespace odeint {
+//       template <>
+//       struct is_resizeable<arma::vec>
+//       {
+// 	typedef boost::true_type type;
+// 	const static bool value = type::value;
+//       };
+//       template <>
+//       struct same_size_impl<arma::vec, arma::vec>
+//       {
+// 	static bool same_size(const arma::vec& x, const arma::vec& y)
+// 	{
+// 	  return x.size() == y.size();
+// 	}
+//       };
+//       template<>
+//       struct resize_impl<arma::vec, arma::vec>
+//       {
+// 	static void resize(arma::vec& v1, const arma::vec& v2)
+// 	{
+// 	  v1.resize(v2.size());
+// 	}
+//       };
+//     } } } // namespace boost::numeric::odeint
+// typedef arma::vec state_type;
+// typedef std::vector<state_type> vector_state_type;
+// typedef std::vector<double> vector_times;
+// struct push_back_state_and_time
+// {
+//     std::vector< state_type >& m_states;
+//     std::vector< double >& m_times;
+//     push_back_state_and_time( std::vector< state_type > &states , std::vector< double > &times )
+//     : m_states( states ) , m_times( times ) { }
+//     void operator()( const state_type &x , double t )
+//     {
+//         m_states.push_back( x );
+//         m_times.push_back( t );
+//     }
+// };
+// struct push_back_state
+// {
+//     std::vector< state_type >& m_states;
+//     push_back_state( std::vector< state_type > &states)
+//     : m_states( states ) { }
+//     void operator()( const state_type &x , double t )
+//     {
+//         m_states.push_back( x );
+//     }
+// };
+// struct Flow {
+//   size_t from, to;
+//   SplineCoef s;
+//   std::vector<SplineCoef> gradients;
+//   bool use_log;
+// };
+// // old version of libarmadillo-dev: mat.as_col() not available
+// arma::vec flatten(arma::mat m) {
+//   arma::vec v(m.n_cols*m.n_rows);
+//   for (size_t j=0; j<m.n_cols; j++)
+//     for (size_t i=0; i<m.n_rows; i++)
+//       v(j*m.n_rows+i) = m(i,j);
+//   return v;
+// }
+// struct StateComponents {
+//   arma::vec P, L;
+//   arma::mat gradP, gradL;
+// };
+// struct StateComponentsCombined {
+//   arma::vec times;
+//   arma::mat P, L;
+//   arma::cube gradP, gradL;
+// };
+// // forward declaration
+// class Markov {
+// public:
+//   typedef std::vector<Flow> Flows;
+//   Flows& flows;
+//   double minTm;
+//   size_t nStates, nGradients;
+//   StateComponents stateComponents(const state_type& x) {
+//     arma::vec P = x(arma::span(0,nStates-1));
+//     arma::vec L = x(arma::span(nStates,2*nStates-1));
+//     arma::mat gradP(arma::vec(x(arma::span(2*nStates,2*nStates+nStates*nGradients-1))).memptr(),
+// 		    nStates, nGradients);
+//     arma::mat gradL(arma::vec(x(arma::span(2*nStates+nStates*nGradients,
+// 					   2*nStates+2*nStates*nGradients-1))).memptr(),
+// 		    nStates, nGradients);
+//     return {P, L, gradP, gradL};
+//   }
+//   Markov(Flows& flows, double minTm = 1.0e-8) : flows(flows), minTm(minTm) {
+//     nGradients = nStates = 0;
+//     for(size_t i=0; i<flows.size(); i++) {
+//       nGradients += flows[i].gradients.size();
+//       nStates = std::max(std::max(nStates,flows[i].from),flows[i].to);
+//     }
+//     nStates++;
+//   }
+//   void operator() ( const state_type &x , state_type &dxdt , const double t )
+//   {
+//     arma::vec rates(flows.size());
+//     arma::vec dPdt(nStates,arma::fill::zeros);
+//     arma::vec dLdt;
+//     arma::mat dGradPdt(nStates,nGradients,arma::fill::zeros);
+//     arma::mat dGradLdt;
+//     // destructure the state vector
+//     StateComponents c = stateComponents(x);
+//     // P (transition probabilities)
+//     for (size_t i=0; i<flows.size(); i++) {
+//       rates(i) = flows[i].s.eval(flows[i].use_log ? log(t<minTm ? minTm : t) : t);
+//       // if (flows[i].use_log) rates(i) = exp(rates(i));
+//       double delta = c.P(flows[i].from)*rates(i);
+//       dPdt(flows[i].to) += delta;
+//       dPdt(flows[i].from) -= delta;
+//     }
+//     // L (length of stay)
+//     dLdt = c.P;
+//     // gradients for P
+//     for (size_t i=0, start=0; i<flows.size(); start+=flows[i].gradients.size(), i++) {
+//       for (size_t j=0; j<flows[i].gradients.size(); j++) {
+// 	double delta = c.gradP(flows[i].from,start+j)*rates(i)+
+// 	  c.P(flows[i].from)*flows[i].gradients[j].eval(t);
+// 	dGradPdt(flows[i].to,start+j) += delta;
+// 	dGradPdt(flows[i].from,start+j) -= delta;
+//       }
+//     }
+//     // gradients for L
+//     dGradLdt = c.gradP;
+//     dxdt = arma::join_cols(dPdt,
+// 			   arma::join_cols(dLdt,
+// 					   arma::join_cols(flatten(dGradPdt),
+// 							   flatten(dGradLdt))));
+//   }
+// };
+// StateComponentsCombined run(Markov &model, arma::vec p0, arma::vec times) {
+//   using namespace boost::numeric::odeint;
+//   vector_state_type states;
+//   // times, outtimes and vtimes all have the same data
+//   vector_times outtimes; // not strictly needed - we could use push_back_state()
+//   vector_times vtimes = arma::conv_to< vector_times >::from(times);
+//   state_type x = join_cols(p0, arma::zeros(model.nStates+2*model.nStates*model.nGradients));
+//   // BOOST_STATIC_ASSERT( is_resizeable<state_type>::value == true );
+//   integrate_times(make_dense_output( 1.0e-10 , 1.0e-10 , runge_kutta_dopri5< state_type >() ),
+// 		  model, x,
+// 		  vtimes.begin(),
+// 		  vtimes.end(),
+// 		  1.0,
+// 		  push_back_state_and_time(states, outtimes));
+//   size_t nx = states[0].size(), nTimes = times.size();
+//   // combine the results
+//   arma::mat combined(nTimes,nx);
+//   for (size_t i=0; i<nTimes; i++)
+//     combined(arma::span(i,i),arma::span(0,nx-1)) = states[i].t();
+//   // destructure the combined matrix
+//   arma::mat P = combined(arma::span::all,arma::span(0,model.nStates-1));
+//   arma::mat L = combined(arma::span::all,arma::span(model.nStates,2*model.nStates-1));
+//   arma::cube gradP(arma::mat(combined(arma::span::all,
+// 				      arma::span(2*model.nStates,2*model.nStates+model.nStates*model.nGradients-1))).memptr(),
+// 		   nTimes, model.nStates, model.nGradients);
+//   arma::cube gradL(arma::mat(combined(arma::span::all,
+// 			    arma::span(2*model.nStates+model.nStates*model.nGradients,
+// 				       2*model.nStates+2*model.nStates*model.nGradients-1))).memptr(),
+// 		   nTimes, model.nStates, model.nGradients);
+//   return {times, P, L, gradP, gradL};
+// }
+// // Rcpp::List runMarkovODE(arma::vec y0, arma::vec times, arma::vec tlam, arma::mat lam, Rcpp::List gradients, arma::ivec from, arma::ivec to, Rcpp::LogicalVector use_logs, double minTm = 1.0e-8) {
+// RcppExport SEXP runMarkovODE(SEXP _y0, SEXP _times, SEXP _tlam, SEXP _lam, SEXP _gradients, SEXP _from, SEXP _to, SEXP _use_logs, SEXP _minTm) {
+//   using namespace Rcpp;
+//   arma::vec y0 = as<arma::vec>(_y0);
+//   arma::vec times = as<arma::vec>(_times);
+//   arma::vec tlam = as<arma::vec>(_tlam);
+//   arma::mat lam = as<arma::mat>(_lam);
+//   List gradients = as<List>(_gradients);
+//   arma::ivec from = as<arma::ivec>(_from);
+//   arma::ivec to = as<arma::ivec>(_to);
+//   LogicalVector use_logs = as<LogicalVector>(_use_logs);
+//   double minTm = as<double>(_minTm);
+//   Markov::Flows flows;
+//   for (size_t i=0; i<from.size(); i++) {
+//     SplineCoef coef = SplineCoef(use_logs[i] ? log(tlam) : tlam, lam.col(i));
+//     std::vector<SplineCoef> vgradients;
+//     arma::mat g = Rcpp::as<arma::mat>(gradients[i]);
+//     for (int j=0; j<gradients.size(); j++)
+//       vgradients.push_back(SplineCoef(tlam, g.col(j)));
+//     flows.push_back({size_t(from(i)), size_t(to(i)), coef, vgradients,
+//                      bool(use_logs[i])});
+//   }
+//   Markov markov(flows, minTm);
+//   auto report = run(markov, y0, times);
+//   return wrap(List::create(Named("times")=report.times,
+// 			   Named("P")=report.P,
+// 			   Named("L")=report.L,
+// 			   Named("gradP")=report.gradP,
+// 			   Named("gradL")=report.gradL));
+// }
 
 RcppExport SEXP multistate_ddt(SEXP P_, SEXP Pu_, SEXP Q_, SEXP Qu_) {
   using namespace arma;
@@ -564,37 +565,37 @@ RcppExport SEXP multistate_ddt(SEXP P_, SEXP Pu_, SEXP Q_, SEXP Qu_) {
 }
 
 
-class ExpM {
-public:
-  arma::mat Qmat;
-  ExpM(arma::mat _Qmat) : Qmat(_Qmat) { }
-  void operator() ( const state_type &x , state_type &dxdt , const double t )
-  {
-    dxdt = (x.t() * Qmat).t();
-  }
-};
-RcppExport SEXP runExpM(SEXP _y0, SEXP _times, SEXP _Qmat) {
-  using namespace Rcpp;
-  arma::vec y0 = as<arma::vec>(_y0);
-  arma::vec times = as<arma::vec>(_times);
-  arma::mat Qmat = as<arma::mat>(_Qmat);
-  ExpM model(Qmat);
-  using namespace boost::numeric::odeint;
-  vector_state_type states;
-  // times, outtimes and vtimes all have the same data
-  vector_times outtimes; // not strictly needed - we could use push_back_state()
-  vector_times vtimes = arma::conv_to< vector_times >::from(times);
-  BOOST_STATIC_ASSERT( is_resizeable<state_type>::value == true );
-  integrate_times(make_dense_output( 1.0e-10 , 1.0e-10 , runge_kutta_dopri5< state_type >() ),
-		  model, y0,
-		  vtimes.begin(),
-		  vtimes.end(),
-		  1.0,
-		  push_back_state_and_time(states, outtimes));
-  size_t nx = states[0].size(), nTimes = times.size();
-  // combine the results
-  arma::mat combined(nTimes,nx);
-  for (size_t i=0; i<nTimes; i++)
-    combined(arma::span(i,i),arma::span(0,nx-1)) = states[i].t();
-  return wrap(combined);
-}
+// class ExpM {
+// public:
+//   arma::mat Qmat;
+//   ExpM(arma::mat _Qmat) : Qmat(_Qmat) { }
+//   void operator() ( const state_type &x , state_type &dxdt , const double t )
+//   {
+//     dxdt = (x.t() * Qmat).t();
+//   }
+// };
+// RcppExport SEXP runExpM(SEXP _y0, SEXP _times, SEXP _Qmat) {
+//   using namespace Rcpp;
+//   arma::vec y0 = as<arma::vec>(_y0);
+//   arma::vec times = as<arma::vec>(_times);
+//   arma::mat Qmat = as<arma::mat>(_Qmat);
+//   ExpM model(Qmat);
+//   using namespace boost::numeric::odeint;
+//   vector_state_type states;
+//   // times, outtimes and vtimes all have the same data
+//   vector_times outtimes; // not strictly needed - we could use push_back_state()
+//   vector_times vtimes = arma::conv_to< vector_times >::from(times);
+//   // BOOST_STATIC_ASSERT( is_resizeable<state_type>::value == true );
+//   integrate_times(make_dense_output( 1.0e-10 , 1.0e-10 , runge_kutta_dopri5< state_type >() ),
+// 		  model, y0,
+// 		  vtimes.begin(),
+// 		  vtimes.end(),
+// 		  1.0,
+// 		  push_back_state_and_time(states, outtimes));
+//   size_t nx = states[0].size(), nTimes = times.size();
+//   // combine the results
+//   arma::mat combined(nTimes,nx);
+//   for (size_t i=0; i<nTimes; i++)
+//     combined(arma::span(i,i),arma::span(0,nx-1)) = states[i].t();
+//   return wrap(combined);
+// }
