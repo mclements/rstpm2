@@ -100,8 +100,6 @@ namespace rstpm2 {
       }
       return f;
     }
-    
-    
     vec gradientPenalty(mat Q, vec beta) { // Q: (nbeta+2) x nbeta
       size_t n = Q.n_rows;
       mat D = join_rows(zeros(n-1,1),eye(n-1,n-1)) - join_rows(eye(n-1,n-1),zeros(n-1,1)); // (nbeta+1) x (nbeta+2)
@@ -116,7 +114,9 @@ namespace rstpm2 {
     vec gradient(vec betafull)
     { 
       vec beta = betafull.subvec(0,X.n_cols-1);
-      vec betas = betafull.subvec(X.n_cols,betafull.size()-1);
+      vec betac = betafull.subvec(X.n_cols, X.n_cols + Xc.n_cols - 1);
+      vec betas = betafull.subvec(X.n_cols+Xc.n_cols, betafull.size()-1);
+      vec etac = Xc * betac;
       vec eta = X * beta;
       vec etaD = XD * beta;
       vec logtstar = log(time) - eta;
@@ -246,28 +246,53 @@ namespace rstpm2 {
       return gradh;
     }
   };
-  
+
+  RcppExport SEXP aft_mixture_model_output(SEXP args) {
+    using namespace Rcpp;
+    using namespace arma;
+    aft_mixture model(args);
+    List list = as<List>(args);
+    std::string return_type = as<std::string>(list["return_type"]);
+    if (return_type == "nmmin") {
+      // model.pre_process();
+      NelderMead nm;
+      nm.trace = as<int>(list["trace"]);
+      nm.maxit = as<int>(list["maxit"]);
+      NumericVector betafull = as<NumericVector>(wrap(model.init));
+      nm.optim<aft_mixture>(betafull,model);
+      // model.post_process();
+      return List::create(_("fail")=nm.fail, 
+			  _("coef")=wrap(nm.coef),
+			  _("hessian")=wrap(nm.hessian));
+    }
+    else if (return_type == "vmmin") {
+      // model.pre_process();
+      BFGS bfgs;
+      bfgs.trace = as<int>(list["trace"]);
+      bfgs.maxit = as<int>(list["maxit"]);
+      NumericVector betafull = as<NumericVector>(wrap(model.init));
+      bfgs.optim<aft_mixture>(betafull,model);
+      // model.post_process();
+      return List::create(_("fail")=bfgs.fail, 
+			  _("coef")=wrap(bfgs.coef),
+			  _("hessian")=wrap(bfgs.hessian));
+    }
+    else if (return_type == "objective")
+      return wrap(model.objective(model.init));
+    else if (return_type == "gradient")
+      return wrap(model.gradient(model.init));
+    else if (return_type == "survival")
+      return wrap(model.survival(as<vec>(list["time"]),as<mat>(list["X"])));
+    else if (return_type == "haz")
+      return wrap(model.haz(as<vec>(list["time"]),as<mat>(list["X"]),as<mat>(list["XD"])));
+    else if (return_type == "gradh")
+      return wrap(model.gradh(as<vec>(list["time"]),as<mat>(list["X"]),as<mat>(list["XD"])));
+    else {
+      REprintf("Unknown return_type.\n");
+      return wrap(-1);
+    }
+  }
+
 } // namespace rstpm2
 
-RcppExport SEXP aft_mixture_model_output(SEXP args) {
-  using namespace Rcpp;
-  using namespace arma;
-  rstpm2::aft_mixture model(args);
-  List list = as<List>(args);
-  std::string return_type = as<std::string>(list["return_type"]);
-  if (return_type == "objective")
-    return wrap(model.objective(model.init));
-  else if (return_type == "gradient")
-    return wrap(model.gradient(model.init));
-  else if (return_type == "survival")
-    return wrap(model.survival(as<vec>(list["time"]),as<mat>(list["X"])));
-  else if (return_type == "haz")
-    return wrap(model.haz(as<vec>(list["time"]),as<mat>(list["X"]),as<mat>(list["XD"])));
-  else if (return_type == "gradh")
-    return wrap(model.gradh(as<vec>(list["time"]),as<mat>(list["X"]),as<mat>(list["XD"])));
-  else {
-    REprintf("Unknown return_type.\n");
-    return wrap(-1);
-  }
-}
 

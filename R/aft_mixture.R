@@ -1,3 +1,8 @@
+## TODO
+## - use cure.formula to specify the cure fraction
+## - add gradients
+## - add better covariance matrix calculations
+
 setClass("aft_mixture", representation(args="list"), contains="mle2")
 
 aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
@@ -214,37 +219,36 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
         args$maxit <- control$maxit
     }
     optim_step <- function(use.gr) {
-        ## args$return_type <<- if (use.gr) "vmmin" else "nmmin"
-        mle2 <-  bbmle::mle2(negll, coef, vecpar=TRUE, control=control, ...)
-        ## fit <- .Call("aft_mixture_model_output", args, PACKAGE="rstpm2")
-        ## coef <- as.vector(mle2$coef)
-        ## hessian <- fit$hessian
-        ## names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
-        args$init <<- coef(mle2)
-        vcov = vcov(mle2)
-        ## mle2 <- if (use.gr) bbmle::mle2(negll, coef, vecpar=TRUE, control=control,
-        ##                                gr=gradient, ...)
+        args$return_type <<- if (use.gr) "vmmin" else "nmmin"
+        fit <- .Call("aft_mixture_model_output", args, PACKAGE="rstpm2")
+        coef <- as.vector(fit$coef)
+        hessian <- fit$hessian
+        names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
+        args$init <<- coef
+        mle2 <- if (use.gr) bbmle::mle2(negll, coef, vecpar=TRUE, control=control,
+                                        gr=gradient, ..., eval.only=TRUE)
+                else bbmle::mle2(negll, coef, vecpar=TRUE, control=control, ..., eval.only=TRUE)
         ## browser()
-        ## mle2@details$convergence <- fit$fail # fit$itrmcd
-        ## vcov <- try(solve(hessian), silent=TRUE)
-        ## if (inherits(vcov, "try-error"))
-        ##     vcov <- try(solve(hessian+1e-6*diag(nrow(hessian))), silent=TRUE)
-        ## if (inherits(vcov, "try-error")) {
-        ##     if (!use.gr)
-        ##         message("Non-invertible Hessian")
-        ##     mle2@vcov <- matrix(NA,length(coef), length(coef))
-        ## } else {
-        ##     mle2@vcov <- vcov
-        ## }
+        mle2@details$convergence <- fit$fail # fit$itrmcd
+        vcov <- try(solve(hessian,tol=0), silent=TRUE)
+        if (inherits(vcov, "try-error"))
+            vcov <- try(solve(hessian+1e-6*diag(nrow(hessian)), tol=0), silent=TRUE)
+        if (inherits(vcov, "try-error")) {
+            if (!use.gr)
+                message("Non-invertible Hessian")
+            mle2@vcov <- matrix(NA,length(coef), length(coef))
+        } else {
+            mle2@vcov <- vcov
+        }
         mle2
     }
     ## browser()
-    mle2 <-  bbmle::mle2(negll, init, vecpar=TRUE, control=control, ...)
-    ## mle2 <- optim_step(use.gr)
-    ## if (all(is.na(mle2@vcov)) && use.gr) {
-    ##     args$init <- init
-    ##     mle2 <- optim_step(FALSE)
-    ## }
+    ## mle2 <-  bbmle::mle2(negll, init, vecpar=TRUE, control=control, ...)
+    mle2 <- optim_step(use.gr)
+    if (all(is.na(mle2@vcov)) && use.gr) {
+        args$init <- init
+        mle2 <- optim_step(FALSE)
+    }
     out <- as(mle2, "aft_mixture")
     out@args <- args
     attr(out,"nobs") <- length(out@args$event) # for logLik method
