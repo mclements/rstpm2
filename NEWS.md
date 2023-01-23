@@ -1,5 +1,8 @@
 # rstpm2
 
+# Version 1.5.9
+    - Bug fix: predict(..., type="meanhr") and type="meanhaz"
+
 # Version 1.5.2
     - Add Clayton copulas with arbitrary cluster sizes to the
       parametric GSMs (experimental)
