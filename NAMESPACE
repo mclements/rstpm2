@@ -1,6 +1,6 @@
 useDynLib(rstpm2, .registration=TRUE)
 
-exportClasses(stpm2,pstpm2,tvcCoxph,aft,aft2)
+exportClasses(stpm2,pstpm2,tvcCoxph,aft,aft_mixture)
 
 export(stpm2, pstpm2, aft, gsm, aft_mixture,
        cox.tvc, # experimental --- don't export?

@@ -249,7 +249,7 @@ namespace rstpm2 {
   
 } // namespace rstpm2
 
-RcppExport SEXP aft_model_output2(SEXP args) {
+RcppExport SEXP aft_mixture_model_output(SEXP args) {
   using namespace Rcpp;
   using namespace arma;
   rstpm2::aft_mixture model(args);
