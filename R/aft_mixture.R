@@ -1,17 +1,12 @@
-## TODO
-## - use cure.formula to specify the cure fraction
-## - add gradients
-## - add better covariance matrix calculations
-
 setClass("aft_mixture", representation(args="list"), contains="mle2")
 
 aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
-                        tvc = NULL, # cure.formula=formula,
+                        tvc = NULL, cure.formula=formula,
                         control = list(parscale = 1, maxit = 1000), init = NULL,
                         weights = NULL,
                         timeVar = "", time0Var = "", log.time.transform=TRUE,
-                        reltol=1.0e-8, trace = 0, cure = FALSE, mixture = FALSE,
-                        contrasts = NULL, subset = NULL, use.gr = FALSE, ...) {
+                        reltol=1.0e-8, trace = 0, cure = FALSE, mixture = TRUE,
+                        contrasts = NULL, subset = NULL, use.gr = TRUE, ...) {
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
@@ -86,6 +81,7 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
     glm.cure.call[[1]] = as.name("glm")
     glm.cure.call$family = as.name("binomial")
     lhs(glm.cure.call$formula) = as.name(eventExpr)
+    rhs(glm.cure.call$formula) = rhs(cure.formula)
     ## glm(y ~ X, family=binomial)
     ## browser()
     glm.cure.obj <- eval(glm.cure.call, envir=parent.frame())
@@ -140,7 +136,7 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
     ## Xc <- model.matrix(coxph.obj, data)
     XD <- grad1(lpfunc,data[[timeVar]],lm.obj,data,timeVar,log.transform=log.time.transform)
     XD <- matrix(XD,nrow=nrow(X))
-    XD0 <- X0 <- matrix(0,1,ncol(X))
+    Xc0 <- XD0 <- X0 <- matrix(0,1,ncol(X))
     if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
     if (delayed) {
         ind0 <- time0>0
@@ -153,6 +149,7 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
         data0 <- data[ind0,,drop=FALSE] # data for delayed entry times
         data0[[timeVar]] <- data0[[time0Var]]
         X0 <- lpmatrix.lm(lm.obj, data0)
+        Xc0 = lpmatrix.lm(glm.cure.obj, data0)
         wt0 <- wt[ind0]
         XD0 <- grad1(lpfunc,data0[[timeVar]],lm.obj,data0,timeVar,log.transform=log.time.transform)
         XD0 <- matrix(XD0,nrow=nrow(X0))
@@ -188,16 +185,6 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
     }
     parscale <- rep(if (is.null(control$parscale)) 1 else control$parscale,length=length(init))
     names(parscale) <- names(init)
-    args <- list(init=init,X=X,XD=XD,wt=wt,event=ifelse(event,1,0),time=time,y=y,
-                 timeVar=timeVar,timeExpr=timeExpr,terms=mt,
-                 delayed=delayed, X0=X0, XD0=XD0, wt0=wt0, parscale=parscale, reltol=reltol,
-                 Xc=Xc, maxit=control$maxit,
-                 time0=if (delayed) time0[time0>0] else NULL, log.time.transform=log.time.transform,
-                 trace = as.integer(trace), map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L,
-                 boundaryKnots=attr(design,"Boundary.knots"), q.const=t(attr(design,"q.const")),
-                 interiorKnots=attr(design,"knots"), design=design, designD=designD,
-                 designDD=designDD, cure=as.integer(cure), mixture = as.integer(mixture),
-                 data=data, lm.obj = lm.obj, glm.cure.obj = glm.cure.obj, return_type="optim")
     negll <- function(beta) {
         localargs <- args
         localargs$return_type <- "objective"
@@ -210,6 +197,17 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
         localargs$init <- beta
         return(as.vector(.Call("aft_mixture_model_output", localargs, PACKAGE="rstpm2")))
     }
+    args <- list(init=init,X=X,XD=XD,wt=wt,event=ifelse(event,1,0),time=time,y=y,
+                 timeVar=timeVar,timeExpr=timeExpr,terms=mt,
+                 delayed=delayed, X0=X0, XD0=XD0, Xc0=Xc0, wt0=wt0, parscale=parscale, reltol=reltol,
+                 Xc=Xc, maxit=control$maxit,
+                 time0=if (delayed) time0[time0>0] else NULL, log.time.transform=log.time.transform,
+                 trace = as.integer(trace), map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L,
+                 boundaryKnots=attr(design,"Boundary.knots"), q.const=t(attr(design,"q.const")),
+                 interiorKnots=attr(design,"knots"), design=design, designD=designD,
+                 designDD=designDD, cure=as.integer(cure), mixture = as.integer(mixture),
+                 data=data, lm.obj = lm.obj, glm.cure.obj = glm.cure.obj, return_type="optim",
+                 gradient=gradient)
     parnames(negll) <- names(init)
     ## MLE
     if (delayed && use.gr) { # initial search using nmmin

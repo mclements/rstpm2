@@ -10,7 +10,7 @@ namespace rstpm2 {
   public:
     List args;
     vec init;
-    mat X, X0, Xc;
+    mat X, X0, Xc, Xc0;
     mat XD, XD0;
     vec event;
     vec time, time0;
@@ -27,6 +27,7 @@ namespace rstpm2 {
       init = as<vec>(args["init"]);
       X = as<mat>(args["X"]);
       Xc = as<mat>(args["Xc"]);
+      Xc0 = as<mat>(args["Xc0"]);
       XD = as<mat>(args["XD"]);
       XD0 = as<mat>(args["XD0"]);
       event = as<vec>(args["event"]);
@@ -82,21 +83,30 @@ namespace rstpm2 {
       vec logh = etas + log(etaDs) + log(1/time -etaD);
       vec H = exp(etas);
       double f = pen - (dot(logh,event) - sum(H));
+      if (mixture) {
+        cure_frac = exp(etac)/(1+exp(etac)); // does this need to be stored?
+	// TODO: delayed?
+	// TODO: can we use above?
+        f = pen - dot(event, log(1-cure_frac)+logh-H)
+        - dot(1-event,log(cure_frac+(1-cure_frac)%exp(-H)));
+      }
       if (delayed) {
 	vec eta0 = X0 * beta;
+	vec etac0 = Xc0 * betac;
 	vec logtstar0 = log(time0) - eta0;
 	vec etas0 = s.basis(logtstar0) * betas;
 	vec etaDs0 = s.basis(logtstar0,1) * betas;
 	vec H0 = exp(etas0);
 	vec eps0 = etaDs0*0. + 1e-16;
 	f += dot(min(etaDs0,eps0), min(etaDs0,eps0));
-	f -= sum(H0);
-      }
-      if (mixture) {
-        cure_frac = exp(etac)/(1+exp(etac));
-        
-        f = pen - dot(event, log(1-cure_frac)+logh-H)
-        - dot(1-event,log(cure_frac+(1-cure_frac)%exp(-H)));
+	if (!mixture) {
+	  f -= sum(H0);
+	} else {
+	  vec cure_frac0 = exp(etac0)/(1+exp(etac0));
+	  vec S0_mix = cure_frac0 + (1.0-cure_frac0) % exp(-H0);
+	  vec H0_mix = -log(S0_mix);
+	  f -= sum(H0_mix);
+	}
       }
       return f;
     }
@@ -147,9 +157,30 @@ namespace rstpm2 {
       mat gradi = join_rows(-rmult(dloghdbeta,event)+dHdbeta, -rmult(dloghdbetas,event)+dHdbetas) + rmult(pgrad,pindex) + rmult(pgrads,pindexs);
       vec out = sum(gradi,0).t();
       out += join_cols(beta*0.0, gradientPenalty(s.q_matrix.t(), betas));
+      if (mixture) {
+        cure_frac = exp(etac)/(1.0+exp(etac));
+	vec S_mix = cure_frac + (1.0-cure_frac) % exp(-H);
+	vec H_mix = -log(S_mix);
+	mat dpidtheta = rmult(Xc, cure_frac % (1-cure_frac));
+	mat dHdbeta_mix = rmult(dHdbeta,(1.0 - cure_frac) % exp(-H) / S_mix);
+	mat dHdbetas_mix = rmult(dHdbetas,(1.0 - cure_frac) % exp(-H) / S_mix);
+	mat dHdtheta_mix = -rmult(dpidtheta, (1.0 - exp(-H))/S_mix);
+	mat dloghdbeta_mix = dloghdbeta - dHdbeta + dHdbeta_mix;
+	mat dloghdbetas_mix = dloghdbetas - dHdbetas + dHdbetas_mix;
+	mat dloghdtheta_mix = dHdtheta_mix - rmult(dpidtheta,1.0 / (1.0 - cure_frac));
+	mat pgrads = join_rows(-2*rmult(X,etaDs % etaDDs),Xc*0.0,2*rmult(XDs,etaDs));
+	mat pgrad = join_rows(-2*rmult(XD,1/time-etaD),Xc*0.0,XDs*0.0);
+	gradi = join_rows(-rmult(dloghdbeta_mix,event)+dHdbeta_mix,
+			  -rmult(dloghdtheta_mix,event)+dHdtheta_mix,
+			  -rmult(dloghdbetas_mix,event)+dHdbetas_mix) +
+	  rmult(pgrad,pindex) + rmult(pgrads,pindexs);
+	out = sum(gradi,0).t();
+	out += join_cols(beta*0.0, betac*0.0, gradientPenalty(s.q_matrix.t(), betas));
+      }
       if (delayed) {
 	vec eta0 = X0 * beta;
 	vec etaD0 = XD0 * beta;
+	vec etac0 = Xc0 * betac;
 	vec logtstar0 = log(time0) - eta0;
 	mat Xs0 = s.basis(logtstar0);
 	mat XDs0 = s.basis(logtstar0,1);
@@ -164,13 +195,25 @@ namespace rstpm2 {
 	uvec pindex0 = ((1.0/time0 - etaD0) < eps0);
 	uvec pindexs0 = (etaDs0 < eps0);
 	etaDs0 = max(etaDs0, eps0);
-	mat pgrad0 = join_rows(-2*rmult(XD0,1/time0-etaD0),XDs0*0.0);
-	mat pgrads0 = join_rows(-2*rmult(X0,etaDs0 % etaDDs0),2*rmult(XDs0,etaDs0));
-	out += sum(join_rows(-dHdbeta0, -dHdbetas0) + rmult(pgrads0,pindexs0) +
-		   rmult(pgrad0,pindex0), 0).t();
-      }
-      if (mixture) {
-       // mat dloghdbetas = rmult(-,)
+	if (!mixture) {
+	  mat pgrad0 = join_rows(-2*rmult(XD0,1/time0-etaD0),XDs0*0.0);
+	  mat pgrads0 = join_rows(-2*rmult(X0,etaDs0 % etaDDs0),2*rmult(XDs0,etaDs0));
+	  out += sum(join_rows(-dHdbeta0, -dHdbetas0) + rmult(pgrads0,pindexs0) +
+		     rmult(pgrad0,pindex0), 0).t();
+	} else {
+	  vec cure_frac0 = exp(etac0)/(1.0+exp(etac0));
+	  vec S_mix0 = cure_frac0 + (1.0-cure_frac0) % exp(-H0);
+	  vec H_mix0 = -log(S_mix0);
+	  mat dpidtheta0 = rmult(Xc0, cure_frac0 % (1-cure_frac0));
+	  mat dHdbeta_mix0 = rmult(dHdbeta0,(1.0 - cure_frac0) % exp(-H0) / S_mix0);
+	  mat dHdbetas_mix0 = rmult(dHdbetas0,(1.0 - cure_frac0) % exp(-H0) / S_mix0);
+	  mat dHdtheta_mix0 = -rmult(dpidtheta0, (1.0 - exp(-H0))/S_mix0);
+	  mat pgrad0 = join_rows(-2*rmult(XD0,1/time0-etaD0),Xc0*0.0,XDs0*0.0);
+	  mat pgrads0 = join_rows(-2*rmult(X0,etaDs0 % etaDDs0),Xc0*0.0,2*rmult(XDs0,etaDs0));
+	  out += sum(join_rows(-dHdbeta_mix0, -dHdtheta_mix0, -dHdbetas_mix0) +
+		     rmult(pgrads0,pindexs0) +
+		     rmult(pgrad0,pindex0), 0).t();
+	}
       }
       return out;
     }
