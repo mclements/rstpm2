@@ -1,9 +1,9 @@
 setClass("aft_mixture", representation(args="list"), contains="mle2")
 
-aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
+aft_mixture <- function(formula, data, df = 3,
                         tvc = NULL, cure.formula=formula,
                         control = list(parscale = 1, maxit = 1000), init = NULL,
-                        weights = NULL,
+                        weights = NULL, careful=FALSE,
                         timeVar = "", time0Var = "", log.time.transform=TRUE,
                         reltol=1.0e-8, trace = 0, cure = FALSE, mixture = TRUE,
                         contrasts = NULL, subset = NULL, use.gr = TRUE, ...) {
@@ -22,8 +22,6 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
         timeVar <- all.vars(timeExpr)
     ## set up the formulae
     full.formula <- formula
-    if (!is.null(smooth.formula))
-        rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
     rhs(full.formula) <- rhs(full.formula) %call+% quote(0)
     if (!is.null(tvc)) {
         tvc.formulas <-
@@ -182,7 +180,7 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
     ## browser()
     coef2 = coef(glm.cure.obj)
     names(coef2) = paste0("cure.", names(coef2))
-    init <- c(coef1, -coef2, coef0) # -coef2 because the glm models for uncured!
+    init <- if (mixture) c(coef1, -coef2, coef0) else c(coef1, coef0) # -coef2 because the glm models for uncured!
     if (any(is.na(init) | is.nan(init)))
         stop("Some missing initial values - check that the design matrix is full rank.")
     if (!is.null(control) && "parscale" %in% names(control)) {
@@ -193,6 +191,16 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
     }
     parscale <- rep(if (is.null(control$parscale)) 1 else control$parscale,length=length(init))
     names(parscale) <- names(init)
+    args <- list(init=init,X=X,XD=XD,wt=wt,event=ifelse(event,1,0),time=time,y=y,
+                 timeVar=timeVar,timeExpr=timeExpr,terms=mt,
+                 delayed=delayed, X0=X0, XD0=XD0, Xc0=Xc0, wt0=wt0, parscale=parscale, reltol=reltol,
+                 Xc=if (mixture) Xc else matrix(0,0,0), maxit=control$maxit,
+                 time0=if (delayed) time0[time0>0] else NULL, log.time.transform=log.time.transform,
+                 trace = as.integer(trace), map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L,
+                 boundaryKnots=attr(design,"Boundary.knots"), q.const=t(attr(design,"q.const")),
+                 interiorKnots=attr(design,"knots"), design=design, designD=designD,
+                 designDD=designDD, cure=as.integer(cure), mixture = as.integer(mixture),
+                 data=data, lm.obj = lm.obj, glm.cure.obj = glm.cure.obj, return_type="optim")
     negll <- function(beta) {
         localargs <- args
         localargs$return_type <- "objective"
@@ -205,20 +213,11 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
         localargs$init <- beta
         return(as.vector(.Call("aft_mixture_model_output", localargs, PACKAGE="rstpm2")))
     }
-    args <- list(init=init,X=X,XD=XD,wt=wt,event=ifelse(event,1,0),time=time,y=y,
-                 timeVar=timeVar,timeExpr=timeExpr,terms=mt,
-                 delayed=delayed, X0=X0, XD0=XD0, Xc0=Xc0, wt0=wt0, parscale=parscale, reltol=reltol,
-                 Xc=Xc, maxit=control$maxit,
-                 time0=if (delayed) time0[time0>0] else NULL, log.time.transform=log.time.transform,
-                 trace = as.integer(trace), map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L,
-                 boundaryKnots=attr(design,"Boundary.knots"), q.const=t(attr(design,"q.const")),
-                 interiorKnots=attr(design,"knots"), design=design, designD=designD,
-                 designDD=designDD, cure=as.integer(cure), mixture = as.integer(mixture),
-                 data=data, lm.obj = lm.obj, glm.cure.obj = glm.cure.obj, return_type="optim",
-                 gradient=gradient)
     parnames(negll) <- names(init)
+    args$negll = negll
+    args$gradient = gradient
     ## MLE
-    if (delayed && use.gr) { # initial search using nmmin (conservative -- is this needed?)
+    if (careful || (delayed && use.gr)) { # initial search using nmmin (conservative -- is this needed?)
         args$return_type <- "nmmin"
         args$maxit <- 50
         fit <- .Call("aft_mixture_model_output", args, PACKAGE="rstpm2")
