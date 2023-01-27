@@ -1,9 +1,9 @@
-setClass("aft_mixture", representation(args="list"), contains="mle2")
+setClass("aft_integrated", representation(args="list"), contains="mle2")
 
-aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
+aft_integrated <- function(formula, data, df = 3,
                         tvc = NULL, cure.formula=formula,
                         control = list(parscale = 1, maxit = 1000), init = NULL,
-                        weights = NULL,
+                        weights = NULL, nNodes=20,
                         timeVar = "", time0Var = "", log.time.transform=TRUE,
                         reltol=1.0e-8, trace = 0, cure = FALSE, mixture = TRUE,
                         contrasts = NULL, subset = NULL, use.gr = TRUE, ...) {
@@ -14,7 +14,7 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
     delayed <- length(lhs(formula))>=4 # indicator for multiple times (cf. strictly delayed)
     surv.type <- attr(eventInstance,"type")
     if (surv.type %in% c("interval","interval2","left","mstate"))
-        stop("aft_mixture not implemented for Surv type ",surv.type,".")
+        stop("aft_integrated not implemented for Surv type ",surv.type,".")
     counting <- attr(eventInstance,"type") == "counting"
     ## interval <- attr(eventInstance,"type") == "interval"
     timeExpr <- lhs(formula)[[if (delayed) 3 else 2]] # expression
@@ -22,8 +22,6 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
         timeVar <- all.vars(timeExpr)
     ## set up the formulae
     full.formula <- formula
-    if (!is.null(smooth.formula))
-        rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
     rhs(full.formula) <- rhs(full.formula) %call+% quote(0)
     if (!is.null(tvc)) {
         tvc.formulas <-
@@ -31,12 +29,12 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
                 call(":",
                      call("as.numeric",as.name(name)),
                      as.call(c(quote(ns),
-                               call("log",timeExpr),
+                               timeExpr,
                                vector2call(list(df=tvc[[name]]))))))
         if (length(tvc.formulas)>1)
             tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
         tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
-        rhs(full.formula) <- rhs(full.formula) %call+% rhs(tvc.formula)
+        rhs(full.formula) <- rhs(full.formula) %call+% rhs(tvc.formula) ## WRONG!
     }
     ##
     ## set up the data
@@ -125,12 +123,6 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
         lpmatrix.lm(fit,data)
     }
     ##
-    ## initialise values
-    ind0 <- FALSE
-    map0 <- 0L
-    which0 <- 0
-    wt0 <- 0
-    ## ttype <- 0
     ## surv.type %in% c("right","counting")
     ##
     ## For integrating for time-varying acceleration factors:
@@ -140,28 +132,17 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
     ## - pass that information to C++ for calculation of the integrals and for the hazards
     ## - and we need to do this for the predictions:)
     ##
+    gauss = gauss.quad(nNodes)
+    ## browser()
+    X_list = lapply(1:nNodes, function(i)
+        lpmatrix.lm(lm.obj,
+                    local({ data[[timeVar]] = (gauss$nodes[i]+1)/2*data[[timeVar]]; data})))
     X <- lpmatrix.lm(lm.obj,data)
-    ## Xc <- model.matrix(coxph.obj, data)
-    XD <- grad1(lpfunc,data[[timeVar]],lm.obj,data,timeVar,log.transform=log.time.transform)
-    XD <- matrix(XD,nrow=nrow(X))
-    Xc0 <- XD0 <- X0 <- matrix(0,1,ncol(X))
     if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
     if (delayed) {
-        ind0 <- time0>0
-        map0 <- vector("integer",nrow(X))
-        map0[ind0] <- as.integer(1:sum(ind0))
-        map0[!ind0] <- NaN
-        ##which0 <- which(ind0)
-        which0 <- 1:nrow(X)
-        which0[!ind0] <- NaN
-        data0 <- data[ind0,,drop=FALSE] # data for delayed entry times
-        data0[[timeVar]] <- data0[[time0Var]]
-        X0 <- lpmatrix.lm(lm.obj, data0)
-        Xc0 = lpmatrix.lm(glm.cure.obj, data0)
-        wt0 <- wt[ind0]
-        XD0 <- grad1(lpfunc,data0[[timeVar]],lm.obj,data0,timeVar,log.transform=log.time.transform)
-        XD0 <- matrix(XD0,nrow=nrow(X0))
-        rm(data0)
+        X_list0 = lapply(1:nNodes, function(i)
+            lpmatrix.lm(lm.obj,
+                        local({ data[[timeVar0]] = (gauss$nodes[i]+1)/2*data[[timeVar0]]; data})))
     }
     ## Weibull regression
     if (delayed) {
@@ -173,7 +154,7 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
     } else {
         survreg1 <- survival::survreg(formula, data)
         coef1 <- coef(survreg1)
-        coef1 <- coef1[-1] # assumes intercept included in the formula; ignores smooth.formula
+        coef1 <- coef1[-1] # assumes intercept included in the formula
     }
     if (ncol(X)>length(coef1)) {
         coef1 <- c(coef1,rep(0,ncol(X) - length(coef1)))
@@ -193,40 +174,45 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
     }
     parscale <- rep(if (is.null(control$parscale)) 1 else control$parscale,length=length(init))
     names(parscale) <- names(init)
+    args <- list(init=init,X_list=X_list,
+                 X_list0=if (delayed) X_list0 else list(matrix(0,0,0)),
+                 wt=wt,event=ifelse(event,1,0),time=time,y=y,
+                 time0 = if (delayed) time0 else 0*time,
+                 timeVar=timeVar,timeExpr=timeExpr,terms=mt,
+                 parscale=parscale, reltol=reltol,
+                 Xt=X, Xc= if (mixture) Xc else matrix(0,0,0), maxit=control$maxit,
+                 time0=time0, log.time.transform=log.time.transform,
+                 trace = as.integer(trace), 
+                 boundaryKnots=attr(design,"Boundary.knots"), q.const=t(attr(design,"q.const")),
+                 interiorKnots=attr(design,"knots"), design=design, designD=designD,
+                 designDD=designDD, cure=as.integer(cure), mixture = as.integer(mixture),
+                 data=data, lm.obj = lm.obj, glm.cure.obj = glm.cure.obj, return_type="optim",
+                 gweights=gauss$weights, gnodes=gauss$nodes)
     negll <- function(beta) {
         localargs <- args
         localargs$return_type <- "objective"
         localargs$init <- beta
-        return(.Call("aft_mixture_model_output", localargs, PACKAGE="rstpm2"))
+        return(.Call("aft_integrated_model_output", localargs, PACKAGE="rstpm2"))
     }
     gradient <- function(beta) {
         localargs <- args
         localargs$return_type <- "gradient"
         localargs$init <- beta
-        return(as.vector(.Call("aft_mixture_model_output", localargs, PACKAGE="rstpm2")))
+        return(as.vector(.Call("aft_integrated_model_output", localargs, PACKAGE="rstpm2")))
     }
-    args <- list(init=init,X=X,XD=XD,wt=wt,event=ifelse(event,1,0),time=time,y=y,
-                 timeVar=timeVar,timeExpr=timeExpr,terms=mt,
-                 delayed=delayed, X0=X0, XD0=XD0, Xc0=Xc0, wt0=wt0, parscale=parscale, reltol=reltol,
-                 Xc=Xc, maxit=control$maxit,
-                 time0=if (delayed) time0[time0>0] else NULL, log.time.transform=log.time.transform,
-                 trace = as.integer(trace), map0 = map0 - 1L, ind0 = ind0, which0 = which0 - 1L,
-                 boundaryKnots=attr(design,"Boundary.knots"), q.const=t(attr(design,"q.const")),
-                 interiorKnots=attr(design,"knots"), design=design, designD=designD,
-                 designDD=designDD, cure=as.integer(cure), mixture = as.integer(mixture),
-                 data=data, lm.obj = lm.obj, glm.cure.obj = glm.cure.obj, return_type="optim",
-                 gradient=gradient)
+    args$negll = negll
+    args$gradient = gradient
     parnames(negll) <- names(init)
     ## MLE
     if (delayed && use.gr) { # initial search using nmmin (conservative -- is this needed?)
         args$return_type <- "nmmin"
         args$maxit <- 50
-        fit <- .Call("aft_mixture_model_output", args, PACKAGE="rstpm2")
+        fit <- .Call("aft_integrated_model_output", args, PACKAGE="rstpm2")
         args$maxit <- control$maxit
     }
     optim_step <- function(use.gr) {
         args$return_type <<- if (use.gr) "vmmin" else "nmmin"
-        fit <- .Call("aft_mixture_model_output", args, PACKAGE="rstpm2")
+        fit <- .Call("aft_integrated_model_output", args, PACKAGE="rstpm2")
         coef <- as.vector(fit$coef)
         hessian <- fit$hessian
         names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
@@ -256,15 +242,15 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
         args$init <- init
         mle2 <- optim_step(FALSE)
     }
-    out <- as(mle2, "aft_mixture")
+    out <- as(mle2, "aft_integrated")
     out@args <- args
     attr(out,"nobs") <- length(out@args$event) # for logLik method
     return(out)
 }
 
-setMethod("nobs", "aft_mixture", function(object, ...) length(object@args$event))
+setMethod("nobs", "aft_integrated", function(object, ...) length(object@args$event))
 
-predict.aft_mixture =  function(object,newdata=NULL,
+predict.aft_integrated =  function(object,newdata=NULL,
                                 type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","meanhaz","af","fail","accfac","gradh"),
                                 grid=FALSE,seqLength=300,level=0.95,
                                 se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,...) {
@@ -329,7 +315,7 @@ predict.aft_mixture =  function(object,newdata=NULL,
         Xc2 = model.matrix(args$glm.cure.obj, newdata2)
     }
     if (type == "gradh") {
-        return(predict.aft_mixture.ext(object, type="gradh", time=time, X=X, XD=XD))
+        return(predict.aft_integrated.ext(object, type="gradh", time=time, X=X, XD=XD))
     }
     ## colMeans <- function(x) colSums(x)/apply(x,2,length)
     local <-  function (object, newdata=NULL, type="surv", exposed, ...)
@@ -500,11 +486,11 @@ predict.aft_mixture =  function(object,newdata=NULL,
 
 }
 
-setMethod("predict", "aft_mixture", predict.aft_mixture)
+setMethod("predict", "aft_integrated", predict.aft_integrated)
 cloglog <- function(x) log(-log(x))
 cexpexp <- function(x) exp(-exp(x))
 
-## setMethod("predictnl", "aft_mixture",
+## setMethod("predictnl", "aft_integrated",
 ##           function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
 ##           {
 ##             link <- match.arg(link)
@@ -576,7 +562,7 @@ cexpexp <- function(x) exp(-exp(x))
 ##       tail(as.list(attr(object@args$lm.obj$terms, "variables")),-2))
 ##     newdata[[object@args$timeVar]] <- rep(x, each = length(object@args$event))
 ##
-##     model_density <-  predict.aft_mixture(object,
+##     model_density <-  predict.aft_integrated(object,
 ##                                    type = "density",
 ##                                    newdata = newdata)
 ##
@@ -647,7 +633,7 @@ KL_not_vectorized <- function(object, true_density = "Weibull",
     return(out)
 }
 
-plot.aft_mixture.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", exposed=NULL, add=FALSE, ci=!add, rug=!add, recent=FALSE,
+plot.aft_integrated.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansurv", exposed=NULL, add=FALSE, ci=!add, rug=!add, recent=FALSE,
                                       xlab=NULL, ylab=NULL, lty=1, line.col=1, ci.col="grey", seqLength=301, ...) {
     ## if (is.null(times)) stop("plot.meansurv: times argument should be specified")
     args <- x@args
@@ -703,13 +689,13 @@ plot.aft_mixture.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type=
     }
     return(invisible(y))
 }
-plot.aft_mixture.base <-
+plot.aft_integrated.base <-
     function(x,y,newdata=NULL,type="surv",
              xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
              add=FALSE,ci=!add,rug=!add,
              var=NULL,exposed=incrVar(var),times=NULL,...) {
         if (type %in% c("meansurv","meansurvdiff","af")) {
-            return(plot.aft_mixture.meansurv(x,times=times,newdata=newdata,type=type,xlab=xlab,ylab=ylab,line.col=line.col,ci.col=ci.col,
+            return(plot.aft_integrated.meansurv(x,times=times,newdata=newdata,type=type,xlab=xlab,ylab=ylab,line.col=line.col,ci.col=ci.col,
                                              lty=lty,add=add,ci=ci,rug=rug, exposed=exposed, ...))
         }
         args <- x@args
@@ -747,16 +733,16 @@ plot.aft_mixture.base <-
         }
         return(invisible(y))
     }
-setMethod("plot", signature(x="aft_mixture", y="missing"),
+setMethod("plot", signature(x="aft_integrated", y="missing"),
           function(x,y,newdata=NULL,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
                    add=FALSE,ci=!add,rug=!add,
                    var=NULL,exposed=incrVar(var),times=NULL,...)
-              plot.aft_mixture.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
+              plot.aft_integrated.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
                                     ylab=ylab, line.col=line.col, lty=lty, add=add,
                                     ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
           )
-predict.aft_mixture.ext <- function(obj, type=c("survival","haz","gradh"),
+predict.aft_integrated.ext <- function(obj, type=c("survival","haz","gradh"),
                                     time=obj@args$time, X=obj@args$X, XD=obj@args$XD) {
     type <- match.arg(type)
     localargs <- obj@args
@@ -764,5 +750,5 @@ predict.aft_mixture.ext <- function(obj, type=c("survival","haz","gradh"),
     localargs$X <- X
     localargs$XD <- XD
     localargs$time <- time
-    as.matrix(.Call("aft_mixture_model_output", localargs, PACKAGE="rstpm2"))
+    as.matrix(.Call("aft_integrated_model_output", localargs, PACKAGE="rstpm2"))
 }

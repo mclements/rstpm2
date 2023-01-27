@@ -15,6 +15,7 @@ extern SEXP test_cox_tvc2_grad(SEXP);
 extern SEXP fitCureModel(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
 extern SEXP aft_model_output(SEXP);
 extern SEXP aft_mixture_model_output(SEXP);
+extern SEXP aft_integrated_model_output(SEXP);
 extern SEXP vunirootRcpp(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
 extern SEXP multistate_ddt(SEXP,SEXP,SEXP,SEXP);
 // extern SEXP runMarkovODE(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
@@ -34,6 +35,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"fitCureModel",       (DL_FUNC) &fitCureModel,       6},
     {"aft_model_output",   (DL_FUNC) &aft_model_output,   1},
     {"aft_mixture_model_output",  (DL_FUNC) &aft_mixture_model_output,  1},
+    {"aft_integrated_model_output",  (DL_FUNC) &aft_integrated_model_output,  1},
     {"vunirootRcpp",       (DL_FUNC) &vunirootRcpp,       7},
     {"multistate_ddt",     (DL_FUNC) &multistate_ddt,     4},
     // {"runMarkovODE",       (DL_FUNC) &runMarkovODE,       9},
