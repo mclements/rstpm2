@@ -146,6 +146,7 @@ namespace rstpm2 {
       vec etaD = XD * beta;
       vec etaD_old = etaD;
       vec logtstar = log(time) - eta;
+      vec tstar = exp(logtstar);
       mat Xs = s.basis(logtstar);
       mat XDs = s.basis(logtstar,1);
       mat XDDs = s.basis(logtstar,2);
@@ -155,8 +156,8 @@ namespace rstpm2 {
       vec etaDDs = XDDs * betas;
       // H calculations
       vec H = exp(etas);
+      mat dHdbeta = -rmult(X,H % etaDs);
       mat dHdbetas = rmult(Xs,H);
-      mat dHdbeta = -rmult(X,H % etaDs / tstar);
       // penalties
       vec eps = etaDs*0. + 1e-8;
       uvec pindexs = (etaDs < eps);
@@ -170,7 +171,7 @@ namespace rstpm2 {
       vec logh = etas + log(etaDs) + log(1/time -etaD/time);
       vec h = exp(logh);
       mat dloghdbetas = Xs+rmult(XDs,1/etaDs % (1-pindexs));
-      mat dloghdbeta = -rmult(X,etaDs % (1-pindexs)) - rmult(X,etaDDs/etaDs % (1-pindexs)) - rmult(XD, (1-pindex)/(1-etaD));
+      mat dloghdbeta = -rmult(X,etaDDs/etaDs) - rmult(X,etaDs_old) - rmult(XD, 1/(1-etaD));
       mat gradi = join_rows(rmult(dloghdbeta,event)-dHdbeta, rmult(dloghdbetas,event)-dHdbetas) + rmult(pgrad,pindex) + rmult(pgrads,pindexs);
       vec gr = sum(gradi,0).t();
       gr -= join_cols(beta*0.0, gradientPenalty(s.q_matrix.t(), betas));
@@ -216,8 +217,8 @@ namespace rstpm2 {
 	if (!mixture) {
 	  mat pgrad0 = join_rows(2.0*rmult(X0,etaDs0_old % etaDDs0)+2.0*rmult(XD0,1-etaD0),Xs0*0.0);
 	  mat pgrads0 = join_rows(X0*0.0,-2*rmult(XDs0,etaDs0_old));
-	  ll += sum(join_rows(dHdbeta0, dHdbetas0) + rmult(pgrads0,pindexs0) +
-		     rmult(pgrad0,pindex0), 0).t();
+	  gr += sum(join_rows(dHdbeta0, dHdbetas0) + rmult(pgrads0,pindexs0) +
+		    rmult(pgrad0,pindex0), 0).t();
 	} else {
 	  vec etac0 = Xc0 * betac;
 	  vec cure_frac0 = exp(etac0)/(1.0+exp(etac0));
@@ -227,14 +228,15 @@ namespace rstpm2 {
 	  mat dHdbeta_mix0 = rmult(dHdbeta0,(1.0 - cure_frac0) % exp(-H0) / S_mix0);
 	  mat dHdbetas_mix0 = rmult(dHdbetas0,(1.0 - cure_frac0) % exp(-H0) / S_mix0);
 	  mat dHdtheta_mix0 = -rmult(dpidtheta0, (1.0 - exp(-H0))/S_mix0);
-	  mat pgrad0 = join_rows(-2*rmult(XD0,1/time0-etaD0),Xc0*0.0,XDs0*0.0);
-	  mat pgrads0 = join_rows(-2*rmult(X0,etaDs0 % etaDDs0),Xc0*0.0,2*rmult(XDs0,etaDs0));
-	  out += sum(join_rows(-dHdbeta_mix0, -dHdtheta_mix0, -dHdbetas_mix0) +
+	  mat pgrad0 = join_rows(2.0*rmult(X0,etaDs0_old % etaDDs0)+2.0*rmult(XD0,1-etaD0),
+				 Xc0*0.0,Xs0*0.0);
+	  mat pgrads0 = join_rows(X0*0.0,Xc0*0.0,-2*rmult(XDs0,etaDs0_old));
+	  gr += sum(join_rows(dHdbeta_mix0, dHdtheta_mix0, dHdbetas_mix0) +
 		     rmult(pgrads0,pindexs0) +
 		     rmult(pgrad0,pindex0), 0).t();
 	}
       }
-      return out;
+      return -gr;
     }
     double objective(NumericVector betafull) {
       return objective(as<vec>(wrap(betafull)));
