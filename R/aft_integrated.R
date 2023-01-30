@@ -148,7 +148,7 @@ aft_integrated <- function(formula, data, df = 3,
     if (delayed) {
         if (requireNamespace("eha", quietly = TRUE)) {
             survreg1 <- eha::aftreg(formula, data)
-            coef1 <- coef(survreg1)
+            coef1 <- -coef(survreg1) # reversed parameterisation
             coef1 <- coef1[1:(length(coef1)-2)]
         } else coef1 <- rep(0,ncol(X))
     } else {
@@ -163,7 +163,8 @@ aft_integrated <- function(formula, data, df = 3,
     ## browser()
     coef2 = coef(glm.cure.obj)
     names(coef2) = paste0("cure.", names(coef2))
-    init <- if (mixture) c(coef1, -coef2, coef0) else c(coef1, coef0) # -coef2 because the glm models for uncured!
+    if (is.null(init))
+        init <- if (mixture) c(coef1, -coef2, coef0) else c(coef1, coef0) # -coef2 because the glm models for uncured!
     if (any(is.na(init) | is.nan(init)))
         stop("Some missing initial values - check that the design matrix is full rank.")
     if (!is.null(control) && "parscale" %in% names(control)) {
@@ -204,5 +205,46 @@ aft_integrated <- function(formula, data, df = 3,
     args$negll = negll
     args$gradient = gradient
     ## MLE
-    if (careful || (delayed && use.gr)    as.matrix(.Call("aft_integrated_model_output", localargs, PACKAGE="rstpm2"))
+    if (careful || (delayed && use.gr)) { # initial search using nmmin (conservative -- is this needed?)
+        args$return_type <- "nmmin"
+        args$maxit <- 50
+        fit <- .Call("aft_integrated_model_output", args, PACKAGE="rstpm2")
+        args$maxit <- control$maxit
+    }
+    optim_step <- function(use.gr) {
+        args$return_type <<- if (use.gr) "vmmin" else "nmmin"
+        fit <- .Call("aft_integrated_model_output", args, PACKAGE="rstpm2")
+        coef <- as.vector(fit$coef)
+        hessian <- fit$hessian
+        names(coef) <- rownames(hessian) <- colnames(hessian) <- names(init)
+        args$init <<- coef
+        ## we could use mle2() to calculate vcov by setting eval.only=FALSE
+        mle2 <- if (use.gr) bbmle::mle2(negll, coef, vecpar=TRUE, control=control,
+                                        gr=gradient, ..., eval.only=TRUE)
+                else bbmle::mle2(negll, coef, vecpar=TRUE, control=control, ..., eval.only=TRUE)
+        ## browser()
+        mle2@details$convergence <- fit$fail # fit$itrmcd
+        vcov <- try(solve(hessian,tol=0), silent=TRUE)
+        if (inherits(vcov, "try-error"))
+            vcov <- try(solve(hessian+1e-6*diag(nrow(hessian)), tol=0), silent=TRUE)
+        if (inherits(vcov, "try-error")) {
+            if (!use.gr)
+                message("Non-invertible Hessian")
+            mle2@vcov <- matrix(NA,length(coef), length(coef))
+        } else {
+            mle2@vcov <- vcov
+        }
+        mle2
+    }
+    ## browser()
+    ## mle2 <-  bbmle::mle2(negll, init, vecpar=TRUE, control=control, ...)
+    mle2 <- optim_step(use.gr)
+    if (all(is.na(mle2@vcov)) && use.gr) {
+        args$init <- init
+        mle2 <- optim_step(FALSE)
+    }
+    out <- as(mle2, "aft_integrated")
+    out@args <- args
+    attr(out,"nobs") <- length(out@args$event) # for logLik method
+    return(out)
 }
