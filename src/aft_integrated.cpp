@@ -93,13 +93,13 @@ namespace rstpm2 {
       }
       vec logh = etas + log(etaDs) - etat - logtstar;
       vec H = exp(etas);
-      double ll = dot(logh,event) - sum(H) - pen;
+      double ll = dot(logh,event) - sum(H) - pen; // NB: addition in the gradient
       if (mixture) {
 	etac = Xc * betac;
-        vec cure_frac = exp(etac)/(1+exp(etac));
+        vec cure_frac = exp(etac)/(1.0+exp(etac));
 	vec Hu = H, loghu=logh;
 	vec S = cure_frac + (1-cure_frac) % exp(-Hu);
-        ll = dot(event, log(1-cure_frac)+loghu-Hu-log(S)) +
+        ll = dot(event, log(1-cure_frac)+loghu-Hu) +
 	  dot(1-event,log(S)) - pen;
       }
       if (any(delayed)) {
@@ -200,7 +200,7 @@ namespace rstpm2 {
 	mat pgrad = join_rows(2*rmult(Xtstar, etaDs % etaDDs / tstar), Xc*0.0, -2.0*rmult(XDs,etaDs));
 	gradi = join_rows(rmult(dloghdbeta_mix,event)-dHdbeta_mix,
 			  rmult(dloghdtheta_mix,event)-dHdtheta_mix,
-			  rmult(dloghdbetas_mix,event)-dHdbetas_mix) - rmult(pgrad,pindexs);
+			  rmult(dloghdbetas_mix,event)-dHdbetas_mix) + rmult(pgrad,pindexs);
 	gr = sum(gradi,0).t();
 	gr -= join_cols(beta*0.0, betac*0.0, gradientPenalty(s.q_matrix.t(), betas));
       }
