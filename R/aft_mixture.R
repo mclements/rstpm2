@@ -165,7 +165,7 @@ aft_mixture <- function(formula, data, df = 3,
     if (delayed) {
         if (requireNamespace("eha", quietly = TRUE)) {
             survreg1 <- eha::aftreg(formula, data)
-            coef1 <- coef(survreg1)
+            coef1 <- -coef(survreg1) # reversed parameterisation
             coef1 <- coef1[1:(length(coef1)-2)]
         } else coef1 <- rep(0,ncol(X))
     } else {
@@ -180,7 +180,8 @@ aft_mixture <- function(formula, data, df = 3,
     ## browser()
     coef2 = coef(glm.cure.obj)
     names(coef2) = paste0("cure.", names(coef2))
-    init <- if (mixture) c(coef1, -coef2, coef0) else c(coef1, coef0) # -coef2 because the glm models for uncured!
+    if (is.null(init))
+        init <- if (mixture) c(coef1, -coef2, coef0) else c(coef1, coef0) # -coef2 because the glm models for uncured!
     if (any(is.na(init) | is.nan(init)))
         stop("Some missing initial values - check that the design matrix is full rank.")
     if (!is.null(control) && "parscale" %in% names(control)) {
