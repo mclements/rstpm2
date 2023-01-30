@@ -387,7 +387,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     if (delayed) {
         if (requireNamespace("eha", quietly = TRUE)) {
             survreg1 <- eha::aftreg(formula, data)
-            coef1 <- coef(survreg1)
+            coef1 <- -coef(survreg1) # reversed parameterisation!!
             coef1 <- coef1[1:(length(coef1)-2)]
         } else coef1 <- rep(0,ncol(X))
     } else {
@@ -398,8 +398,9 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     if (ncol(X)>length(coef1)) {
         coef1 <- c(coef1,rep(0,ncol(X) - length(coef1)))
         names(coef1) <- names(coef1b)
-        }
-    init <- c(coef1,coef0)
+    }
+    if (is.null(init))
+        init <- c(coef1,coef0)
     if (any(is.na(init) | is.nan(init)))
         stop("Some missing initial values - check that the design matrix is full rank.")
     if (!is.null(control) && "parscale" %in% names(control)) {
@@ -432,6 +433,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         localargs$init <- beta
         return(as.vector(.Call("aft_model_output", localargs, PACKAGE="rstpm2")))
     }
+    args$gradient=gradient
     negll.slow <- function(betafull) {
         beta <- betafull[1:ncol(args$X)]
         betas <- betafull[-(1:ncol(args$X))]
@@ -535,7 +537,6 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     }
     gradient2 <- function(betafull)
         colSums(gradi(betafull))
-    ## browser()
     if (FALSE) {
         ##
         library(rstpm2)
@@ -600,6 +601,10 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         head(gradi(scale*init)[event,])
         range(tmp - gradi(scale*init))
         ##
+        coef = coef(out)
+        fd(negll,-coef)
+        gradient(-coef)
+        gradient2(-coef)
     }
     parnames(negll) <- names(init)
     ## MLE
@@ -641,6 +646,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     out <- as(mle2, "aft")
     out@args <- args
     attr(out,"nobs") <- length(out@args$event) # for logLik method
+    ## browser()
     return(out)
   }
 
