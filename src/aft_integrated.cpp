@@ -180,7 +180,8 @@ namespace rstpm2 {
       vec logh = etas + log(etaDs) - etat - logtstar;
       vec h = exp(logh);
       mat dloghdbetas = Xs+rmult(XDs,1/etaDs % (1-pindexs));
-      mat dloghdbeta = - rmult(Xtstar,etaDDs/etaDs_old/tstar) -rmult(Xtstar,etaDs_old / tstar) + rmult(Xtstar,1.0/tstar) - Xt;
+      mat dloghdbeta = - rmult(Xtstar,etaDDs/etaDs_old/tstar) -
+	rmult(Xtstar,etaDs_old / tstar) + rmult(Xtstar,1.0/tstar) - Xt;
       mat gradi = join_rows(rmult(dloghdbeta,event)-dHdbeta,
 			    rmult(dloghdbetas,event)-dHdbetas) + rmult(pgrad,pindexs);
       vec gr = sum(gradi,0).t();
@@ -197,7 +198,7 @@ namespace rstpm2 {
 	mat dloghdbeta_mix = dloghdbeta - dHdbeta + dHdbeta_mix;
 	mat dloghdbetas_mix = dloghdbetas - dHdbetas + dHdbetas_mix;
 	mat dloghdtheta_mix = dHdtheta_mix - rmult(dpidtheta,1.0 / (1.0 - cure_frac));
-	mat pgrad = join_rows(2*rmult(Xtstar, etaDs % etaDDs / tstar), Xc*0.0, -2.0*rmult(XDs,etaDs));
+	mat pgrad = join_rows(2*rmult(Xtstar, etaDs_old % etaDDs / tstar), Xc*0.0, -2.0*rmult(XDs,etaDs_old));
 	gradi = join_rows(rmult(dloghdbeta_mix,event)-dHdbeta_mix,
 			  rmult(dloghdtheta_mix,event)-dHdtheta_mix,
 			  rmult(dloghdbetas_mix,event)-dHdbetas_mix) + rmult(pgrad,pindexs);
