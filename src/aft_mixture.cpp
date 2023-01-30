@@ -171,7 +171,7 @@ namespace rstpm2 {
       vec logh = etas + log(etaDs) + log(1/time -etaD/time);
       vec h = exp(logh);
       mat dloghdbetas = Xs+rmult(XDs,1/etaDs % (1-pindexs));
-      mat dloghdbeta = -rmult(X,etaDDs/etaDs) - rmult(X,etaDs_old) - rmult(XD, 1/(1-etaD));
+      mat dloghdbeta = -rmult(X,etaDDs/etaDs) - rmult(X,etaDs_old) - rmult(XD, 1/(1-etaD_old));
       mat gradi = join_rows(rmult(dloghdbeta,event)-dHdbeta, rmult(dloghdbetas,event)-dHdbetas) + rmult(pgrad,pindex) + rmult(pgrads,pindexs);
       vec gr = sum(gradi,0).t();
       gr -= join_cols(beta*0.0, gradientPenalty(s.q_matrix.t(), betas));
