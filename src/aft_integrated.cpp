@@ -221,6 +221,7 @@ namespace rstpm2 {
 	mat XDDs0 = s.basis(logtstar0,2);
 	vec etas0 = Xs0 * betas;
 	vec etaDs0 = XDs0 * betas;
+	vec etaDs0_old = etaDs0;
 	vec etaDDs0 = XDDs0 * betas;
 	vec H0 = exp(etas0);
 	mat dHdbetas0 = rmult(Xs0,H0);
@@ -228,10 +229,10 @@ namespace rstpm2 {
 	vec eps0 = etaDs0*0. + 1e-8;
 	uvec pindexs0 = (etaDs0 < eps0);
 	etaDs0 = max(etaDs0, eps0);
-	mat pgrad0 = join_rows(2*rmult(Xtstar0, etaDs0 % etaDDs0 / tstar0), Xs*0.0);
-	mat pgrads0 = join_rows(Xt*0.0, -rmult(XDs0,etaDs0));
+	mat pgrad0 = join_rows(2*rmult(Xtstar0, etaDs0_old % etaDDs0 / tstar0), Xs*0.0);
+	mat pgrads0 = join_rows(Xt*0.0, -2.0*rmult(XDs0,etaDs0_old));
 	if (!mixture) {
-	  gr += sum(join_rows(-dHdbeta0, -dHdbetas0) + rmult(pgrads0,pindexs0) + rmult(pgrad0,pindexs0), 0).t();
+	  gr += sum(join_rows(dHdbeta0, dHdbetas0) + rmult(pgrads0,pindexs0) + rmult(pgrad0,pindexs0), 0).t();
 	} else {
 	  vec cure_frac0 = exp(etac(delayed))/(1.0+exp(etac(delayed)));
 	  vec S_mix0 = cure_frac0 + (1.0-cure_frac0) % exp(-H0);
@@ -240,7 +241,9 @@ namespace rstpm2 {
 	  mat dHdbeta_mix0 = rmult(dHdbeta0,(1.0 - cure_frac0) % exp(-H0) / S_mix0);
 	  mat dHdbetas_mix0 = rmult(dHdbetas0,(1.0 - cure_frac0) % exp(-H0) / S_mix0);
 	  mat dHdtheta_mix0 = -rmult(dpidtheta0, (1.0 - exp(-H0))/S_mix0);
-	  gr += sum(join_rows(-dHdbeta_mix0, -dHdtheta_mix0, -dHdbetas_mix0) +
+	  mat pgrad0 = join_rows(2*rmult(Xtstar0, etaDs0_old % etaDDs0 / tstar0), Xc*0.0, Xs*0.0);
+	  mat pgrads0 = join_rows(Xt*0.0, Xc*0.0, -2.0*rmult(XDs0,etaDs0_old));
+	  gr += sum(join_rows(dHdbeta_mix0, dHdtheta_mix0, dHdbetas_mix0) +
 		    rmult(pgrads0,pindexs0) + rmult(pgrad0,pindexs0), 0).t();
 	}
       }
