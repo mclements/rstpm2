@@ -1,0 +1,218 @@
+#+title: Equations for the rstpm2 package
+#+author: Mark Clements
+
+* Generalised survival model
+
+#+begin_src maxima :results raw :exports both
+logexpand:all;
+derivsubst:true;
+load(pdiff)$
+assume(t>0)$
+S : G(eta(t,z,theta));
+H : -log(S);
+h : diff(H,t);
+print("H:");
+tex(H);
+print("h:");
+tex(h);
+
+print("diff(H,theta):");
+tex(diff(H,theta));
+
+print("diff(log(h),theta):");
+tex(diff(log(h),theta));
+
+/*print("ll:");
+ll : delta*log(h) - H - (1-subst(u=log(t), diff(g(X,u,beta),u)))^2 -
+subst(u=log(t)-g(X,log(t),beta), diff(B(u,gamma),u))^2;
+tex(ll);
+print("diff(ll, theta)");
+tex(diff(ll, theta));
+*/
+#+end_src
+
+
+* Mixture cure models
+
+#+begin_src maxima :results raw :exports both
+logexpand:all;
+derivsubst:true;
+load(pdiff)$
+S : pi(theta)+(1-pi(theta))*exp(-Hu(t,theta));
+H : -log(S);
+h : diff(H,t);
+h : subst(hu(t,theta), diff(Hu(t,theta),t), h);
+
+print("H:");
+tex(H);
+print("h:");
+tex(h);
+
+print("diff(H,theta):");
+tex(diff(H,theta));
+
+print("diff(log(h),theta):");
+tex(diff(log(h),theta));
+diff(log(h),theta) - diff(H,theta);
+#+end_src
+
+* Integral equation for AFT models
+
+#+begin_src maxima :results raw :exports both
+logexpand:all;
+derivsubst:true;
+load(pdiff)$
+assume(t>0)$
+S : exp(-exp(B(log(integrate(exp(-x(v)*beta),v,0,t)),gamma)));
+H : -log(S);
+h : diff(H,t);
+print("H:");
+tex(H);
+print("h:");
+tex(h);
+
+print("diff(H,beta):");
+tex(diff(H,beta));
+print("diff(H,gamma):");
+tex(diff(H,gamma));
+
+print("diff(log(h),beta):");
+tex(diff(log(h),beta));
+print("diff(log(h),gamma):");
+tex(diff(log(h),gamma));
+
+print("ll:");
+ll : delta*log(h) - H - (subst(u=log(integrate(exp(-x(v)*beta),v,0,t)), diff(B(u,gamma),u)))^2;
+tex(ll);
+print("diff(ll, beta)");
+tex(diff(ll, beta));
+print("diff(ll, gamma)");
+tex(diff(ll, gamma));
+#+end_src
+
+* Integral equation for AFT models with functional constraints on gamma
+
+#+begin_src maxima :results raw :exports both
+logexpand:all;
+derivsubst:true;
+load(pdiff)$
+assume(t>0)$
+gamma : gamma0 + exp(alpha);
+S : exp(-exp(B(log(integrate(exp(-x(v)*beta),v,0,t)),gamma)));
+H : -log(S);
+h : diff(H,t);
+print("H:");
+tex(H);
+print("h:");
+tex(h);
+
+print("diff(H,beta):");
+tex(diff(H,beta));
+print("diff(H,alpha):");
+tex(diff(H,alpha));
+print("diff(H,gamma0):");
+tex(diff(H,gamma0));
+
+print("diff(log(h),beta):");
+tex(diff(log(h),beta));
+print("diff(log(h),alpha):");
+tex(diff(log(h),alpha));
+print("diff(log(h),gamma0):");
+tex(diff(log(h),gamma0));
+#+end_src
+
+
+* Non-integral equation for AFT models
+
+#+begin_src maxima :results raw :exports both
+logexpand:all;
+derivsubst:true;
+load(pdiff)$
+assume(t>0)$
+S : exp(-exp(B(log(t*exp(-eta(X,log(t),beta))),gamma)));
+H : -log(S);
+h : diff(H,t);
+print("H:");
+tex(H);
+print("h:");
+tex(h);
+
+print("diff(H,beta):");
+tex(diff(H,beta));
+print("diff(H,gamma):");
+tex(diff(H,gamma));
+
+print("diff(log(h),beta):");
+tex(diff(log(h),beta));
+print("diff(log(h),gamma):");
+tex(diff(log(h),gamma));
+
+print("ll:");
+ll : delta*log(h) - H - (1-subst(u=log(t), diff(eta(X,u,beta),u)))^2 -
+subst(u=log(t)-eta(X,log(t),beta), diff(B(u,gamma),u))^2;
+tex(ll);
+print("diff(ll, beta)");
+tex(diff(ll, beta));
+print("diff(ll, gamma)");
+tex(diff(ll, gamma));
+
+#+end_src
+
+
+# * Constraints
+
+# 1. Baseline log cumulative hazard function:
+
+# Delta Q gamma >= 0 <=> Q[i+1,] gamma >= Q[i,] gamma 
+
+# And/or: hazard is positive <=> B'(log(tstar),gamma)>0
+
+# What if we use B-splines with a constraint? This would lead to 
+# gamma[i+1] >= gamma[i]
+
+# 2. Cumulative covariate effects on the acceleration factor:
+# If g(X,t,beta) = X beta + \sum_j X_j(t)*B_j(log(t))^T gamma_j
+
+# This constraint is not needed for the integral model. Should we focus on that model?
+
+
+
+
+* Integral equations for AFT models with $H = B(\ldots)$
+
+#+begin_src maxima :results raw :exports both
+logexpand:all;
+derivsubst:true;
+load(pdiff)$
+assume(t>0)$
+S : exp(-B(integrate(exp(-x(v)*beta),v,0,t),gamma));
+H : -log(S);
+h : diff(H,t);
+print("H:");
+tex(H);
+print("h:");
+tex(h);
+
+print("diff(H,beta):");
+tex(diff(H,beta));
+print("diff(H,gamma):");
+tex(diff(H,gamma));
+
+print("diff(log(h),beta):");
+tex(diff(log(h),beta));
+print("diff(log(h),gamma):");
+tex(diff(log(h),gamma));
+#+end_src
+
+
+# /* non-integral equation for AFT model (non mixture cure)
+# - cumulative effect modelled directly (does this make any sense?)
+# */
+# assume(t>0)$
+# S : exp(-exp(B(exp(g(X,log(t),beta)),gamma)));
+
+# /* non-integral equation for AFT model (non mixture cure)
+#   H = B(...)
+# */
+# assume(t>0)$
+# S : exp(-B(t*exp(-g(X,t,beta)),gamma));
