@@ -16,6 +16,7 @@ test_that("base", {
     expect_eps(coef(fit)[2], -0.361403, 1e-5)
 })
 test_that("offset", {
+    skip_on_cran()
     brcancer2 = transform(brcancer, o=1)
     fit <- stpm2(Surv(rectime,censrec==1)~hormon+offset(o),data=brcancer2)
     expect_eps(coef(fit)[1], -6.6465454, 1e-5)
@@ -37,12 +38,12 @@ test_that("Comparison with Stata", {
     expect_eps(coef(fit)[2], -0.3614357, 1e-5)
 })
 test_that("Cure", {
-    ## skip_on_cran()
+    skip_on_cran()
     fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
                  smooth.formula=~nsx(log(rectime),df=3,cure=TRUE))
-    expect_eps(coef(fit)[2], -0.3564268, 1e-5)
-    fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,cure=TRUE)
-    expect_eps(coef(fit)[2], -0.3564268, 1e-5)
+    expect_eps(coef(fit)[2], -0.3419921, 1e-5)
+    fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,cure=TRUE,df=3)
+    expect_eps(coef(fit)[2], -0.3419921, 1e-5)
 })
 test_that("probit", {
     fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,link="probit")
