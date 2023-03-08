@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2023-01-30 Mon 14:53 -->
+<!-- 2023-02-15 Wed 16:50 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Equations for the rstpm2 package</title>
@@ -269,18 +269,18 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgbf9e991">1. Generalised survival model</a></li>
-<li><a href="#orgd7bed4e">2. Mixture cure models</a></li>
-<li><a href="#orgce63cd8">3. Integral equation for AFT models</a></li>
-<li><a href="#orgd5591d8">4. Integral equation for AFT models with functional constraints on gamma</a></li>
-<li><a href="#orgf98fd3e">5. Non-integral equation for AFT models</a></li>
-<li><a href="#org7ae4698">6. Integral equations for AFT models with \(H = B(\ldots)\)</a></li>
+<li><a href="#orgaf287ad">1. Generalised survival model</a></li>
+<li><a href="#org912de02">2. Mixture cure models</a></li>
+<li><a href="#org63ce2dc">3. Integral equation for AFT models</a></li>
+<li><a href="#orgd586de9">4. Integral equation for AFT models with functional constraints on gamma</a></li>
+<li><a href="#org77bcc93">5. Non-integral equation for AFT models</a></li>
+<li><a href="#org8c91d0c">6. Integral equations for AFT models with \(H = B(\ldots)\)</a></li>
 </ul>
 </div>
 </div>
 
-<div id="outline-container-orgbf9e991" class="outline-2">
-<h2 id="orgbf9e991"><span class="section-number-2">1</span> Generalised survival model</h2>
+<div id="outline-container-orgaf287ad" class="outline-2">
+<h2 id="orgaf287ad"><span class="section-number-2">1</span> Generalised survival model</h2>
 <div class="outline-text-2" id="text-1">
 <div class="org-src-container">
 <pre class="src src-maxima"><span style="color: #a020f0;">logexpand:all</span>;
@@ -301,13 +301,11 @@ h <span style="color: #a020f0;">:</span> <span style="color: #483d8b;">diff</spa
 <span style="color: #483d8b;">print</span>(<span style="color: #8b2252;">"diff(log(h),theta):"</span>);
 <span style="color: #483d8b;">tex</span>(<span style="color: #483d8b;">diff</span>(<span style="color: #483d8b;">log</span>(h),theta));
 
-<span style="color: #b22222;">/*</span><span style="color: #b22222;">print("ll:");</span>
-<span style="color: #b22222;">ll : delta*log(h) - H - (1-subst(u=log(t), diff(g(X,u,beta),u)))^2 -</span>
-<span style="color: #b22222;">subst(u=log(t)-g(X,log(t),beta), diff(B(u,gamma),u))^2;</span>
-<span style="color: #b22222;">tex(ll);</span>
-<span style="color: #b22222;">print("diff(ll, theta)");</span>
-<span style="color: #b22222;">tex(diff(ll, theta));</span>
-<span style="color: #b22222;">*/</span>
+<span style="color: #483d8b;">print</span>(<span style="color: #8b2252;">"ll:"</span>);
+ll <span style="color: #a020f0;">:</span> <span style="color: #483d8b;">delta</span><span style="color: #a020f0;">*</span><span style="color: #483d8b;">log</span>(h) <span style="color: #a020f0;">-</span> H <span style="color: #a020f0;">-</span>  <span style="color: #483d8b;">diff</span>(eta(t,z,<span style="color: #483d8b;">beta</span>),t)<span style="color: #a020f0;">^</span><span style="color: #008b8b;">2</span>;
+<span style="color: #483d8b;">tex</span>(ll);
+<span style="color: #483d8b;">print</span>(<span style="color: #8b2252;">"diff(ll, beta)"</span>);
+<span style="color: #483d8b;">tex</span>(<span style="color: #483d8b;">diff</span>(ll, <span style="color: #483d8b;">beta</span>));
 </pre>
 </div>
 
@@ -330,13 +328,22 @@ diff(log(h),theta):
  }\over{G\left(\eta\left(t , z , \vartheta\right)\right)}}+{{\eta_{
  \left(1 , 0 , 1\right)}(t,z,\vartheta)}\over{\eta_{\left(1 , 0 , 0
  \right)}(t,z,\vartheta)}}\]
+ll: 
+\[\delta\,\left(\log G_{\left(1\right)}(\eta\left(t , z , \vartheta
+ \right))-\log G\left(\eta\left(t , z , \vartheta\right)\right)+\log 
+ \eta_{\left(1 , 0 , 0\right)}(t,z,\vartheta)+\log \left(-1\right)
+ \right)+\log G\left(\eta\left(t , z , \vartheta\right)\right)-\eta_{
+ \left(1 , 0 , 0\right)}(t,z,\beta)^2\]
+diff(ll, beta) 
+\[-2\,\eta_{\left(1 , 0 , 0\right)}(t,z,\beta)\,\eta_{\left(1 , 0 , 1
+ \right)}(t,z,\beta)\]
 </p>
 </div>
 </div>
 
 
-<div id="outline-container-orgd7bed4e" class="outline-2">
-<h2 id="orgd7bed4e"><span class="section-number-2">2</span> Mixture cure models</h2>
+<div id="outline-container-org912de02" class="outline-2">
+<h2 id="org912de02"><span class="section-number-2">2</span> Mixture cure models</h2>
 <div class="outline-text-2" id="text-2">
 <div class="org-src-container">
 <pre class="src src-maxima"><span style="color: #a020f0;">logexpand:all</span>;
@@ -391,8 +398,8 @@ diff(log(h),theta):
 </div>
 </div>
 
-<div id="outline-container-orgce63cd8" class="outline-2">
-<h2 id="orgce63cd8"><span class="section-number-2">3</span> Integral equation for AFT models</h2>
+<div id="outline-container-org63ce2dc" class="outline-2">
+<h2 id="org63ce2dc"><span class="section-number-2">3</span> Integral equation for AFT models</h2>
 <div class="outline-text-2" id="text-3">
 <div class="org-src-container">
 <pre class="src src-maxima"><span style="color: #a020f0;">logexpand:all</span>;
@@ -509,8 +516,8 @@ diff(ll, gamma)
 </div>
 </div>
 
-<div id="outline-container-orgd5591d8" class="outline-2">
-<h2 id="orgd5591d8"><span class="section-number-2">4</span> Integral equation for AFT models with functional constraints on gamma</h2>
+<div id="outline-container-orgd586de9" class="outline-2">
+<h2 id="orgd586de9"><span class="section-number-2">4</span> Integral equation for AFT models with functional constraints on gamma</h2>
 <div class="outline-text-2" id="text-4">
 <div class="org-src-container">
 <pre class="src src-maxima"><span style="color: #a020f0;">logexpand:all</span>;
@@ -599,8 +606,8 @@ diff(log(h),gamma0):
 </div>
 
 
-<div id="outline-container-orgf98fd3e" class="outline-2">
-<h2 id="orgf98fd3e"><span class="section-number-2">5</span> Non-integral equation for AFT models</h2>
+<div id="outline-container-org77bcc93" class="outline-2">
+<h2 id="org77bcc93"><span class="section-number-2">5</span> Non-integral equation for AFT models</h2>
 <div class="outline-text-2" id="text-5">
 <div class="org-src-container">
 <pre class="src src-maxima"><span style="color: #a020f0;">logexpand:all</span>;
@@ -633,6 +640,7 @@ ll <span style="color: #a020f0;">:</span> <span style="color: #483d8b;">delta</s
 <span style="color: #483d8b;">tex</span>(<span style="color: #483d8b;">diff</span>(ll, <span style="color: #483d8b;">beta</span>));
 <span style="color: #483d8b;">print</span>(<span style="color: #8b2252;">"diff(ll, gamma)"</span>);
 <span style="color: #483d8b;">tex</span>(<span style="color: #483d8b;">diff</span>(ll, <span style="color: #483d8b;">gamma</span>));
+
 </pre>
 </div>
 
@@ -708,8 +716,8 @@ diff(ll, gamma)
 
 
 
-<div id="outline-container-org7ae4698" class="outline-2">
-<h2 id="org7ae4698"><span class="section-number-2">6</span> Integral equations for AFT models with \(H = B(\ldots)\)</h2>
+<div id="outline-container-org8c91d0c" class="outline-2">
+<h2 id="org8c91d0c"><span class="section-number-2">6</span> Integral equations for AFT models with \(H = B(\ldots)\)</h2>
 <div class="outline-text-2" id="text-6">
 <div class="org-src-container">
 <pre class="src src-maxima"><span style="color: #a020f0;">logexpand:all</span>;
@@ -765,8 +773,7 @@ diff(log(h),gamma):
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Mark Clements</p>
-<p class="date">Created: 2023-01-30 Mon 14:53</p>
-<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+<p class="date">Created: 2023-02-15 Wed 16:50</p>
 </div>
 </body>
 </html>

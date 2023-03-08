@@ -22,13 +22,11 @@ tex(diff(H,theta));
 print("diff(log(h),theta):");
 tex(diff(log(h),theta));
 
-/*print("ll:");
-ll : delta*log(h) - H - (1-subst(u=log(t), diff(g(X,u,beta),u)))^2 -
-subst(u=log(t)-g(X,log(t),beta), diff(B(u,gamma),u))^2;
+print("ll:");
+ll : delta*log(h) - H -  diff(eta(t,z,beta),t)^2;
 tex(ll);
-print("diff(ll, theta)");
-tex(diff(ll, theta));
-*/
+print("diff(ll, beta)");
+tex(diff(ll, beta));
 #+end_src
 
 
