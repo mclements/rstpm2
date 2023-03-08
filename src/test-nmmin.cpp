@@ -715,8 +715,9 @@ namespace rstpm2 {
       vec h = link->h(eta,etaD) + bhazard;
       vec H = link->H(eta);
       vec eps = h*0.0 + 1.0e-16; 
-      double constraint = kappa/2.0 * (sum(h % h % (h<0)) +
-				       sum(H % H % (H<0))); 
+      double constraint = kappa * (sum(h % h % (h<0)) +
+				   sum(H % H % (H<0)));
+      constraint += kappa*sum(etaD % etaD % (etaD<eps));
       h = max(h,eps);
       H = max(H,eps);
       vec li = wt % event % log(h) - wt % H;
@@ -861,10 +862,14 @@ namespace rstpm2 {
       vec eps = h*0.0 + 1.0e-16;
       mat gradH = link->gradH(eta,X);
       mat gradh = link->gradh(eta,etaD,X,XD);
-      mat Xconstraint = kappa * (rmult(gradh, h % (h<0)) +
-				 rmult(gradH, H % (H<0)));
-      // h = max(h,eps);
-      mat Xgrad = -rmult(gradH, wt) + rmult(gradh, event / h % wt);
+      mat Xconstraint = 2.0*kappa * (rmult(gradh, h % (h<eps)) +
+				     rmult(gradH, H % (H<eps)));
+      Xconstraint += 2.0*kappa*rmult(XD, etaD % (etaD<eps));
+      h = max(h,eps);
+      uvec hindex = (h<eps);
+      uvec Hindex = (H<eps);
+      uvec pindex = (etaD<eps);
+      mat Xgrad = -rmult(gradH, wt) + rmult(gradh, event / h % wt % (1-pindex));
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
     }
@@ -872,7 +877,7 @@ namespace rstpm2 {
       mat gradH0 = link->gradH(eta0, X0); 
       vec H0 = link->H(eta0); 
       vec eps = H0*0.0 + 1.0e-16;
-      mat Xconstraint = kappa * rmult(gradH0, H0 % (H0<0));
+      mat Xconstraint = 2.0*kappa*rmult(gradH0, H0 % (H0<0));
       mat Xgrad = rmult(gradH0, wt0);
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
@@ -939,13 +944,9 @@ namespace rstpm2 {
     vec gradient(vec beta) {
       gradli_constraint gc = gradli(X * beta, XD * beta, X0 * beta, X1 * beta,
 				    X, XD, X0, X1, beta);
-      rowvec dconstraint = sum(gc.constraint,0);
-      rowvec vgr = sum(gc.gradli,0);
-      vec gr(n);
-      for (size_t i = 0; i<beta.size(); ++i) {
-	gr[i] = vgr[i];// - dconstraint[i];
-      }
-      return -gr;
+      vec dconstraint = sum(gc.constraint,0).t();
+      vec gr = sum(gc.gradli,0).t();
+      return -gr+dconstraint;
     }
     bool feasible(vec beta) {
       vec eta = X * beta;
