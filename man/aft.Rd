@@ -102,7 +102,7 @@ logical indicating whether to use gradients in the calculation
   \code{mle2} class.
 }
 \value{
-An \code{stpm2-class} object that inherits from \code{mle2-class}. 
+An \code{aft-class} object that inherits from \code{mle2-class}. 
 }
 %% \references{
 %% %% ~put references to the literature/web site here ~

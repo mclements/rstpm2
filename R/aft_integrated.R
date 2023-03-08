@@ -3,9 +3,9 @@ setClass("aft_integrated", representation(args="list"), contains="mle2")
 aft_integrated <- function(formula, data, df = 3,
                         tvc = NULL, cure.formula=formula,
                         control = list(parscale = 1, maxit = 1000), init = NULL,
-                        weights = NULL, nNodes=20, careful=FALSE,
+                        weights = NULL, nNodes=20, 
                         timeVar = "", time0Var = "", log.time.transform=TRUE,
-                        reltol=1.0e-8, trace = 0, cure = FALSE, mixture = TRUE,
+                        reltol=1.0e-8, trace = 0, cure = FALSE, mixture = FALSE,
                         contrasts = NULL, subset = NULL, use.gr = TRUE, ...) {
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
@@ -78,11 +78,11 @@ aft_integrated <- function(formula, data, df = 3,
     glm.cure.call = coxph.call
     glm.cure.call[[1]] = as.name("glm")
     glm.cure.call$family = as.name("binomial")
-    lhs(glm.cure.call$formula) = as.name(eventExpr)
+    lhs(glm.cure.call$formula) = as.name("event")
     rhs(glm.cure.call$formula) = rhs(cure.formula)
     ## glm(y ~ X, family=binomial)
     ## browser()
-    glm.cure.obj <- eval(glm.cure.call, envir=parent.frame())
+    glm.cure.obj <- eval(glm.cure.call, data)
     Xc = model.matrix(glm.cure.obj, data)
     ##
     ## pred1 <- predict(survreg1)
@@ -205,7 +205,7 @@ aft_integrated <- function(formula, data, df = 3,
     args$negll = negll
     args$gradient = gradient
     ## MLE
-    if (careful || (delayed && use.gr)) { # initial search using nmmin (conservative -- is this needed?)
+    if (delayed && use.gr) { # initial search using nmmin (conservative -- is this needed?)
         args$return_type <- "nmmin"
         args$maxit <- 50
         fit <- .Call("aft_integrated_model_output", args, PACKAGE="rstpm2")

@@ -1,11 +1,11 @@
 setClass("aft_mixture", representation(args="list"), contains="mle2")
 
-aft_mixture <- function(formula, data, df = 3,
+aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
                         tvc = NULL, cure.formula=formula,
                         control = list(parscale = 1, maxit = 1000), init = NULL,
-                        weights = NULL, careful=FALSE,
+                        weights = NULL, 
                         timeVar = "", time0Var = "", log.time.transform=TRUE,
-                        reltol=1.0e-8, trace = 0, cure = FALSE, mixture = TRUE,
+                        reltol=1.0e-8, trace = 0, cure = FALSE, mixture = FALSE,
                         contrasts = NULL, subset = NULL, use.gr = TRUE, ...) {
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
@@ -22,6 +22,8 @@ aft_mixture <- function(formula, data, df = 3,
         timeVar <- all.vars(timeExpr)
     ## set up the formulae
     full.formula <- formula
+    if (!is.null(smooth.formula))
+        rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
     rhs(full.formula) <- rhs(full.formula) %call+% quote(0)
     if (!is.null(tvc)) {
         tvc.formulas <-
@@ -78,11 +80,12 @@ aft_mixture <- function(formula, data, df = 3,
     glm.cure.call = coxph.call
     glm.cure.call[[1]] = as.name("glm")
     glm.cure.call$family = as.name("binomial")
-    lhs(glm.cure.call$formula) = as.name(eventExpr)
+    lhs(glm.cure.call$formula) = as.name("event")
     rhs(glm.cure.call$formula) = rhs(cure.formula)
     ## glm(y ~ X, family=binomial)
     ## browser()
-    glm.cure.obj <- eval(glm.cure.call, envir=parent.frame())
+    ## glm.cure.obj <- eval(glm.cure.call, envir=parent.frame())
+    glm.cure.obj <- eval(glm.cure.call, data)
     Xc = model.matrix(glm.cure.obj, data)
     ##
     ## pred1 <- predict(survreg1)
@@ -218,7 +221,7 @@ aft_mixture <- function(formula, data, df = 3,
     args$negll = negll
     args$gradient = gradient
     ## MLE
-    if (careful || (delayed && use.gr)) { # initial search using nmmin (conservative -- is this needed?)
+    if (delayed && use.gr) { # initial search using nmmin (conservative -- is this needed?)
         args$return_type <- "nmmin"
         args$maxit <- 50
         fit <- .Call("aft_mixture_model_output", args, PACKAGE="rstpm2")
@@ -497,7 +500,6 @@ predict.aft_mixture =  function(object,newdata=NULL,
     if (keep.attributes)
         attr(out,"newdata") <- newdata
     return(out)
-
 }
 
 setMethod("predict", "aft_mixture", predict.aft_mixture)
@@ -638,7 +640,7 @@ KL_not_vectorized <- function(object, true_density = "Weibull",
         newdata <- data.frame(X = uniqueCov[i,-NCOL(uniqueCov)])
 
         colnames(newdata) <-
-            as.character(tail(as.list(attr(fit@args$lm.obj$terms,"variables")),-2)[[1]])
+            as.character(tail(as.list(attr(object@args$lm.obj$terms,"variables")),-2)[[1]])
         out <- out +
             integrate(integrand,
                       0, 30, newdata = newdata)$value*
