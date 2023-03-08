@@ -2476,7 +2476,7 @@ eform <- function (object, ...)
   UseMethod("eform")
 setGeneric("eform")
 eform.stpm2 <- function (object, parm, level = 0.95, method = c("Profile","Delta"), 
-                    name = "exp(beta)") 
+                    name = "exp(beta)", ...) 
           {
               method <- match.arg(method)
               if (missing(parm)) 
