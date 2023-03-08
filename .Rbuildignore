@@ -11,3 +11,4 @@ log$
 jss\.bst
 jss\.cls
 ^.*\.dvi$
+^inst/doc/.*[~]$
