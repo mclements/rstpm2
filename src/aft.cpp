@@ -91,12 +91,14 @@ namespace rstpm2 {
     vec betas = betafull.subvec(X.n_cols,betafull.size()-1);
     vec eta = X * beta;
     vec etaD = XD * beta;
+    vec etaD_old = etaD;
     vec logtstar = log(time) - eta;
     mat Xs = s.basis(logtstar);
     mat XDs = s.basis(logtstar,1);
     mat XDDs = s.basis(logtstar,2);
     vec etas = Xs * betas;
     vec etaDs = XDs * betas;
+    vec etaDs_old = etaDs;
     vec etaDDs = XDDs * betas;
     // H calculations
     vec H = exp(etas);
@@ -118,7 +120,8 @@ namespace rstpm2 {
     vec logh = etas + log(etaDs) + log(1/time - etaD/time);
     vec h = exp(logh);
     mat dloghdbetas = Xs+rmult(XDs,1/etaDs % (1-pindexs));
-    mat dloghdbeta = -rmult(X,etaDs % (1-pindexs)) - rmult(X,etaDDs/etaDs % (1-pindexs)) - rmult(XD, (1-pindex)/time/(1-etaD));
+    mat dloghdbeta = -rmult(X,etaDDs/etaDs % (1-pindexs)) - rmult(X,etaDs_old) - rmult(XD, 1/(1-etaD_old) % (1-pindex));
+    // mat dloghdbeta = -rmult(X,etaDs % (1-pindexs)) - rmult(X,etaDDs/etaDs % (1-pindexs)) - rmult(XD, (1-pindex)/time/(1-etaD));
     mat gradi = join_rows(-rmult(dloghdbeta,event)+dHdbeta, -rmult(dloghdbetas,event)+dHdbetas) + rmult(pgrad,pindex) + rmult(pgrads,pindexs);
     // mat gradi = join_rows(-rmult(dloghdbeta,event)+dHdbeta, -rmult(dloghdbetas,event)+dHdbetas);
     vec out = sum(gradi,0).t();
