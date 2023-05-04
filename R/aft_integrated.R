@@ -528,28 +528,3 @@ predict.aft_integrated.ext <- function(obj, type=c("survival","haz","gradh"),
     localargs$time <- time
     as.matrix(.Call("aft_integrated_model_output", localargs, PACKAGE="rstpm2"))
 }
-
-setMethod("predictnl", "aft_integrated",
-          function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
-          {
-            link <- match.arg(link)
-            linkf <- eval(parse(text=link))
-            if (is.null(newdata) && !is.null(object@args$data))
-              newdata <- object@args$data
-            localf <- function(coef,...)
-            {
-              object@args$init <- object@fullcoef <- coef
-              linkf(fun(object,...))
-            }
-            numDeltaMethod(object,localf,newdata=newdata,gd=gd,...)
-          })
-
-setMethod("plot", signature(x="aft_integrated", y="missing"),
-          function(x,y,newdata=NULL,type="surv",
-                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
-                   add=FALSE,ci=!add,rug=!add,
-                   var=NULL,exposed=incrVar(var),times=NULL,...)
-              plot.aft.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
-                            ylab=ylab, line.col=line.col, lty=lty, add=add,
-                            ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
-          )

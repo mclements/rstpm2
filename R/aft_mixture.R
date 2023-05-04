@@ -274,7 +274,7 @@ setMethod("predict", "aft_mixture",
                    grid=FALSE,seqLength=300,level=0.95,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,...) {
               type = match.arg(type)
-              predict.aft_integrated(object, newdata, type, grid, seqLength, level, se.fit, link, exposed, var, keep.attributes, ...)
+              predict.aft_mixture(object, newdata, type, grid, seqLength, level, se.fit, link, exposed, var, keep.attributes, ...)
           })
 
 predict.aft_mixture <-
@@ -345,7 +345,7 @@ predict.aft_mixture <-
             time2 <- eval(args$timeExpr,newdata2) # is this always equal to time?
             Xc2 = model.matrix(args$glm.cure.obj, newdata2)
         }
-        if (type %in% c("surv","grad")) {
+        if (type %in% c("grad")) {
             return(predict.aft_mixture.ext(object, type=type, time=time, X=X, XD=XD))
         }
         ## colMeans <- function(x) colSums(x)/apply(x,2,length)
@@ -529,21 +529,6 @@ setMethod("predict", "aft_mixture", predict.aft_mixture)
 cloglog <- function(x) log(-log(x))
 cexpexp <- function(x) exp(-exp(x))
 
-setMethod("predictnl", "aft_mixture",
-          function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
-          {
-            link <- match.arg(link)
-            linkf <- eval(parse(text=link))
-            if (is.null(newdata) && !is.null(object@args$data))
-              newdata <- object@args$data
-            localf <- function(coef,...)
-            {
-              object@args$init <- object@fullcoef <- coef
-              linkf(fun(object,...))
-            }
-            numDeltaMethod(object,localf,newdata=newdata,gd=gd,...)
-          })
-
 ## ## KL using GausLaguerre Quadrature --numerically unstable
 ##
 ## KL <- function(object, true_density = "Weibull",
@@ -666,12 +651,3 @@ KL_not_vectorized <- function(object, true_density = "Weibull",
     return(out)
 }
 
-setMethod("plot", signature(x="aft_mixture", y="missing"),
-          function(x,y,newdata=NULL,type="surv",
-                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
-                   add=FALSE,ci=!add,rug=!add,
-                   var=NULL,exposed=incrVar(var),times=NULL,...)
-              plot.aft.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
-                                    ylab=ylab, line.col=line.col, lty=lty, add=add,
-                                    ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
-          )

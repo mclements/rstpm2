@@ -864,6 +864,7 @@ plot.aft.meansurv <- function(x, y=NULL, times=NULL, newdata=NULL, type="meansur
     }
     return(invisible(y))
 }
+
 plot.aft.base <- 
           function(x,y,newdata=NULL,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
@@ -917,6 +918,25 @@ setMethod("plot", signature(x="aft", y="missing"),
                               ylab=ylab, line.col=line.col, lty=lty, add=add,
                               ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
           )
+setMethod("plot", signature(x="aft_mixture", y="missing"),
+          function(x,y,newdata=NULL,type="surv",
+                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
+                   add=FALSE,ci=!add,rug=!add,
+                   var=NULL,exposed=incrVar(var),times=NULL,...)
+              plot.aft.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
+                              ylab=ylab, line.col=line.col, lty=lty, add=add,
+                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
+          )
+setMethod("plot", signature(x="aft_integrated", y="missing"),
+          function(x,y,newdata=NULL,type="surv",
+                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
+                   add=FALSE,ci=!add,rug=!add,
+                   var=NULL,exposed=incrVar(var),times=NULL,...)
+              plot.aft.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
+                              ylab=ylab, line.col=line.col, lty=lty, add=add,
+                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
+          )
+
 predict.aft.ext <- function(obj, type=c("survival","haz","gradh"),
                             time=obj@args$time, X=obj@args$X, XD=obj@args$XD) {
     type <- match.arg(type)

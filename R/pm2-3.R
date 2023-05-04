@@ -1596,8 +1596,8 @@ setMethod("predictnl", "stpm2",
     return(dm)
   })
 ##
-setMethod("predictnl", "aft",
-          function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
+
+predictnl.aft <- function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
   {
     link <- match.arg(link)
     linkf <- eval(parse(text=link))
@@ -1609,7 +1609,11 @@ setMethod("predictnl", "aft",
         linkf(fun(object,...))
       }
     numDeltaMethod(object,localf,newdata=newdata,gd=gd,...)
-  })
+  }
+
+setMethod("predictnl", "aft", predictnl.aft)
+setMethod("predictnl", "aft_mixture", predictnl.aft)
+setMethod("predictnl", "aft_integrated", predictnl.aft)
 
 residuals.stpm2.base <- function(object, type=c("li","gradli")) {
     type <- match.arg(type)
