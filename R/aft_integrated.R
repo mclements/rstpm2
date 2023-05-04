@@ -30,7 +30,7 @@ aft_integrated <- function(formula, data, df = 3,
                      call("as.numeric",as.name(name)),
                      as.call(c(quote(ns),
                                timeExpr,
-                               vector2call(list(df=tvc[[name]]))))))
+                               vector2call(list(intercept=TRUE,df=tvc[[name]]))))))
         if (length(tvc.formulas)>1)
             tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
         tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
