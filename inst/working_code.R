@@ -18,6 +18,43 @@
 ##   require(bbmle)
 ## }
 
+## Examples for the second AFT paper
+library(rstpm2)
+library(biostat3)
+localised = transform(subset(biostat3::colon, stage=="Localised"), male=0+(sex=="Male"))
+
+fit0 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
+fit0 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
+fit0 = aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
+summary(fit0)
+par(mfrow=1:2)
+plot(fit0, type="surv", newdata=data.frame(age=50, male=0), ylim=c(0.7,1), main="Females") # ok
+plot(fit0, type="surv", newdata=data.frame(age=50, male=1), ylim=c(0.7,1), main="Males")   # ok
+## plot(fit0, type="surv", newdata=data.frame(age=50, male=0:1)) ## issue with plotting multiple rows
+
+
+summary(fit0) # ok - same fit as aft()
+par(mfrow=1:2)
+## debugonce(rstpm2:::plot.aft.base)
+plot(fit0, type="surv", newdata=data.frame(age=50, male=0), main="Females") # ok
+plot(fit0, type="surv", newdata=data.frame(age=50, male=1), main="Males")   # ok
+## plot(fit0, type="surv", newdata=data.frame(age=50, male=0:1)) ## issue with plotting multiple rows
+
+fit1 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised, tvc = list(male=2))
+fit1 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised, tvc = list(male=2))
+fit1 = aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised, tvc = list(male=2))
+summary(fit1)
+
+par(mfrow=1:2)
+plot(fit1, type="surv", newdata=data.frame(age=50, male=0), main="Females") # ok
+plot(fit1, type="surv", newdata=data.frame(age=50, male=1), main="Males") # wrong-o!
+
+plot(fit1, type="accfac", newdata=data.frame(age=50, male=0), var="male", ylim=c(0,3))
+
+
+plot(fit1, type="accfac", newdata=data.frame(age=50, male=0),
+     exposed=function(data) transform(data, male=1), ylim=c(0,3))
+
 ## Email from Paul S
 library(rstpm2)
 fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3,tvc=list(hormon=2))
