@@ -248,3 +248,308 @@ aft_integrated <- function(formula, data, df = 3,
     attr(out,"nobs") <- length(out@args$event) # for logLik method
     return(out)
 }
+
+setMethod("nobs", "aft_integrated", function(object, ...) length(object@args$event))
+
+setMethod("predict", "aft_integrated",
+          function(object,newdata=NULL,
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","meanhaz","af","fail","accfac","gradh"),
+                   grid=FALSE,seqLength=300,level=0.95,
+                   se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,...) {
+              predict.aft_integrated(object, newdata, type, grid, seqLength, level, se.fit, link, exposed, var, keep.attributes, ...)
+          })
+
+predict.aft_integrated =  function(object,newdata=NULL,
+                                type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","meanhaz","af","fail","accfac","gradh"),
+                                grid=FALSE,seqLength=300,level=0.95,
+                                se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,...) {
+    type <- match.arg(type)
+    args <- object@args
+    if (type %in% c("fail")) {
+        out <- 1-predict(object,newdata=newdata,type="surv",grid,seqLength,se.fit,link,exposed,var,keep.attributes,...)
+        if (se.fit) {temp <- out$lower; out$lower <- out$upper; out$upper <- temp}
+        return(out)
+    }
+    if (is.null(exposed) && is.null(var) & type %in% c("hr","sdiff","hdiff","meansurvdiff","or","af","accfac"))
+        stop('Either exposed or var required for type in ("hr","sdiff","hdiff","meansurvdiff","or","af","accfac")')
+    ## exposed is a function that takes newdata and returns the revised newdata
+    ## var is a string for a variable that defines a unit change in exposure
+    if (is.null(newdata) && type %in% c("hr","sdiff","hdiff","meansurvdiff","or","af","accfac"))
+        stop("Prediction using type in ('hr','sdiff','hdiff','meansurvdiff','or','af','accfac') requires newdata to be specified.")
+    calcX <- !is.null(newdata)
+    time <- NULL
+    if (is.null(newdata)) {
+        ##mm <- X <- model.matrix(object) # fails (missing timevar)
+        X <- args$X
+        X_list <- args$X_list
+        XD <- args$XD
+        ##y <- model.response(object@model.frame)
+        y <- args$y
+        time <- as.vector(y[,ncol(y)-1])
+        newdata <- as.data.frame(args$data)
+    }
+    lpfunc <- function(x,...) {
+        newdata2 <- newdata
+        newdata2[[object@args$timeVar]] <- x
+        lpmatrix.lm(object@args$lm.obj,newdata2)
+    }
+    ## resp <- attr(Terms, "variables")[attr(Terms, "response")]
+    ## similarly for the derivatives
+    if (grid) {
+        Y <- args$y
+        event <- Y[,ncol(Y)]==1
+        time <- args$data[[args$timeVar]]
+        eventTimes <- time[event]
+        tt <- seq(min(eventTimes),max(eventTimes),length=seqLength)[-1]
+        data.x <- data.frame(tt)
+        names(data.x) <- args$timeVar
+        newdata[[args$timeVar]] <- NULL
+        newdata <- merge(newdata,data.x)
+        calcX <- TRUE
+    }
+    if (calcX)  {
+        X <- lpmatrix.lm(args$lm.obj, newdata)
+        XD <- grad1(lpfunc,newdata[[object@args$timeVar]],
+                    log.transform=object@args$log.time.transform)
+        XD <- matrix(XD,nrow=nrow(X))
+        Xc <- lpmatrix.lm(args$glm.cure.obj, newdata)
+        time <- eval(args$timeExpr,newdata)
+        X_list = lapply(args$gnodes, function(gnode)
+            lpmatrix.lm(args$lm.obj,
+                    local({ newdata[[args$timeVar]] = (gnode+1)/2*newdata[[args$timeVar]]; newdata})))
+    }
+    if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","af","accfac")) {
+        newdata2 <- exposed(newdata)
+        X2 <- lpmatrix.lm(args$lm.obj, newdata2)
+        XD2 <- grad1(lpfunc,newdata2[[object@args$timeVar]],
+                     log.transform=object@args$log.time.transform)
+        XD2 <- matrix(XD2,nrow=nrow(X))
+        time2 <- eval(args$timeExpr,newdata2) # is this always equal to time?
+        Xc2 = model.matrix(args$glm.cure.obj, newdata2)
+        X_list2 = lapply(args$gnodes, function(gnode)
+            lpmatrix.lm(args$lm.obj,
+                    local({ newdata2[[args$timeVar]] = (gnode+1)/2*newdata2[[args$timeVar]]; newdata2})))
+    }
+    if (type == "gradh") {
+        return(predict.aft_integrated.ext(object, type="gradh", time=time, X=X, XD=XD,
+                                          Xc=Xc, X_list=X_list))
+    }
+    ## colMeans <- function(x) colSums(x)/apply(x,2,length)
+    local <-  function (object, newdata=NULL, type="surv", exposed, ...)
+    {
+        args <- object@args
+        betafull <- coef(object)
+        beta <- betafull[1:ncol(X)]
+        betas <- betafull[-(1:ncol(X))]
+        tt <- args$terms
+        tstar = time*0
+        scale = time/2.0
+        for(i in 1:length(X_list)) {
+            tstar = tstar + args$gweights[i]*scale * exp(-X_list[[i]] %*% beta)
+        }
+        ## eta <- as.vector(X %*% beta)
+        logtstar <- log(tstar)
+        etas <- as.vector(predict(args$design, logtstar) %*% betas)
+        H <- exp(etas)
+        S <- exp(-H)
+        ## browser()
+        if (type=="cumhaz")
+            return(H)
+        if (type=="surv")
+            return(S)
+        if (type=="fail")
+            return(1-S)
+        if (type=="odds")
+            return((1-S)/S)
+        if (type=="meansurv")
+            return(tapply(S,newdata[[object@args$timeVar]],mean))
+        etaDs <- as.vector(predict(args$designD, logtstar) %*% betas)
+        etaD <- as.vector(XD %*% beta)
+        h <- drop(H*etaDs*exp(X %*% beta))
+        Sigma = vcov(object)
+        if (type=="link")
+            return(logtstar) ## what should this be?
+        if (type=="density")
+            return (S*h)
+        if (type=="hazard")
+            return(h)
+        if (type=="loghazard")
+            return(log(h))
+        if (type=="meanhaz")
+            return(tapply(S*h,newdata[[object@args$timeVar]],sum)/tapply(S,newdata[[object@args$timeVar]],sum))
+        tstar2 = time2*0
+        scale2 = time2/2.0
+        for(i in 1:length(X_list2)) {
+            tstar2 = tstar2 + args$gweights[i]*scale2 * exp(-X_list2[[i]] %*% beta)
+        }
+        logtstar2 = log(tstar2)
+        etas2 <- as.vector(predict(args$design, logtstar2) %*% betas)
+        H2 <- exp(etas2)
+        S2 <- exp(-H2)
+        if (type=="sdiff")
+            return(S2-S)
+        if (type=="or")
+            return((1-S2)/S2/((1-S)/S))
+        if (type=="meansurvdiff")
+            return(tapply(S2,newdata[[object@args$timeVar]],mean) - tapply(S,newdata[[object@args$timeVar]],mean))
+        etaDs2 <- as.vector(predict(args$designD, logtstar2) %*% betas)
+        etaD2 <- as.vector(XD2 %*% beta)
+        h2 <- drop(H2*etaDs2*exp(X2 %*% beta))
+        if (type=="hdiff")
+            return(h2 - h)
+        if (type=="hr")
+            return(h2/h)
+        if (type=="af") {
+            meanS <- tapply(S,newdata[[object@args$timeVar]],mean)
+            meanS2 <- tapply(S2,newdata[[object@args$timeVar]],mean)
+            return((meanS2 - meanS)/(1-meanS))
+        }
+        if (type=="accfac") {
+            return(exp((X2-X) %*% beta))
+        }
+    }
+    local2 <-  function (object, newdata=NULL, type="surv", exposed, ...)
+    {
+        args <- object@args
+        betafull <- coef(object)
+        beta <- betafull[1:ncol(args$X)]
+        betac <- betafull[(ncol(args$X)+1):(ncol(args$X)+ncol(args$Xc))]
+        betas <- betafull[-(1:(ncol(args$X)+ncol(args$Xc)))]
+        tt <- args$terms
+        tt <- args$terms
+        tstar = time*0
+        scale = time/2.0
+        for(i in 1:length(X_list)) {
+            tstar = tstar + args$gweights[i]*scale * exp(-X_list[[i]] %*% beta)
+        }
+        ## eta <- as.vector(X %*% beta)
+        etac <- as.vector(Xc %*% betac)
+        cure_frac <- exp(etac)/(1+exp(etac))
+        logtstar <- log(timestar)
+        etas <- as.vector(predict(args$design, logtstar) %*% betas)
+        Hu <- exp(etas)
+        Su <- exp(-Hu)
+        S <- cure_frac + (1-cure_frac)*Su
+        if (type=="cumhaz")
+            return(-log(cure_frac + (1-cure_frac)*exp(-Hu)))
+        if (type=="surv")
+            return(S)
+        if (type=="fail")
+            return(1-S)
+        if (type=="odds")
+            return((1-S)/S)
+        if (type=="meansurv")
+            return(tapply(S,newdata[[object@args$timeVar]],mean))
+        etaDs <- as.vector(predict(args$designD, logtstar) %*% betas)
+        etaD <- as.vector(XD %*% beta)
+        hu <- drop(Hu*etaDs*exp(X %*% beta))
+        h <- (1-cure_frac)*exp(-Hu)*hu/(cure_frac + (1-cure_frac)*exp(-Hu))
+        Sigma = vcov(object)
+        if (type=="link")
+            return(eta)
+        if (type=="density")
+            return (S*h)
+        if (type=="hazard")
+            return(h)
+        if (type=="loghazard")
+            return(log(h))
+        if (type=="meanhaz")
+            return(tapply(S*h,newdata[[object@args$timeVar]],sum)/tapply(S,newdata[[object@args$timeVar]],sum))
+        tstar2 = time2*0
+        scale2 = time2/2.0
+        for(i in 1:length(X_list2)) {
+            tstar2 = tstar2 + args$gweights[i]*scale2 * exp(-X_list2[[i]] %*% beta)
+        }
+        logtstar2 = log(tstar2)
+        ## eta2 <- as.vector(X2 %*% beta)
+        etas2 <- as.vector(predict(args$design, logtstar2) %*% betas)
+        etac2 <- as.vector(Xc2 %*% betac)
+        cure_frac2 <- exp(etac2)/(1+exp(etac2))
+        Hu2 <- exp(etas2)
+        Su2 <- exp(-Hu2)
+        S2 <- cure_frac2 + (1-cure_frac2)*Su2
+        if (type=="sdiff")
+            return(S2-S)
+        if (type=="or")
+            return((1-S2)/S2/((1-S)/S))
+        if (type=="meansurvdiff")
+            return(tapply(S2,newdata[[object@args$timeVar]],mean) - tapply(S,newdata[[object@args$timeVar]],mean))
+        etaDs2 <- as.vector(predict(args$designD, logtstar2) %*% betas)
+        etaD2 <- as.vector(XD2 %*% beta)
+        hu2 <- drop(Hu2*etaDs2*exp(X2 %*% beta))
+        h2 <- (1-cure_frac2)*exp(-Hu2)*hu2/(cure_frac2 + (1-cure_frac2)*exp(-Hu2))
+        if (type=="hdiff")
+            return(h2 - h)
+        if (type=="hr")
+            return(h2/h)
+        if (type=="af") {
+            meanS <- tapply(S,newdata[[object@args$timeVar]],mean)
+            meanS2 <- tapply(S2,newdata[[object@args$timeVar]],mean)
+            return((meanS2 - meanS)/(1-meanS))
+        }
+        if (type=="accfac") {
+            return(exp((X2-X) %*% beta))
+        }
+    }
+    local <- if(args$mixture)  local2 else local
+    out <- if (!se.fit) {
+               local(object,newdata,type=type,exposed=exposed,
+                     ...)
+           } else {
+               if (is.null(link))
+                   link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
+                                  hdiff="I",loghazard="I",link="I",odds="log",or="log",meansurv="I",meanhaz="I",af="I",accfac="log")
+               invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
+               pred <- predictnl(object,local,link=link,newdata=newdata,type=type,gd=NULL,
+                                 exposed=exposed,...)
+               ci <- confint.predictnl(pred, level = level)
+               out <- data.frame(Estimate=pred$fit,
+                                 lower=ci[,1],
+                                 upper=ci[,2])
+               if (link=="cloglog")
+                   out <- data.frame(Estimate=out$Estimate,lower=out$upper,upper=out$lower)
+               invlinkf(out)
+           }
+    if (keep.attributes)
+        attr(out,"newdata") <- newdata
+    return(out)
+}
+
+predict.aft_integrated.ext <- function(obj, type=c("survival","haz","gradh"),
+                                       time=obj@args$time, X=obj@args$X, XD=obj@args$XD,
+                                       X_list=obj@args$X_list, Xc=obj@args$Xc) {
+    type <- match.arg(type)
+    localargs <- obj@args
+    localargs$return_type <- type
+    localargs$X <- X
+    localargs$XD <- XD
+    localargs$Xc <- Xc
+    localargs$X_list <- X_list
+    localargs$time <- time
+    as.matrix(.Call("aft_integrated_model_output", localargs, PACKAGE="rstpm2"))
+}
+
+setMethod("predictnl", "aft_integrated",
+          function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
+          {
+            link <- match.arg(link)
+            linkf <- eval(parse(text=link))
+            if (is.null(newdata) && !is.null(object@args$data))
+              newdata <- object@args$data
+            localf <- function(coef,...)
+            {
+              object@args$init <- object@fullcoef <- coef
+              linkf(fun(object,...))
+            }
+            numDeltaMethod(object,localf,newdata=newdata,gd=gd,...)
+          })
+
+setMethod("plot", signature(x="aft_integrated", y="missing"),
+          function(x,y,newdata=NULL,type="surv",
+                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
+                   add=FALSE,ci=!add,rug=!add,
+                   var=NULL,exposed=incrVar(var),times=NULL,...)
+              plot.aft.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
+                            ylab=ylab, line.col=line.col, lty=lty, add=add,
+                            ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
+          )
