@@ -90,7 +90,7 @@ namespace rstpm2 {
       	if (delta<0.0)
       	  pen += kappa*delta*delta;
       }
-      vec logh = etas + log(etaDs) + log(1/time -etaD/time);
+      vec logh = etas + log(etaDs) + log(1 - etaD) - log(time) - eta;
       vec H = exp(etas);
       double ll = dot(logh,event) - sum(H) - pen;
       if (mixture) {
