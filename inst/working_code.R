@@ -21,17 +21,166 @@
 ## Examples for the second AFT paper
 library(rstpm2)
 library(biostat3)
-localised = transform(subset(biostat3::colon, stage=="Localised"), male=0+(sex=="Male"))
+colon = transform(biostat3::colon,
+                  male=0+(sex=="Male"),
+                  Unknown=0+(stage=="Unknown"),
+                  Localised=0+(stage=="Localised"),
+                  Regional=0+(stage=="Regional"),
+                  Distant=0+(stage=="Distant"))
+localised = subset(colon, stage=="Localised")
 
 fit0 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
-fit0 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
-fit0 = aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
-summary(fit0)
-par(mfrow=1:2)
+fit1 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
+fit2 = aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
+fit0
+fit1
+fit2
+par(mfrow=c(3,2))
 plot(fit0, type="surv", newdata=data.frame(age=50, male=0), ylim=c(0.7,1), main="Females") # ok
 plot(fit0, type="surv", newdata=data.frame(age=50, male=1), ylim=c(0.7,1), main="Males")   # ok
+plot(fit1, type="surv", newdata=data.frame(age=50, male=0), ylim=c(0.7,1), main="Females") # ok
+plot(fit1, type="surv", newdata=data.frame(age=50, male=1), ylim=c(0.7,1), main="Males")   # ok
+plot(fit2, type="surv", newdata=data.frame(age=50, male=0), ylim=c(0.7,1), main="Females") # ok
+plot(fit2, type="surv", newdata=data.frame(age=50, male=1), ylim=c(0.7,1), main="Males")   # ok
 ## plot(fit0, type="surv", newdata=data.frame(age=50, male=0:1)) ## issue with plotting multiple rows
 
+library(survival)
+par(mfrow=c(1,1))
+plot(sfit <- survfit(Surv(surv_mm, status=="Dead: cancer") ~ male, data=localised),
+     col=1:2, xlab="Time since diagnosis (years)", ylab="Survival")
+legend("topright", legend=c("Females","Males"), lty=1, col=1:2, bty="n")
+
+survdiff(Surv(surv_mm/12, status=="Dead: cancer") ~ male, data=localised) # log-rank test (nuffing)
+summary(aft(Surv(surv_mm, status=="Dead: cancer") ~ male, data=localised))
+
+par(mfrow=1:2)
+summary(fit1 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ male, df=4, data=localised))
+plot(fit1, newdata=data.frame(male=1), type="surv",
+     xlab="Time since cancer diagnosis (months)",
+     main="Males",
+     ylim=c(0.4,1))
+lines(survfit(Surv(surv_mm, status=="Dead: cancer") ~ 1, data=localised,
+              subset=(male==1)))
+plot(fit1, newdata=data.frame(male=0), type="surv",
+     xlab="Time since cancer diagnosis (months)",
+     main="Females",
+     ylim=c(0.4,1))
+lines(survfit(Surv(surv_mm, status=="Dead: cancer") ~ 1, data=localised,
+              subset=(male==0)))
+
+## Females are older -> potential confounding (we would prefer to have done this by a review of the literature rather than using our own data:)
+t.test(age~male, localised) 
+plot(density(subset(localised,male==1)$age))
+lines(density(subset(localised,male==0)$age), lty=2)
+
+summary(fit1 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male, data=localised, df=4))
+plot(fit1, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # ok
+
+## Issues: the tvc for aft/aft_mixture looks wrong...
+
+summary(fit1 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male, data=localised, df=4,
+                    use.gr=TRUE,
+                    tvc=list(male=4), tvc.intercept=FALSE))
+summary(fit2 <- aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male, data=localised, df=4, tvc=list(male=4), tvc.intercept=FALSE))
+par(mfrow=c(1,2))
+plot(fit1, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # ok
+plot(fit2, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # Does this make sense?
+
+summary(fit1 <- aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ male, data=localised, df=4, tvc=list(male=2), tvc.intercept=FALSE))
+summary(fit2 <- aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ male, data=localised, df=4, tvc=list(male=2), tvc.intercept=FALSE))
+par(mfrow=c(1,2))
+plot(fit1, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # ok
+plot(fit2, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # Does this make sense?
+
+
+plot(fit1, newdata=data.frame(age=70, male=0), type="sdiff",
+     ## exposed=function(data) transform(data, male=1),
+     var="male",
+     xlab="Time since cancer diagnosis (months)")
+
+plot(fit2, newdata=data.frame(age=70, male=0), type="hr",
+     ## exposed=function(data) transform(data, male=1),
+     var="male",
+     xlab="Time since cancer diagnosis (months)")
+
+
+
+fit0 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50), data=localised,
+           tvc=list(male=3))
+fit1 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50), data=localised,
+                   tvc=list(male=3))
+fit2 = aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50), data=localised,
+                      tvc=list(male=3))
+fit0
+fit1
+fit2
+par(mfrow=c(1,3))
+plot(fit0, type="accfac", newdata=data.frame(age=50, male=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # ok
+plot(fit1, type="accfac", newdata=data.frame(age=50, male=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # ok
+plot(fit2, type="accfac", newdata=data.frame(age=50, male=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # ok
+
+fit0 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised,
+           tvc.intercept=FALSE, tvc=list(male=2))
+fit1 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised,
+                   tvc.intercept=FALSE, tvc=list(male=2))
+fit2 = aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised,
+                      tvc.intercept=FALSE, tvc=list(male=2))
+fit0
+fit1
+fit2
+par(mfrow=c(1,3))
+plot(fit0, type="accfac", newdata=data.frame(age=50, male=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # ok
+plot(fit1, type="accfac", newdata=data.frame(age=50, male=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # ok
+plot(fit2, type="accfac", newdata=data.frame(age=50, male=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # ok
+
+fit1 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ ns(age-50,df=3) + male, data=localised,
+                   tvc=list(male=2))
+fit2 = aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ ns(age-50,df=3) + male, data=localised,
+                      tvc=list(male=2))
+fit1
+fit2
+par(mfrow=c(1,2))
+plot(fit1, type="accfac", newdata=data.frame(age=50, male=0,Unknown=0,Regional=0,Distant=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # ok
+plot(fit2, type="accfac", newdata=data.frame(age=50, male=0,Unknown=0,Regional=0,Distant=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # ok
+
+fit1 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=3) + male + Unknown + Regional + Distant, data=colon, tvc=list(Distant=2))
+fit2 = aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=3) + male + Unknown + Regional + Distant, data=colon, tvc=list(Distant=2))
+summary(fit1)
+summary(fit2)
+par(mfrow=c(1,2))
+plot(fit1, type="accfac", newdata=data.frame(age=50, male=0,Unknown=0,Regional=0,Distant=0), ylim=c(0,2),
+     exposed=function(data) transform(data,Distant=1)) # ok
+plot(fit2, type="accfac", newdata=data.frame(age=50, male=0,Unknown=0,Regional=0,Distant=0), ylim=c(0,2),
+     exposed=function(data) transform(data,Distant=1)) # ok
+
+
+
+## Bug: gradients were different for aft and aft_mixture with tvc :(
+fdiff = \(f,x,eps=1e-5)
+    sapply(1:length(x),
+           \(i) (f("[<-"(x,i,x[i]+eps)) - f("[<-"(x,i,x[i]-eps)))/2/eps)
+fdiff(fit0@minuslogl, coef(fit0))
+fit0@args$gradient(coef(fit0))
+fdiff(fit1@minuslogl, coef(fit1))
+fit1@args$gradient(coef(fit1))
+##
+fdiff(fit0@minuslogl, -coef(fit0))
+fit0@args$gradient(-coef(fit0))
+fdiff(fit1@minuslogl, -coef(fit1))
+fit1@args$gradient(-coef(fit1))
 
 summary(fit0) # ok - same fit as aft()
 par(mfrow=1:2)
