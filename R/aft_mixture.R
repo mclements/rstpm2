@@ -3,7 +3,7 @@ setClass("aft_mixture", representation(args="list"), contains="mle2")
 aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
                         tvc = NULL, cure.formula=formula,
                         control = list(parscale = 1, maxit = 1000), init = NULL,
-                        weights = NULL, 
+                        weights = NULL, tvc.intercept=TRUE,
                         timeVar = "", time0Var = "", log.time.transform=TRUE,
                         reltol=1.0e-8, trace = 0, cure = FALSE, mixture = FALSE,
                         contrasts = NULL, subset = NULL, use.gr = TRUE, ...) {
@@ -32,7 +32,7 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
                      call("as.numeric",as.name(name)),
                      as.call(c(quote(ns),
                                call("log",timeExpr),
-                               vector2call(list(intercept=TRUE,df=tvc[[name]]))))))
+                               vector2call(list(intercept=tvc.intercept,df=tvc[[name]]))))))
         if (length(tvc.formulas)>1)
             tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
         tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
@@ -133,14 +133,6 @@ aft_mixture <- function(formula, data, smooth.formula = NULL, df = 3,
     wt0 <- 0
     ## ttype <- 0
     ## surv.type %in% c("right","counting")
-    ##
-    ## For integrating for time-varying acceleration factors:
-    ## - get nodes and weights for Gauss-Legendre quadrature
-    ## - get a design matrix for each node
-    ## - get a design matrix for the end of follow-up (for the hazard calculations)
-    ## - pass that information to C++ for calculation of the integrals and for the hazards
-    ## - and we need to do this for the predictions:)
-    ##
     X <- lpmatrix.lm(lm.obj,data)
     ## Xc <- model.matrix(coxph.obj, data)
     XD <- grad1(lpfunc,data[[timeVar]],lm.obj,data,timeVar,log.transform=log.time.transform)
@@ -651,3 +643,12 @@ KL_not_vectorized <- function(object, true_density = "Weibull",
     return(out)
 }
 
+setMethod("plot", signature(x="aft_mixture", y="missing"),
+          function(x,y,newdata=NULL,type="surv",
+                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
+                   add=FALSE,ci=!add,rug=!add,
+                   var=NULL,exposed=incrVar(var),times=NULL,...)
+              plot.aft.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
+                              ylab=ylab, line.col=line.col, lty=lty, add=add,
+                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
+          )

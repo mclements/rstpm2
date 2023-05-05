@@ -243,7 +243,7 @@ setClass("aft", representation(args="list"), contains="mle2")
 aft <- function(formula, data, smooth.formula = NULL, df = 3,
                 tvc = NULL,
                 control = list(parscale = 1, maxit = 1000), init = NULL,
-                weights = NULL,
+                weights = NULL, tvc.intercept=TRUE,
                 timeVar = "", time0Var = "", log.time.transform=TRUE,
                 reltol=1.0e-8, trace = 0, cure = FALSE,
                 contrasts = NULL, subset = NULL, use.gr = TRUE, ...) {
@@ -272,7 +272,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
                      call("as.numeric",as.name(name)),
                      as.call(c(quote(ns),
                                call("log",timeExpr),
-                                vector2call(list(intercept=TRUE,df=tvc[[name]]))))))
+                                vector2call(list(intercept=tvc.intercept,df=tvc[[name]]))))))
         if (length(tvc.formulas)>1)
             tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
         tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
@@ -910,24 +910,6 @@ plot.aft.base <-
               return(invisible(y))
           }
 setMethod("plot", signature(x="aft", y="missing"),
-          function(x,y,newdata=NULL,type="surv",
-                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
-                   add=FALSE,ci=!add,rug=!add,
-                   var=NULL,exposed=incrVar(var),times=NULL,...)
-              plot.aft.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
-                              ylab=ylab, line.col=line.col, lty=lty, add=add,
-                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
-          )
-setMethod("plot", signature(x="aft_mixture", y="missing"),
-          function(x,y,newdata=NULL,type="surv",
-                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
-                   add=FALSE,ci=!add,rug=!add,
-                   var=NULL,exposed=incrVar(var),times=NULL,...)
-              plot.aft.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
-                              ylab=ylab, line.col=line.col, lty=lty, add=add,
-                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
-          )
-setMethod("plot", signature(x="aft_integrated", y="missing"),
           function(x,y,newdata=NULL,type="surv",
                    xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
                    add=FALSE,ci=!add,rug=!add,

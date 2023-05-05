@@ -3,7 +3,7 @@ setClass("aft_integrated", representation(args="list"), contains="mle2")
 aft_integrated <- function(formula, data, df = 3,
                         tvc = NULL, cure.formula=formula,
                         control = list(parscale = 1, maxit = 1000), init = NULL,
-                        weights = NULL, nNodes=20, 
+                        weights = NULL, nNodes=20, tvc.intercept=TRUE,
                         timeVar = "", time0Var = "", log.time.transform=TRUE,
                         reltol=1.0e-8, trace = 0, cure = FALSE, mixture = FALSE,
                         contrasts = NULL, subset = NULL, use.gr = TRUE, ...) {
@@ -30,7 +30,7 @@ aft_integrated <- function(formula, data, df = 3,
                      call("as.numeric",as.name(name)),
                      as.call(c(quote(ns),
                                timeExpr,
-                               vector2call(list(intercept=TRUE,df=tvc[[name]]))))))
+                               vector2call(list(intercept=tvc.intercept,df=tvc[[name]]))))))
         if (length(tvc.formulas)>1)
             tvc.formulas <- list(Reduce(`%call+%`, tvc.formulas))
         tvc.formula <- as.formula(call("~",tvc.formulas[[1]]))
@@ -528,3 +528,13 @@ predict.aft_integrated.ext <- function(obj, type=c("survival","haz","gradh"),
     localargs$time <- time
     as.matrix(.Call("aft_integrated_model_output", localargs, PACKAGE="rstpm2"))
 }
+
+setMethod("plot", signature(x="aft_integrated", y="missing"),
+          function(x,y,newdata=NULL,type="surv",
+                   xlab=NULL,ylab=NULL,line.col=1,ci.col="grey",lty=par("lty"),
+                   add=FALSE,ci=!add,rug=!add,
+                   var=NULL,exposed=incrVar(var),times=NULL,...)
+              plot.aft.base(x=x, y=y, newdata=newdata, type=type, xlab=xlab,
+                              ylab=ylab, line.col=line.col, lty=lty, add=add,
+                              ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
+          )
