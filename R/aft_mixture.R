@@ -401,8 +401,8 @@ predict.aft_mixture <-
                 return((meanS2 - meanS)/(1-meanS))
             }
             if (type=="accfac") {
-                accfac <- eta - log(1-time*etaD)
-                accfac2 <- eta2 - log(1-time2*etaD2)
+                accfac <- -eta + log(1-etaD)
+                accfac2 <- -eta2 + log(1-etaD2)
                 return(exp(accfac2-accfac))
             }
         }
@@ -475,8 +475,8 @@ predict.aft_mixture <-
                 return((meanS2 - meanS)/(1-meanS))
             }
             if (type=="accfac") {
-                accfac <- eta - log(1-time*etaD)
-                accfac2 <- eta2 - log(1-time2*etaD2)
+                accfac <- -eta + log(1-etaD)
+                accfac2 <- -eta2 + log(1-etaD2)
                 return(exp(accfac2-accfac))
             }
         }

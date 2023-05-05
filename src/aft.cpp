@@ -59,7 +59,7 @@ namespace rstpm2 {
       if (delta<0.0)
 	pen += kappa*delta*delta;
     }
-    vec logh = etas + log(etaDs) + log(1/time - etaD/time);
+    vec logh = etas + log(etaDs) + log(1 - etaD) - log(time) - eta;
     vec H = exp(etas);
     double f = pen - (dot(logh,event) - sum(H));
     if (delayed) {
@@ -117,7 +117,7 @@ namespace rstpm2 {
     // 
     mat pgrad = join_rows(-2.0*rmult(X,etaDs % etaDDs)-2.0*rmult(XD,1-etaD),Xs*0.0);
     etaD = 1 - max(1-etaD, eps);
-    vec logh = etas + log(etaDs) + log(1/time - etaD/time);
+    vec logh = etas + log(etaDs) - log(time) + log(1 - etaD) - eta;
     vec h = exp(logh);
     mat dloghdbetas = Xs+rmult(XDs,1/etaDs % (1-pindexs));
     mat dloghdbeta = -rmult(X,etaDDs/etaDs % (1-pindexs)) - rmult(X,etaDs_old) - rmult(XD, 1/(1-etaD_old) % (1-pindex));

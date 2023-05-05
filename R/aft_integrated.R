@@ -405,7 +405,7 @@ predict.aft_integrated =  function(object,newdata=NULL,
             return((meanS2 - meanS)/(1-meanS))
         }
         if (type=="accfac") {
-            return(exp((X2-X) %*% beta))
+            return(exp(-(X2-X) %*% beta))
         }
     }
     local2 <-  function (object, newdata=NULL, type="surv", exposed, ...)
@@ -488,7 +488,7 @@ predict.aft_integrated =  function(object,newdata=NULL,
             return((meanS2 - meanS)/(1-meanS))
         }
         if (type=="accfac") {
-            return(exp((X2-X) %*% beta))
+            return(exp(-(X2-X) %*% beta))
         }
     }
     local <- if(args$mixture)  local2 else local
