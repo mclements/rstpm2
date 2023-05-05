@@ -118,9 +118,9 @@ aft_integrated <- function(formula, data, df = 3,
     wt <- if (is.null(substitute(weights))) rep(1,nrow(data)) else eval(substitute(weights),data,parent.frame())
     ##
     ## XD matrix
-    lpfunc <- function(x,fit,data,var) {
-        data[[var]] <- x
-        lpmatrix.lm(fit,data)
+    loglpfunc <- function(x,fit,data,var) {
+      data[[var]] <- exp(x)
+      lpmatrix.lm(fit,data)
     }
     ##
     ## surv.type %in% c("right","counting")
@@ -142,7 +142,7 @@ aft_integrated <- function(formula, data, df = 3,
     if (delayed) {
         X_list0 = lapply(1:nNodes, function(i)
             lpmatrix.lm(lm.obj,
-                        local({ data[[time0Var]] = (gauss$nodes[i]+1)/2*data[[time0Var]]; data})))
+                        local({ data[[timeVar]] = (gauss$nodes[i]+1)/2*data[[time0Var]]; data})))
     }
     ## Weibull regression
     if (delayed) {
@@ -288,9 +288,9 @@ predict.aft_integrated =  function(object,newdata=NULL,
         time <- as.vector(y[,ncol(y)-1])
         newdata <- as.data.frame(args$data)
     }
-    lpfunc <- function(x,...) {
+    loglpfunc <- function(x,...) {
         newdata2 <- newdata
-        newdata2[[object@args$timeVar]] <- x
+        newdata2[[object@args$timeVar]] <- exp(x)
         lpmatrix.lm(object@args$lm.obj,newdata2)
     }
     ## resp <- attr(Terms, "variables")[attr(Terms, "response")]
@@ -309,8 +309,8 @@ predict.aft_integrated =  function(object,newdata=NULL,
     }
     if (calcX)  {
         X <- lpmatrix.lm(args$lm.obj, newdata)
-        XD <- grad1(lpfunc,newdata[[object@args$timeVar]],
-                    log.transform=object@args$log.time.transform)
+        XD <- grad1(loglpfunc,log(newdata[[object@args$timeVar]]),
+                    log.transform=FALSE)
         XD <- matrix(XD,nrow=nrow(X))
         Xc <- lpmatrix.lm(args$glm.cure.obj, newdata)
         time <- eval(args$timeExpr,newdata)
@@ -321,8 +321,8 @@ predict.aft_integrated =  function(object,newdata=NULL,
     if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","af","accfac")) {
         newdata2 <- exposed(newdata)
         X2 <- lpmatrix.lm(args$lm.obj, newdata2)
-        XD2 <- grad1(lpfunc,newdata2[[object@args$timeVar]],
-                     log.transform=object@args$log.time.transform)
+        XD2 <- grad1(loglpfunc,log(newdata2[[object@args$timeVar]]),
+                     log.transform=FALSE)
         XD2 <- matrix(XD2,nrow=nrow(X))
         time2 <- eval(args$timeExpr,newdata2) # is this always equal to time?
         Xc2 = model.matrix(args$glm.cure.obj, newdata2)

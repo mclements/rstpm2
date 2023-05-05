@@ -29,6 +29,7 @@ colon = transform(biostat3::colon,
                   Distant=0+(stage=="Distant"))
 localised = subset(colon, stage=="Localised")
 
+## The following models should give the same estimates...
 fit0 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
 fit1 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
 fit2 = aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
@@ -77,13 +78,14 @@ summary(fit1 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male, d
 plot(fit1, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2),
      exposed=function(data) transform(data,male=1)) # ok
 
-## Issues: the tvc for aft/aft_mixture looks wrong...
-
-summary(fit1 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male, data=localised, df=4,
-                    use.gr=TRUE,
-                    tvc=list(male=4), tvc.intercept=FALSE))
-summary(fit2 <- aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male, data=localised, df=4, tvc=list(male=4), tvc.intercept=FALSE))
-par(mfrow=c(1,2))
+summary(fit0 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male, data=localised, df=4,
+                    tvc=list(male=3), tvc.intercept=FALSE))
+summary(fit1 <- aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male, data=localised, df=4,
+                    tvc=list(male=3), tvc.intercept=FALSE))
+summary(fit2 <- aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male, data=localised, df=4, tvc=list(male=3), tvc.intercept=FALSE))
+par(mfrow=c(1,3))
+plot(fit0, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2),
+     exposed=function(data) transform(data,male=1)) # ok
 plot(fit1, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2),
      exposed=function(data) transform(data,male=1)) # ok
 plot(fit2, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2),

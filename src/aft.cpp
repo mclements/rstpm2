@@ -50,7 +50,7 @@ namespace rstpm2 {
     double pen = dot(min(etaDs,eps), min(etaDs,eps));
     etaDs = max(etaDs, eps);
     // fix bounds on etaD
-    pen += dot(min(1-etaD, eps), min(1-etaD,eps));
+    pen += dot(min(1-etaD, eps), min(1-etaD,eps)); // 1-etaD>0 so that log(1-etaD) is well-defined
     etaD = 1 - max(1-etaD, eps);
     // add penalty for monotone splines
     vec betasStar = s.q_matrix.t() * betas;
@@ -59,7 +59,7 @@ namespace rstpm2 {
       if (delta<0.0)
 	pen += kappa*delta*delta;
     }
-    vec logh = etas + log(etaDs) + log(1 - etaD) - log(time) - eta;
+    vec logh = etas + log(etaDs) + log(1 - etaD) - log(time);
     vec H = exp(etas);
     double f = pen - (dot(logh,event) - sum(H));
     if (delayed) {

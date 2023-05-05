@@ -68,6 +68,8 @@ print("H:");
 tex(H);
 print("h:");
 tex(h);
+print("log(h):");
+tex(log(h));
 
 print("diff(H,beta):");
 tex(diff(H,beta));
@@ -134,6 +136,8 @@ print("H:");
 tex(H);
 print("h:");
 tex(h);
+print("log(h):");
+tex(log(h));
 
 print("diff(H,beta):");
 tex(diff(H,beta));
@@ -174,6 +178,60 @@ tex(diff(ll, gamma));
 # This constraint is not needed for the integral model. Should we focus on that model?
 
 
+* Non-integral equation for AFT models without time-varying effect
+
+#+begin_src maxima :results raw :exports both
+logexpand:all;
+derivsubst:true;
+load(pdiff)$
+assume(t>0)$
+S : exp(-exp(B(log(t*exp(-eta(X,beta))),gamma)));
+H : -log(S);
+h : diff(H,t);
+print("H:");
+tex(H);
+print("h:");
+tex(h);
+print("log(h):");
+tex(log(h));
+
+print("diff(H,beta):");
+tex(diff(H,beta));
+print("diff(H,gamma):");
+tex(diff(H,gamma));
+
+print("diff(log(h),beta):");
+tex(diff(log(h),beta));
+print("diff(log(h),gamma):");
+tex(diff(log(h),gamma));
+
+print("ll:");
+ll : delta*log(h) - H - (1-subst(u=log(t), diff(eta(X,u,beta),u)))^2 -
+subst(u=log(t)-eta(X,log(t),beta), diff(B(u,gamma),u))^2;
+tex(ll);
+print("diff(ll, beta)");
+tex(diff(ll, beta));
+print("diff(ll, gamma)");
+tex(diff(ll, gamma));
+
+#+end_src
+
+
+# * Constraints
+
+# 1. Baseline log cumulative hazard function:
+
+# Delta Q gamma >= 0 <=> Q[i+1,] gamma >= Q[i,] gamma 
+
+# And/or: hazard is positive <=> B'(log(tstar),gamma)>0
+
+# What if we use B-splines with a constraint? This would lead to 
+# gamma[i+1] >= gamma[i]
+
+# 2. Cumulative covariate effects on the acceleration factor:
+# If g(X,t,beta) = X beta + \sum_j X_j(t)*B_j(log(t))^T gamma_j
+
+# This constraint is not needed for the integral model. Should we focus on that model?
 
 
 * Integral equations for AFT models with $H = B(\ldots)$

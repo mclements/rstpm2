@@ -354,6 +354,10 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
       data[[var]] <- x
       lpmatrix.lm(fit,data)
     }
+    loglpfunc <- function(x,fit,data,var) {
+      data[[var]] <- exp(x)
+      lpmatrix.lm(fit,data)
+    }
     ##
     ## initialise values
     ind0 <- FALSE
@@ -363,7 +367,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     ## ttype <- 0
     ## surv.type %in% c("right","counting")
     X <- lpmatrix.lm(lm.obj,data)
-    XD <- grad1(lpfunc,data[[timeVar]],lm.obj,data,timeVar,log.transform=log.time.transform)
+    XD <- grad1(loglpfunc,log(data[[timeVar]]),lm.obj,data,timeVar,log.transform=FALSE)
     XD <- matrix(XD,nrow=nrow(X))
     XD0 <- X0 <- matrix(0,1,ncol(X))
     if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
@@ -379,7 +383,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         data0[[timeVar]] <- data0[[time0Var]]
         X0 <- lpmatrix.lm(lm.obj, data0)
         wt0 <- wt[ind0]
-        XD0 <- grad1(lpfunc,data0[[timeVar]],lm.obj,data0,timeVar,log.transform=log.time.transform)
+        XD0 <- grad1(loglpfunc,log(data0[[timeVar]]),lm.obj,data0,timeVar,log.transform=FALSE)
         XD0 <- matrix(XD0,nrow=nrow(X0))
         rm(data0)
     }
@@ -687,6 +691,11 @@ setMethod("predict", "aft",
                   newdata2[[object@args$timeVar]] <- x
                   lpmatrix.lm(object@args$lm.obj,newdata2)
               }
+              loglpfunc <- function(x,...) {
+                  newdata2 <- newdata
+                  newdata2[[object@args$timeVar]] <- exp(x)
+                  lpmatrix.lm(object@args$lm.obj,newdata2)
+              }
               ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
               ## similarly for the derivatives
               if (grid) {
@@ -703,16 +712,16 @@ setMethod("predict", "aft",
               }
               if (calcX)  {
                   X <- lpmatrix.lm(args$lm.obj, newdata)
-                  XD <- grad1(lpfunc,newdata[[object@args$timeVar]],
-                              log.transform=object@args$log.time.transform)
+                  XD <- grad1(loglpfunc,log(newdata[[object@args$timeVar]]),
+                              log.transform=FALSE)
                   XD <- matrix(XD,nrow=nrow(X))
                   time <- eval(args$timeExpr,newdata)
               }
               if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","af","accfac")) {
                   newdata2 <- exposed(newdata)
                   X2 <- lpmatrix.lm(args$lm.obj, newdata2)
-                  XD2 <- grad1(lpfunc,newdata2[[object@args$timeVar]],
-                              log.transform=object@args$log.time.transform)
+                  XD2 <- grad1(loglpfunc,log(newdata2[[object@args$timeVar]]),
+                              log.transform=FALSE)
                   XD2 <- matrix(XD2,nrow=nrow(X))
                   time2 <- eval(args$timeExpr,newdata2) # is this always equal to time?
               }
