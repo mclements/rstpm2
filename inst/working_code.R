@@ -21,6 +21,7 @@
 ## Examples for the second AFT paper
 library(rstpm2)
 library(biostat3)
+library(survival)
 colon = transform(biostat3::colon,
                   male=0+(sex=="Male"),
                   Unknown=0+(stage=="Unknown"),
@@ -29,7 +30,27 @@ colon = transform(biostat3::colon,
                   Distant=0+(stage=="Distant"))
 localised = subset(colon, stage=="Localised")
 
-## The following models should give the same estimates...
+## Story
+## Some sanity checks -> move to tests
+## Introduce the dataset: simulated data based on a population-based cancer registry
+## We could also use the brcancer dataset
+## Time-varying acceleration factors: stage or sex?
+
+## What about left truncation? We could use population-based data for prostate cancer incidence or time to next PSA test or biopsy. Both of these analyses could use the Stockholm PSA and Biopsy Register.
+## What about recurrent events? This would require either a marginal model, a copula model or a random effects model. This could use Stan or ADMB or Benjamin's library. For the last option, we could simplify Benjamin's VAJointSurv library -- and then think about other extensions.
+## What about relative survival / excess hazard modelling? This would be a modest extension.
+
+## show that aft(..., df=2) and survreg(...) give the same results for the beta coefficients
+fit0 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised)
+fit1 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised)
+fit2 = aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised)
+fit3 = survreg(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
+fit0
+fit1
+fit2
+fit3
+
+## The following models also give the same estimates...
 fit0 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
 fit1 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
 fit2 = aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
@@ -45,15 +66,11 @@ plot(fit2, type="surv", newdata=data.frame(age=50, male=0), ylim=c(0.7,1), main=
 plot(fit2, type="surv", newdata=data.frame(age=50, male=1), ylim=c(0.7,1), main="Males")   # ok
 ## plot(fit0, type="surv", newdata=data.frame(age=50, male=0:1)) ## issue with plotting multiple rows
 
+## plot survival
 library(survival)
-par(mfrow=c(1,1))
-plot(sfit <- survfit(Surv(surv_mm, status=="Dead: cancer") ~ male, data=localised),
-     col=1:2, xlab="Time since diagnosis (years)", ylab="Survival")
-legend("topright", legend=c("Females","Males"), lty=1, col=1:2, bty="n")
-
-survdiff(Surv(surv_mm/12, status=="Dead: cancer") ~ male, data=localised) # log-rank test (nuffing)
 summary(aft(Surv(surv_mm, status=="Dead: cancer") ~ male, data=localised))
 
+## Kaplan-Meier estimators versus a fitted AFT model
 par(mfrow=1:2)
 summary(fit1 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ male, df=4, data=localised))
 plot(fit1, newdata=data.frame(male=1), type="surv",
@@ -69,14 +86,10 @@ plot(fit1, newdata=data.frame(male=0), type="surv",
 lines(survfit(Surv(surv_mm, status=="Dead: cancer") ~ 1, data=localised,
               subset=(male==0)))
 
-## Females are older -> potential confounding (we would prefer to have done this by a review of the literature rather than using our own data:)
+## Female patients are older -> potential confounding
 t.test(age~male, localised) 
 plot(density(subset(localised,male==1)$age))
 lines(density(subset(localised,male==0)$age), lty=2)
-
-summary(fit1 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male, data=localised, df=4))
-plot(fit1, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2),
-     exposed=function(data) transform(data,male=1)) # ok
 
 summary(fit0 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male, data=localised, df=4,
                     tvc=list(male=3), tvc.intercept=FALSE))
@@ -84,12 +97,77 @@ summary(fit1 <- aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)
                     tvc=list(male=3), tvc.intercept=FALSE))
 summary(fit2 <- aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male, data=localised, df=4, tvc=list(male=3), tvc.intercept=FALSE))
 par(mfrow=c(1,3))
-plot(fit0, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2),
-     exposed=function(data) transform(data,male=1)) # ok
-plot(fit1, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2),
-     exposed=function(data) transform(data,male=1)) # ok
-plot(fit2, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2),
-     exposed=function(data) transform(data,male=1)) # Does this make sense?
+plot(fit0, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2), var="male", main="aft")
+plot(fit1, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2), var="male",
+     main="aft_mixture")
+plot(fit2, type="accfac", newdata=data.frame(age=70, male=0), ylim=c(0,2), var="male",
+     main="aft_integrated")
+
+## 
+summary(fit0 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male+Distant, data=colon, df=4,
+                    tvc=list(Distant=3), tvc.intercept=FALSE))
+summary(fit1 <- aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male+Distant, data=colon, df=4,
+                    tvc=list(Distant=3), tvc.intercept=FALSE))
+summary(fit2 <- aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male+Distant, data=colon, df=4,
+                    tvc=list(Distant=3), tvc.intercept=FALSE))
+par(mfrow=c(1,3))
+plot(fit0, type="accfac", newdata=data.frame(age=70, male=0, Distant=0), var="Distant", main="aft")
+plot(fit1, type="accfac", newdata=data.frame(age=70, male=0, Distant=0), var="Distant",
+     main="aft_mixture")
+plot(fit2, type="accfac", newdata=data.frame(age=70, male=0, Distant=0), var="Distant",
+     main="aft_integrated")
+
+## 
+summary(fit0 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male+Localised, data=colon, df=4,
+                    tvc=list(Localised=3), tvc.intercept=FALSE))
+summary(fit1 <- aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male+Localised, data=colon, df=4,
+                    tvc=list(Localised=3), tvc.intercept=FALSE))
+summary(fit2 <- aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male+Localised, data=colon, df=4,
+                    tvc=list(Localised=3), tvc.intercept=FALSE))
+par(mfrow=c(1,3))
+plot(fit0, type="accfac", newdata=data.frame(age=70, male=0, Localised=0), var="Localised", main="aft")
+plot(fit1, type="accfac", newdata=data.frame(age=70, male=0, Localised=0), var="Localised",
+     main="aft_mixture")
+plot(fit2, type="accfac", newdata=data.frame(age=70, male=0, Localised=0), var="Localised",
+     main="aft_integrated")
+
+## 
+summary(fit0 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male+Distant, data=colon, df=4,
+                    tvc=list(Distant=3, male=2), tvc.intercept=FALSE))
+summary(fit1 <- aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male+Distant, data=colon, df=4,
+                    tvc=list(Distant=3, male=2), tvc.intercept=FALSE))
+summary(fit2 <- aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male+Distant, data=colon, df=4,
+                    tvc=list(Distant=3,male=2), tvc.intercept=FALSE))
+par(mfrow=c(1,3))
+plot(fit0, type="accfac", newdata=data.frame(age=70, male=0, Distant=0), var="Distant", main="aft")
+plot(fit1, type="accfac", newdata=data.frame(age=70, male=1, Distant=0), var="Distant",
+     main="aft_mixture")
+plot(fit2, type="accfac", newdata=data.frame(age=70, male=0, Distant=0), var="Distant",
+     main="aft_integrated")
+
+## Predictions for a tvc for one covariate does not change with a change in other covariates.
+## I had expected that the aft() and aft_mixture formulations would lead to small differences in predictions. This is a pleasant property:).
+predict(fit0, type="accfac", newdata=data.frame(age=70, male=0, Distant=0, surv_mm=50), var="Distant")
+predict(fit0, type="accfac", newdata=data.frame(age=50, male=1, Distant=0, surv_mm=50), var="Distant")
+predict(fit1, type="accfac", newdata=data.frame(age=70, male=0, Distant=0, surv_mm=50), var="Distant")
+predict(fit1, type="accfac", newdata=data.frame(age=50, male=1, Distant=0, surv_mm=50), var="Distant")
+predict(fit2, type="accfac", newdata=data.frame(age=70, male=0, Distant=0, surv_mm=50), var="Distant")
+predict(fit2, type="accfac", newdata=data.frame(age=50, male=1, Distant=0, surv_mm=50), var="Distant")
+
+## 
+summary(fit0 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male+Distant, data=colon, df=4,
+                    tvc=list(Distant=3, male=2), tvc.intercept=FALSE))
+summary(fit1 <- aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male+Distant, data=colon, df=4,
+                    tvc=list(Distant=3, male=2), tvc.intercept=FALSE))
+summary(fit2 <- aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ ns(age,df=2)+male+Distant, data=colon, df=4,
+                    tvc=list(Distant=3,male=2), tvc.intercept=FALSE))
+par(mfrow=c(1,3))
+plot(fit0, type="sdiff", newdata=data.frame(age=70, male=0, Distant=0), var="Distant", main="aft")
+plot(fit1, type="sdiff", newdata=data.frame(age=70, male=1, Distant=0), var="Distant",
+     main="aft_mixture")
+plot(fit2, type="sdiff", newdata=data.frame(age=70, male=0, Distant=0), var="Distant",
+     main="aft_integrated")
+
 
 summary(fit1 <- aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ male, data=localised, df=4, tvc=list(male=2), tvc.intercept=FALSE))
 summary(fit2 <- aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ male, data=localised, df=4, tvc=list(male=2), tvc.intercept=FALSE))
