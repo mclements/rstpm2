@@ -691,10 +691,9 @@ setMethod("predict", "aft",
                   newdata2[[object@args$timeVar]] <- x
                   lpmatrix.lm(object@args$lm.obj,newdata2)
               }
-              loglpfunc <- function(x,...) {
-                  newdata2 <- newdata
-                  newdata2[[object@args$timeVar]] <- exp(x)
-                  lpmatrix.lm(object@args$lm.obj,newdata2)
+              loglpfunc <- function(x,newdata,...) {
+                  newdata[[object@args$timeVar]] <- exp(x)
+                  lpmatrix.lm(object@args$lm.obj,newdata)
               }
               ## resp <- attr(Terms, "variables")[attr(Terms, "response")] 
               ## similarly for the derivatives
@@ -713,7 +712,7 @@ setMethod("predict", "aft",
               if (calcX)  {
                   X <- lpmatrix.lm(args$lm.obj, newdata)
                   XD <- grad1(loglpfunc,log(newdata[[object@args$timeVar]]),
-                              log.transform=FALSE)
+                              log.transform=FALSE, newdata=newdata)
                   XD <- matrix(XD,nrow=nrow(X))
                   time <- eval(args$timeExpr,newdata)
               }
@@ -721,7 +720,7 @@ setMethod("predict", "aft",
                   newdata2 <- exposed(newdata)
                   X2 <- lpmatrix.lm(args$lm.obj, newdata2)
                   XD2 <- grad1(loglpfunc,log(newdata2[[object@args$timeVar]]),
-                              log.transform=FALSE)
+                              log.transform=FALSE, newdata=newdata2)
                   XD2 <- matrix(XD2,nrow=nrow(X))
                   time2 <- eval(args$timeExpr,newdata2) # is this always equal to time?
               }
