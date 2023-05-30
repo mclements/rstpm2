@@ -655,7 +655,7 @@ namespace rstpm2 {
     typedef Stpm2 This;
     Stpm2(SEXP sexp) : bfgs() {
       List list = as<List>(sexp);
-      std::string linkType = as<std::string>(list["link"]);
+      std::string linkType = as<std::string>(list("link"));
       if (linkType=="PH")
 	      link=new LogLogLink(sexp);
       else if (linkType=="PO")
@@ -670,39 +670,39 @@ namespace rstpm2 {
 	      REprintf("No matching link.type");
 	      return;
       }
-      bfgs.coef = init = as<NumericVector>(list["init"]);
-      X = as<mat>(list["X"]); 
-      XD = as<mat>(list["XD"]); 
-      bhazard = as<vec>(list["bhazard"]);
-      wt = as<vec>(list["wt"]);
-      event = as<vec>(list["event"]);
-      time = as<vec>(list["time"]);
-      offset = as<vec>(list["offset"]);
-      delayed = as<bool>(list["delayed"]);
-      interval = as<bool>(list["interval"]);
+      bfgs.coef = init = as<NumericVector>(list("init"));
+      X = as<mat>(list("X")); 
+      XD = as<mat>(list("XD")); 
+      bhazard = as<vec>(list("bhazard"));
+      wt = as<vec>(list("wt"));
+      event = as<vec>(list("event"));
+      time = as<vec>(list("time"));
+      offset = as<vec>(list("offset"));
+      delayed = as<bool>(list("delayed"));
+      interval = as<bool>(list("interval"));
       n = nbeta = init.size(); // number of parameters
       N = X.n_rows; // number of observations
-      X1 = as<mat>(list["X1"]);
-      X0 = as<mat>(list["X0"]);
+      X1 = as<mat>(list("X1"));
+      X0 = as<mat>(list("X0"));
       wt0.set_size(N); wt0.fill(0.0);
       if (delayed) {
-	wt0 = as<vec>(list["wt0"]);
+	wt0 = as<vec>(list("wt0"));
       }
       // if (interval) {
-      // 	X1 = as<mat>(list["X1"]);
+      // 	X1 = as<mat>(list("X1"));
       // }
-      map0 = as<vec>(list["map0"]); // length N map for X->X0
-      full_which0 = as<vec>(list["which0"]); // length N map for X0->X
-      ind0 = as<uvec>(list["ind0"]); // length N boolean for X0
-      ttype = as<vec>(list["ttype"]); 
-      kappa_init = kappa = as<double>(list["kappa"]);
-      maxkappa = as<double>(list["maxkappa"]);
-      optimiser = as<std::string>(list["optimiser"]);
-      bfgs.trace = as<int>(list["trace"]);
-      reltol = bfgs.reltol = as<double>(list["reltol"]);
-      robust_initial = as<bool>(list["robust_initial"]);
+      map0 = as<vec>(list("map0")); // length N map for X->X0
+      full_which0 = as<vec>(list("which0")); // length N map for X0->X
+      ind0 = as<uvec>(list("ind0")); // length N boolean for X0
+      ttype = as<vec>(list("ttype")); 
+      kappa_init = kappa = as<double>(list("kappa"));
+      maxkappa = as<double>(list("maxkappa"));
+      optimiser = as<std::string>(list("optimiser"));
+      bfgs.trace = as<int>(list("trace"));
+      reltol = bfgs.reltol = as<double>(list("reltol"));
+      robust_initial = as<bool>(list("robust_initial"));
       bfgs.hessianp = false;
-      bfgs.parscale = parscale = as<vec>(list["parscale"]);
+      bfgs.parscale = parscale = as<vec>(list("parscale"));
       which0 = removeNaN(full_which0);
     }
     // log-likelihood components and constraints
