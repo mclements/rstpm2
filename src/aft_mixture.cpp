@@ -120,6 +120,49 @@ namespace rstpm2 {
       }
       return -ll;
     }
+    double objective2(vec betafull)
+    {
+      vec beta, betac, betas, etac;
+      if (mixture) {
+	beta = betafull.subvec(0,X.n_cols-1);
+	betac = betafull.subvec(X.n_cols, X.n_cols + Xc.n_cols - 1);
+	betas = betafull.subvec(X.n_cols+Xc.n_cols, betafull.size()-1);
+      } else {
+	beta = betafull.subvec(0,X.n_cols-1);
+	betas = betafull.subvec(X.n_cols, betafull.size()-1);
+      }
+      vec eta = X * beta;
+      vec etaD = XD * beta;
+      vec logtstar = log(time) - eta;
+      vec etas = s.basis(logtstar) * betas;
+      vec etaDs = s.basis(logtstar,1) * betas;
+      vec logh = etas + log(etaDs) + log(1 - etaD) - log(time);
+      vec H = exp(etas);
+      double ll = dot(logh,event) - sum(H);
+      if (mixture) {
+	etac = Xc * betac;
+        vec cure_frac = exp(etac)/(1+exp(etac));
+        ll = dot(event, log(1-cure_frac)+logh-H)
+	  + dot(1-event,log(cure_frac+(1-cure_frac)%exp(-H)));
+      }
+      if (delayed) {
+	vec eta0 = X0 * beta;
+	vec logtstar0 = log(time0) - eta0;
+	vec etas0 = s.basis(logtstar0) * betas;
+	vec etaDs0 = s.basis(logtstar0,1) * betas;
+	vec H0 = exp(etas0);
+	if (!mixture) {
+	  ll += sum(H0);
+	} else {
+	  vec etac0 = Xc0 * betac;
+	  vec cure_frac0 = exp(etac0)/(1+exp(etac0));
+	  vec S0_mix = cure_frac0 + (1.0-cure_frac0) % exp(-H0);
+	  vec H0_mix = -log(S0_mix);
+	  ll += sum(H0_mix);
+	}
+      }
+      return -ll;
+    }
     vec gradientPenalty(mat Q, vec beta) { // Q: (nbeta+2) x nbeta
       size_t n = Q.n_rows;
       mat D = join_rows(zeros(n-1,1),eye(n-1,n-1)) - join_rows(eye(n-1,n-1),zeros(n-1,1)); // (nbeta+1) x (nbeta+2)
@@ -241,11 +284,96 @@ namespace rstpm2 {
       }
       return -gr;
     }
+    vec gradient2(vec betafull)
+    {
+      vec beta, betac, betas, etac;
+      if (mixture) {
+	beta = betafull.subvec(0,X.n_cols-1);
+	betac = betafull.subvec(X.n_cols, X.n_cols + Xc.n_cols - 1);
+	betas = betafull.subvec(X.n_cols+Xc.n_cols, betafull.size()-1);
+      } else {
+	beta = betafull.subvec(0,X.n_cols-1);
+	betas = betafull.subvec(X.n_cols, betafull.size()-1);
+      }
+      vec eta = X * beta;
+      vec etaD = XD * beta;
+      vec etaD_old = etaD;
+      vec logtstar = log(time) - eta;
+      vec tstar = exp(logtstar);
+      mat Xs = s.basis(logtstar);
+      mat XDs = s.basis(logtstar,1);
+      mat XDDs = s.basis(logtstar,2);
+      vec etas = Xs * betas;
+      vec etaDs = XDs * betas;
+      vec etaDDs = XDDs * betas;
+      // H calculations
+      vec H = exp(etas);
+      mat dHdbeta = -rmult(X,H % etaDs);
+      mat dHdbetas = rmult(Xs,H);
+      vec logh = etas + log(etaDs) + log(1/time -etaD/time);
+      vec h = exp(logh);
+      mat dloghdbetas = Xs+rmult(XDs,1/etaDs);
+      mat dloghdbeta = -rmult(X,etaDDs/etaDs) - rmult(X,etaDs) - rmult(XD, 1/(1-etaD));
+      mat gradi = join_rows(rmult(dloghdbeta,event)-dHdbeta, rmult(dloghdbetas,event)-dHdbetas);
+      vec gr = sum(gradi,0).t();
+      if (mixture) {
+	etac = Xc * betac;
+        vec cure_frac = exp(etac)/(1.0+exp(etac));
+	vec S_mix = cure_frac + (1.0-cure_frac) % exp(-H);
+	vec H_mix = -log(S_mix);
+	mat dpidtheta = rmult(Xc, cure_frac % (1-cure_frac));
+	mat dHdbeta_mix = rmult(dHdbeta,(1.0 - cure_frac) % exp(-H) / S_mix);
+	mat dHdbetas_mix = rmult(dHdbetas,(1.0 - cure_frac) % exp(-H) / S_mix);
+	mat dHdtheta_mix = -rmult(dpidtheta, (1.0 - exp(-H))/S_mix);
+	mat dloghdbeta_mix = dloghdbeta - dHdbeta + dHdbeta_mix;
+	mat dloghdbetas_mix = dloghdbetas - dHdbetas + dHdbetas_mix;
+	mat dloghdtheta_mix = dHdtheta_mix - rmult(dpidtheta,1.0 / (1.0 - cure_frac));
+	gradi = join_rows(rmult(dloghdbeta_mix,event)-dHdbeta_mix,
+			  rmult(dloghdtheta_mix,event)-dHdtheta_mix,
+			  rmult(dloghdbetas_mix,event)-dHdbetas_mix);
+	gr = sum(gradi,0).t();
+      }
+      if (delayed) {
+	vec eta0 = X0 * beta;
+	vec etaD0 = XD0 * beta;
+	vec logtstar0 = log(time0) - eta0;
+	mat Xs0 = s.basis(logtstar0);
+	mat XDs0 = s.basis(logtstar0,1);
+	mat XDDs0 = s.basis(logtstar0,2);
+	vec etas0 = Xs0 * betas;
+	vec etaDs0 = XDs0 * betas;
+	vec etaDDs0 = XDDs0 * betas;
+	vec H0 = exp(etas0);
+	mat dHdbetas0 = rmult(Xs0,H0);
+	mat dHdbeta0 = -rmult(X0,H0 % etaDs0);
+	if (!mixture) {
+	  gr += sum(join_rows(dHdbeta0, dHdbetas0), 0).t();
+	} else {
+	  vec etac0 = Xc0 * betac;
+	  vec cure_frac0 = exp(etac0)/(1.0+exp(etac0));
+	  vec S_mix0 = cure_frac0 + (1.0-cure_frac0) % exp(-H0);
+	  vec H_mix0 = -log(S_mix0);
+	  mat dpidtheta0 = rmult(Xc0, cure_frac0 % (1-cure_frac0));
+	  mat dHdbeta_mix0 = rmult(dHdbeta0,(1.0 - cure_frac0) % exp(-H0) / S_mix0);
+	  mat dHdbetas_mix0 = rmult(dHdbetas0,(1.0 - cure_frac0) % exp(-H0) / S_mix0);
+	  mat dHdtheta_mix0 = -rmult(dpidtheta0, (1.0 - exp(-H0))/S_mix0);
+	  gr += sum(join_rows(dHdbeta_mix0, dHdtheta_mix0, dHdbetas_mix0), 0).t();
+	}
+      }
+      return -gr;
+    }
     double objective(NumericVector betafull) {
       return objective(as<vec>(wrap(betafull)));
     }
     NumericVector gradient(NumericVector betafull) {
       vec value = gradient(as<vec>(wrap(betafull)));
+      return as<NumericVector>(wrap(value));
+    }
+    double objective2(NumericVector betafull) {
+      return objective2(as<vec>(wrap(betafull)));
+    }
+    NumericVector gradient2(NumericVector betafull) {
+      vec value = gradient2(as<vec>(wrap(betafull)));
       return as<NumericVector>(wrap(value));
     }
     vec survival(vec time, mat X) {
@@ -321,8 +449,9 @@ namespace rstpm2 {
     if (return_type == "nmmin") {
       // model.pre_process();
       NelderMead nm;
-      nm.trace = as<int>(list["trace"]);
-      nm.maxit = as<int>(list["maxit"]);
+      nm.trace = as<int>(list("trace"));
+      nm.maxit = as<int>(list("maxit"));
+      nm.reltol = as<int>(list("reltol"));
       NumericVector betafull = as<NumericVector>(wrap(model.init));
       nm.optim<aft_mixture>(betafull,model);
       // model.post_process();
@@ -333,8 +462,9 @@ namespace rstpm2 {
     else if (return_type == "vmmin") {
       // model.pre_process();
       BFGS bfgs;
-      bfgs.trace = as<int>(list["trace"]);
-      bfgs.maxit = as<int>(list["maxit"]);
+      bfgs.trace = as<int>(list("trace"));
+      bfgs.maxit = as<int>(list("maxit"));
+      bfgs.reltol = as<int>(list("reltol"));
       NumericVector betafull = as<NumericVector>(wrap(model.init));
       bfgs.optim<aft_mixture>(betafull,model);
       // model.post_process();
@@ -346,12 +476,16 @@ namespace rstpm2 {
       return wrap(model.objective(model.init));
     else if (return_type == "gradient")
       return wrap(model.gradient(model.init));
+    else if (return_type == "objective2")
+      return wrap(model.objective2(model.init));
+    else if (return_type == "gradient2")
+      return wrap(model.gradient2(model.init));
     else if (return_type == "survival")
-      return wrap(model.survival(as<vec>(list["time"]),as<mat>(list["X"])));
+      return wrap(model.survival(as<vec>(list("time")),as<mat>(list("X"))));
     else if (return_type == "haz")
-      return wrap(model.haz(as<vec>(list["time"]),as<mat>(list["X"]),as<mat>(list["XD"])));
+      return wrap(model.haz(as<vec>(list("time")),as<mat>(list("X")),as<mat>(list("XD"))));
     else if (return_type == "gradh")
-      return wrap(model.gradh(as<vec>(list["time"]),as<mat>(list["X"]),as<mat>(list["XD"])));
+      return wrap(model.gradh(as<vec>(list("time")),as<mat>(list("X")),as<mat>(list("XD"))));
     else {
       REprintf("Unknown return_type.\n");
       return wrap(-1);

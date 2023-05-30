@@ -127,6 +127,61 @@ namespace rstpm2 {
       }
       return -ll;
     }
+    double objective2(vec betafull)
+    {
+      vec beta, betac, betas, etac;
+      if (mixture) {
+	beta = betafull.subvec(0,Xt.n_cols-1);
+	betac = betafull.subvec(Xt.n_cols, Xt.n_cols + Xc.n_cols - 1);
+	betas = betafull.subvec(Xt.n_cols+Xc.n_cols, betafull.size()-1);
+      } else {
+	beta = betafull.subvec(0,Xt.n_cols-1);
+	betas = betafull.subvec(Xt.n_cols, betafull.size()-1);
+      }
+      vec tstar = time*0.0;
+      vec scale = time/2.0;
+      // Can this be done more efficiently using a cube?
+      for(size_t i=0; i<X_vector.size(); i++) {
+	tstar += gweights[i]*scale % exp(-X_vector[i]*beta);
+      }
+      vec logtstar = log(tstar);
+      vec etat = Xt*beta;
+      vec etas = s.basis(logtstar) * betas;
+      vec etaDs = s.basis(logtstar,1) * betas;
+      vec logh = etas + log(etaDs) - etat - logtstar;
+      vec H = exp(etas);
+      double ll = dot(logh,event) - sum(H); // NB: addition in the gradient
+      if (mixture) {
+	etac = Xc * betac;
+        vec cure_frac = exp(etac)/(1.0+exp(etac));
+	vec Hu = H, loghu=logh;
+	vec S = cure_frac + (1-cure_frac) % exp(-Hu);
+        ll = dot(event, log(1-cure_frac)+loghu-Hu) +
+	  dot(1-event,log(S));
+      }
+      if (any(delayed)) {
+	vec tstar0 = time0(delayed)*0.0;
+	vec scale0 = time0(delayed)/2.0;
+	for(size_t i=0; i<X_vector0.size(); i++) {
+	  mat X0 = X_vector0[i].rows(delayed);
+	  tstar0 += gweights[i]*scale0 % exp(-X0*beta);
+	}
+	vec logtstar0 = log(tstar0);
+	vec etas0 = s.basis(logtstar0) * betas;
+	vec etaDs0 = s.basis(logtstar0,1) * betas;
+	vec H0 = exp(etas0);
+	if (!mixture) {
+	  ll += sum(H0);
+	} else {
+	  vec cure_frac0 = exp(etac(delayed))/(1+exp(etac(delayed)));
+	  vec S0_mix = cure_frac0 + (1.0-cure_frac0) % exp(-H0);
+	  vec H0_mix = -log(S0_mix);
+	  ll += sum(H0_mix);
+	}
+	// if (pen>0.0) ll=-100;
+      }
+      return -ll;
+    }
     vec gradientPenalty(mat Q, vec beta) { // Q: (nbeta+2) x nbeta
       size_t n = Q.n_rows;
       mat D = join_rows(zeros(n-1,1),eye(n-1,n-1)) - join_rows(eye(n-1,n-1),zeros(n-1,1)); // (nbeta+1) x (nbeta+2)
@@ -249,11 +304,110 @@ namespace rstpm2 {
       }
       return -gr;
     }
+    vec gradient2(vec betafull)
+    { 
+      vec beta, betac, betas, etac;
+      if (mixture) {
+	beta = betafull.subvec(0,Xt.n_cols-1);
+	betac = betafull.subvec(Xt.n_cols, Xt.n_cols + Xc.n_cols - 1);
+	betas = betafull.subvec(Xt.n_cols+Xc.n_cols, betafull.size()-1);
+      } else {
+	beta = betafull.subvec(0,Xt.n_cols-1);
+	betas = betafull.subvec(Xt.n_cols, betafull.size()-1);
+      }
+      vec tstar = time*0.0;
+      mat Xtstar = Xt*0.0;
+      vec scale = time/2.0;
+      // Can this be done more efficiently using a cube?
+      for(size_t i=0; i<X_vector.size(); i++) {
+	vec integrand = gweights[i]*scale % exp(-X_vector[i]*beta);
+	tstar += integrand;
+	Xtstar += rmult(X_vector[i],integrand);
+      }
+      vec logtstar = log(tstar);
+      vec etat = Xt*beta;
+      mat Xs = s.basis(logtstar);
+      mat XDs = s.basis(logtstar,1);
+      mat XDDs = s.basis(logtstar,2);
+      vec etas = Xs * betas;
+      vec etaDs = XDs * betas;
+      vec etaDDs = XDDs * betas;
+      // H calculations
+      vec H = exp(etas);
+      mat dHdbeta = -rmult(Xtstar, H % etaDs / tstar);
+      mat dHdbetas = rmult(Xs,H);
+      vec logh = etas + log(etaDs) - etat - logtstar;
+      vec h = exp(logh);
+      mat dloghdbetas = Xs+rmult(XDs,1/etaDs);
+      mat dloghdbeta = - rmult(Xtstar,etaDDs/etaDs/tstar) -
+	rmult(Xtstar,etaDs / tstar) + rmult(Xtstar,1.0/tstar) - Xt;
+      mat gradi = join_rows(rmult(dloghdbeta,event)-dHdbeta,
+			    rmult(dloghdbetas,event)-dHdbetas);
+      vec gr = sum(gradi,0).t();
+      if (mixture) {
+	etac = Xc * betac;
+        vec cure_frac = exp(etac)/(1.0+exp(etac));
+	vec S_mix = cure_frac + (1.0-cure_frac) % exp(-H);
+	vec H_mix = -log(S_mix);
+	mat dpidtheta = rmult(Xc, cure_frac % (1-cure_frac));
+	mat dHdbeta_mix = rmult(dHdbeta,(1.0 - cure_frac) % exp(-H) / S_mix);
+	mat dHdbetas_mix = rmult(dHdbetas,(1.0 - cure_frac) % exp(-H) / S_mix);
+	mat dHdtheta_mix = -rmult(dpidtheta, (1.0 - exp(-H))/S_mix);
+	mat dloghdbeta_mix = dloghdbeta - dHdbeta + dHdbeta_mix;
+	mat dloghdbetas_mix = dloghdbetas - dHdbetas + dHdbetas_mix;
+	mat dloghdtheta_mix = dHdtheta_mix - rmult(dpidtheta,1.0 / (1.0 - cure_frac));
+	gradi = join_rows(rmult(dloghdbeta_mix,event)-dHdbeta_mix,
+			  rmult(dloghdtheta_mix,event)-dHdtheta_mix,
+			  rmult(dloghdbetas_mix,event)-dHdbetas_mix);
+	gr = sum(gradi,0).t();
+      }
+      if (any(delayed)) {
+	vec tstar0 = time0(delayed)*0.0;
+	vec scale0 = time0(delayed)/2.0;
+	mat Xtstar0 = Xt.rows(delayed)*0.0;
+	// Can this be done more efficiently using a cube?
+	for(size_t i=0; i<X_vector0.size(); i++) {
+	  vec integrand = gweights[i]*scale0 % exp(-X_vector0[i].rows(delayed)*beta);
+	  tstar0 += integrand;
+	  Xtstar0 += rmult(X_vector0[i].rows(delayed),integrand);
+	}
+	vec logtstar0 = log(tstar0);
+	mat Xs0 = s.basis(logtstar0);
+	mat XDs0 = s.basis(logtstar0,1);
+	mat XDDs0 = s.basis(logtstar0,2);
+	vec etas0 = Xs0 * betas;
+	vec etaDs0 = XDs0 * betas;
+	vec etaDDs0 = XDDs0 * betas;
+	vec H0 = exp(etas0);
+	mat dHdbetas0 = rmult(Xs0,H0);
+	mat dHdbeta0 = -rmult(Xtstar0,H0 % etaDs0 / tstar0);
+	if (!mixture) {
+	  gr += sum(join_rows(dHdbeta0, dHdbetas0), 0).t();
+	} else {
+	  vec cure_frac0 = exp(etac(delayed))/(1.0+exp(etac(delayed)));
+	  vec S_mix0 = cure_frac0 + (1.0-cure_frac0) % exp(-H0);
+	  vec H_mix0 = -log(S_mix0);
+	  mat dpidtheta0 = rmult(Xc.rows(delayed), cure_frac0 % (1-cure_frac0));
+	  mat dHdbeta_mix0 = rmult(dHdbeta0,(1.0 - cure_frac0) % exp(-H0) / S_mix0);
+	  mat dHdbetas_mix0 = rmult(dHdbetas0,(1.0 - cure_frac0) % exp(-H0) / S_mix0);
+	  mat dHdtheta_mix0 = -rmult(dpidtheta0, (1.0 - exp(-H0))/S_mix0);
+	  gr += sum(join_rows(dHdbeta_mix0, dHdtheta_mix0, dHdbetas_mix0), 0).t();
+	}
+      }
+      return -gr;
+    }
     double objective(NumericVector betafull) {
       return objective(as<vec>(wrap(betafull)));
     }
     NumericVector gradient(NumericVector betafull) {
       vec value = gradient(as<vec>(wrap(betafull)));
+      return as<NumericVector>(wrap(value));
+    }
+    double objective2(NumericVector betafull) {
+      return objective2(as<vec>(wrap(betafull)));
+    }
+    NumericVector gradient2(NumericVector betafull) {
+      vec value = gradient2(as<vec>(wrap(betafull)));
       return as<NumericVector>(wrap(value));
     }
     // vec survival(vec time, std::vector<mat> X_vector1) {
@@ -330,8 +484,9 @@ namespace rstpm2 {
     if (return_type == "nmmin") {
       // model.pre_process();
       NelderMead nm;
-      nm.trace = as<int>(list["trace"]);
-      nm.maxit = as<int>(list["maxit"]);
+      nm.trace = as<int>(list("trace"));
+      nm.maxit = as<int>(list("maxit"));
+      nm.reltol = as<int>(list("reltol"));
       NumericVector betafull = as<NumericVector>(wrap(model.init));
       nm.optim<aft_integrated>(betafull,model);
       // model.post_process();
@@ -342,8 +497,9 @@ namespace rstpm2 {
     else if (return_type == "vmmin") {
       // model.pre_process();
       BFGS bfgs;
-      bfgs.trace = as<int>(list["trace"]);
-      bfgs.maxit = as<int>(list["maxit"]);
+      bfgs.trace = as<int>(list("trace"));
+      bfgs.maxit = as<int>(list("maxit"));
+      bfgs.reltol = as<int>(list("reltol"));
       NumericVector betafull = as<NumericVector>(wrap(model.init));
       bfgs.optim<aft_integrated>(betafull,model);
       // model.post_process();
@@ -355,6 +511,10 @@ namespace rstpm2 {
       return wrap(model.objective(model.init));
     else if (return_type == "gradient")
       return wrap(model.gradient(model.init));
+    else if (return_type == "objective2")
+      return wrap(model.objective2(model.init));
+    else if (return_type == "gradient2")
+      return wrap(model.gradient2(model.init));
     // else if (return_type == "survival")
     //   return wrap(model.survival(as<vec>(list["time"]),as<mat>(list["X"])));
     // else if (return_type == "haz")

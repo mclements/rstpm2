@@ -201,9 +201,23 @@ aft_integrated <- function(formula, data, df = 3,
         localargs$init <- beta
         return(as.vector(.Call("aft_integrated_model_output", localargs, PACKAGE="rstpm2")))
     }
-    parnames(negll) <- names(init)
+    negll2 <- function(beta) {
+        localargs <- args
+        localargs$return_type <- "objective2"
+        localargs$init <- beta
+        return(.Call("aft_integrated_model_output", localargs, PACKAGE="rstpm2"))
+    }
+    gradient2 <- function(beta) {
+        localargs <- args
+        localargs$return_type <- "gradient2"
+        localargs$init <- beta
+        return(as.vector(.Call("aft_integrated_model_output", localargs, PACKAGE="rstpm2")))
+    }
+    parnames(negll2) <- parnames(negll) <- names(init)
     args$negll = negll
     args$gradient = gradient
+    args$negll2 = negll2
+    args$gradient2 = gradient2
     ## MLE
     if (delayed && use.gr) { # initial search using nmmin (conservative -- is this needed?)
         args$return_type <- "nmmin"

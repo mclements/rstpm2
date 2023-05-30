@@ -18,6 +18,56 @@
 ##   require(bbmle)
 ## }
 
+## AFT model fitting with linear constraints
+library(rstpm2)
+library(biostat3)
+library(survival)
+colon = transform(biostat3::colon,
+                  male=0+(sex=="Male"),
+                  Unknown=0+(stage=="Unknown"),
+                  Localised=0+(stage=="Localised"),
+                  Regional=0+(stage=="Regional"),
+                  Distant=0+(stage=="Distant"))
+localised = subset(colon, stage=="Localised")
+fit1 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, reltol=1e-12)
+getui = function(object,df) {
+    q.const = t(object@args$q.const)
+    n.coef = length(coef(object))
+    nr = nrow(q.const)
+    (cbind(0,diag(nr-1))-cbind(diag(nr-1),0)) %*% cbind(matrix(0,nr,length(coef(object))-df), q.const)
+}
+ui = getui(fit1, 8)
+## ui = (cbind(0,diag(9))-cbind(diag(9),0)) %*% cbind(matrix(0,10,5), t(fit1@args$q.const))
+
+fit1@args$gradient(coef(fit1))
+fit1@args$gradient2(coef(fit1))
+
+fit1b = constrOptim(coef(fit1)*1.1, fit1@args$negll2, fit1@args$gradient2, ui=ui, ci=0, mu=1e-12)
+fit1@args$gradient2(fit1b$par)
+fit1@args$gradient2(coef(fit1))
+summary(fit1)
+
+library(alabama)
+alabama::auglag(coef(fit1)*1.01, fn=fit1@args$negll2, gr=fit1@args$gradient2,
+                hin=function(coef) ui %*% coef,
+                hin.jac=function(coef) ui,
+                control.optim=list(reltol=1e-12))
+
+library(nloptr)
+fn = function(coef) print(fit1@args$negll2(coef))
+if (FALSE)
+    nloptr::auglag(coef(fit1)*1.01, fn=fn, gr=fit1@args$gradient2,
+                   hin=function(coef) ui %*% coef,
+                   hinjac=function(coef) ui,
+                   localtol=1e-8) # fails: NAs??
+
+(cbind(0,diag(6))-cbind(diag(6),0)) %*% cbind(matrix(0,7,5), t(fit1@args$q.const)) %*% coef(fit1)
+diff(t(fit1@args$q.const) %*% coef(fit1)[-(1:5)])
+
+fit2 = aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised)
+fit3 = survreg(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
+
+
 ## Examples for the second AFT paper
 library(rstpm2)
 library(biostat3)

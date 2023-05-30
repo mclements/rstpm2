@@ -25,10 +25,14 @@ namespace rstpm2 {
     mat rmult(mat m, vec v);
     mat rmult(mat m, uvec v);
     double objective(vec betafull);
+    double objective2(vec betafull);
     vec gradientPenalty(mat Q, vec beta);
     vec gradient(vec betafull);
+    vec gradient2(vec betafull);
     double objective(NumericVector betafull);
+    double objective2(NumericVector betafull);
     NumericVector gradient(NumericVector betafull);
+    NumericVector gradient2(NumericVector betafull);
     vec survival(vec time, mat X);
     vec haz(vec time, mat X, mat XD);
     mat gradh(vec time, mat X, mat XD);
