@@ -18,6 +18,20 @@
 ##   require(bbmle)
 ## }
 
+## Email from Breanna M
+library(rstpm2)
+## choose knots based on user-defined quantiles for the event times
+aknots=quantile(log(subset(brcancer,censrec==1)$rectime),c(0.05,0.5,0.95))
+nknots=length(aknots)
+## fit using those knots
+stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
+      smooth.formula=~ns(log(rectime),Boundary.knots=range(aknots),knots=aknots[-c(1,nknots)]))
+## or (for shorter output)
+myns = function(rectime) ns(log(rectime),Boundary.knots=range(aknots),knots=aknots[-c(1,nknots)])
+stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
+      smooth.formula=~myns(rectime))
+
+
 ## AFT model fitting with linear constraints
 library(rstpm2)
 library(biostat3)
