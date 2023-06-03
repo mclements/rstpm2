@@ -364,9 +364,9 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     X <- lpmatrix.lm(lm.obj,data)
     XD0 <- X0 <- XD <- matrix(0,1,ncol(X))
     X_list = list()
+    gauss = gauss.quad(nNodes)
     if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
     if (tvc.integrated) {
-        gauss = gauss.quad(nNodes)
         X_list = lapply(1:nNodes, function(i)
             lpmatrix.lm(lm.obj,
                         local({ data[[timeVar]] = (gauss$nodes[i]+1)/2*data[[timeVar]]; data})))
@@ -434,6 +434,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
                  boundaryKnots=attr(design,"Boundary.knots"), q.const=t(attr(design,"q.const")),
                  interiorKnots=attr(design,"knots"), design=design, designD=designD,
                  designDD=designDD, cure=as.integer(cure), mixture = as.integer(mixture),
+                 tvc.integrated=tvc.integrated,
                  data=data, lm.obj = lm.obj, glm.cure.obj = glm.cure.obj,
                  init_copy = init, return_type="optim",
                  gweights=gauss$weights, gnodes=gauss$nodes)
