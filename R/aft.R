@@ -237,7 +237,7 @@ S0hat <- function(obj)
 setClass("aft", representation(args="list"), contains="mle2")
 
 aft <- function(formula, data, smooth.formula = NULL, df = 3,
-                tvc = NULL, cure.formula=formula,
+                tvc = NULL, cure.formula=~1,
                 control = list(parscale = 1, maxit = 1000), init = NULL,
                 weights = NULL, tvc.intercept=TRUE, tvc.integrated= FALSE, nNodes=20, 
                 timeVar = "", time0Var = "", log.time.transform=TRUE,
