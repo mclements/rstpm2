@@ -242,7 +242,8 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
                 weights = NULL, tvc.intercept=TRUE, tvc.integrated= FALSE, nNodes=20, 
                 timeVar = "", time0Var = "", log.time.transform=TRUE,
                 reltol=1.0e-8, trace = 0, cure = FALSE, mixture = FALSE,
-                contrasts = NULL, subset = NULL, use.gr = TRUE, ...) {
+                contrasts = NULL, subset = NULL, use.gr = TRUE,
+                add.penalties = TRUE, ...) {
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
@@ -290,6 +291,29 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
                names(mf), 0L)
     mf <- mf[c(1L, m)]
     ##
+    ## Specials:
+    bhazard = rep(0,nrow(data))
+    specials.names <- c("bhazard")
+    specials <- attr(terms.formula(full.formula, specials.names), "specials")
+    spcall <- mf
+    spcall[[1]] <- quote(stats::model.frame)
+    spcall$formula <- terms(formula, specials.names, data = data)
+    mf2 <- eval(spcall, parent.frame())
+    lm.formula = full.formula
+    if (any(!sapply(specials,is.null))) {
+        bhazard.index <- specials$bhazard
+        if (length(bhazard.index)>0) {
+            bhazard <- mf2[, bhazard.index]
+            bhazard.index2 <- attr(terms.formula(full.formula, "bhazard"), "specials")$bhazard
+            termobj = terms(mf2)
+            dropped.terms = if(length(attr(termobj,"term.labels"))==1) reformulate("1", response=termobj[[2L]], intercept=TRUE, env=environment(termobj)) else stats::drop.terms(terms(mf2), bhazard.index - 1, keep.response=TRUE)
+            formula <- formula(dropped.terms)
+            lm.formula <- formula(stats::drop.terms(terms(full.formula), bhazard.index2 - 1))
+        } else {
+            bhazard.index2 = NULL
+        }
+        ## rm(mf2,spcall)
+    }
     ## get variables
     time <- eval(timeExpr, data, parent.frame())
     time0Expr <- NULL # initialise
@@ -308,6 +332,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     ## Cox regression
     coxph.call <- mf
     coxph.call[[1L]] <- as.name("coxph")
+    coxph.call$formula = formula
     coxph.call$model <- TRUE
     coxph.obj <- eval(coxph.call, envir=parent.frame())
     y <- model.extract(model.frame(coxph.obj),"response")
@@ -316,10 +341,12 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     glm.cure.call = coxph.call
     glm.cure.call[[1]] = as.name("glm")
     glm.cure.call$family = as.name("binomial")
-    lhs(glm.cure.call$formula) = as.name("event")
+    glm.cure.call$data = as.name("data")
+    glm.cure.call$model = NULL
+    data["*event*"] = event 
+    lhs(glm.cure.call$formula) = as.name("*event*")
     rhs(glm.cure.call$formula) = rhs(cure.formula)
     ## glm(y ~ X, family=binomial)
-    ## browser()
     glm.cure.obj <- eval(glm.cure.call, envir=as.list(environment()), enclos=parent.frame())
     Xc = model.matrix(glm.cure.obj, data)
     ##
@@ -329,7 +356,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     ## initial values and object for lpmatrix predictions
     lm.call <- mf
     lm.call[[1L]] <- as.name("lm")
-    lm.formula <- full.formula
+    ## lm.formula <- full.formula # ??
     lhs(lm.formula) <- quote(logtstar) # new response
     lm.call$formula <- lm.formula
     dataEvents <- data[event,]
@@ -342,7 +369,6 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     ## }
     lm0.obj <- lm(logHhat~nsx(logtstar,df,intercept=TRUE)-1,dataEvents)
     ## lm0D.obj <- lm(logHhat~nsxD(logtstar,df,intercept=TRUE,cure=cure)-1,dataEvents)
-    ## browser()
     coef0 <- coef(lm0.obj) # log-log baseline
     ## design information for baseline survival
     design <- nsx(dataEvents$logtstar, df=df, intercept=TRUE, cure=cure)
@@ -405,7 +431,6 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         coef1 <- c(coef1,rep(0,ncol(X) - length(coef1)))
         names(coef1) <- names(coef1b)
     }
-    ## browser()
     coef2 = coef(glm.cure.obj)
     names(coef2) = paste0("cure.", names(coef2))
     if (is.null(init))
@@ -437,17 +462,22 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
                  tvc.integrated=tvc.integrated,
                  data=data, lm.obj = lm.obj, glm.cure.obj = glm.cure.obj,
                  init_copy = init, return_type="optim",
-                 gweights=gauss$weights, gnodes=gauss$nodes)
-    negll <- function(beta) {
+                 gweights=gauss$weights, gnodes=gauss$nodes, bhazard=bhazard,
+                 add.penalties = TRUE)
+    negll <- function(beta, ...) {
         localargs <- args
         localargs$return_type <- "objective"
         localargs$init <- beta
+        if (length(dots <- list(...)) > 0)
+            localargs <- modifyList(localargs, dots)
         return(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
     }
-    gradient <- function(beta) {
+    gradient <- function(beta, ...) {
         localargs <- args
         localargs$return_type <- "gradient"
         localargs$init <- beta
+        if (length(dots <- list(...)) > 0)
+            localargs <- modifyList(localargs, dots)
         return(as.vector(.Call("aft_model_output", localargs, PACKAGE="rstpm2")))
     }
     parnames(negll) <- names(init)
