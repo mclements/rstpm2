@@ -612,6 +612,7 @@ double R_zeroin2(			/* An estimate of the root */
   }
 
   void ConstrBFGSx::optim_inner(Rcpp::NumericVector init) {
+    NumericVector cinit = clone(init);
       n = init.size();
       std::vector<int> mask(n,1);
       if (trace > 0) {
@@ -619,7 +620,7 @@ double R_zeroin2(			/* An estimate of the root */
 	Rprint_(init);
       }
       vmmin(n,
-	    &init[0],
+	    &cinit[0],
 	    &Fmin,
 	    &adapt_R,
 	    &adapt_dR,
@@ -633,6 +634,7 @@ double R_zeroin2(			/* An estimate of the root */
 	    &fncount,
 	    &grcount,
 	    &fail);
+      coef = clone(cinit);
   }
 
   void ConstrBFGSx::constr_optim(NumericVector theta,
