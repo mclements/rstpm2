@@ -37,7 +37,7 @@ namespace rstpm2 {
     return model->objective(x);
   }
   /**
-     Adapt a gradient function for BFGS
+     Adapt a gradient function for BFGS, BFGSx and ConstrBFGSx
   **/
   template<class T>
     void adapt_gradient(int n, double * beta, double * grad, void * par) {
@@ -66,7 +66,7 @@ namespace rstpm2 {
     Rcpp::NumericVector coef;
     Rcpp::NumericMatrix hessian;
   };
-
+  
   class BFGS {
   public:
     BFGS(int trace = 0, int maxit = 100, 
@@ -88,6 +88,79 @@ namespace rstpm2 {
     Rcpp::NumericMatrix hessian;
   };
 
+  // class AbstractModel {
+  // public:
+  //   virtual double objective(Rcpp::NumericVector coefficients) = 0; // abstract
+  //   virtual Rcpp::NumericVector gradient(Rcpp::NumericVector coefficients) = 0; // abstract
+  //   virtual Rcpp::NumericMatrix hessian();
+  //   Rcpp::NumericVector coef;
+  // };
+  
+  class BFGSx {
+  public:
+    using This = BFGSx;
+    BFGSx(int trace = 0, int maxit = 100, 
+	  double abstol = - INFINITY,
+	  double reltol = 1.0e-8, int report = 10, double epshess = 1.0e-8,
+	  bool hessianp = true)  : trace(trace), maxit(maxit), report(report),
+				   abstol(abstol), reltol(reltol),
+				   epshess(epshess), hessianp(hessianp) { }
+    virtual void optim(Rcpp::NumericVector init);
+    virtual double objective(Rcpp::NumericVector coefficients) = 0; // abstract
+    virtual Rcpp::NumericVector gradient(Rcpp::NumericVector coefficients) = 0; // abstract
+    Rcpp::NumericMatrix calc_hessian() {
+      int n = coef.size();
+      Rcpp::NumericVector df1(n);
+      Rcpp::NumericVector df2(n);
+      Rcpp::NumericMatrix hess(n,n);
+      double tmp;
+      for(int i=0; i<n; ++i) {
+	tmp = coef[i];
+	coef[i] = tmp + epshess;
+	df1 = gradient(coef);
+	coef[i] = tmp - epshess;
+	df2 = gradient(coef);
+	for (int j=0; j<n; ++j)
+	  hess(i,j) = (df1[j] - df2[j]) / (2*epshess);
+	coef[i] = tmp;
+      }
+      // now symmetrize
+      for(int i=0; i<n; ++i) 
+	for(int j=i; j<n; ++j) 
+	  if (i != j)
+	    hess(i,j) = hess(j,i) = (hess(i,j) + hess(j,i)) / 2.0;
+      return hess;
+    }
+    int n, trace, maxit, report, fncount, grcount, fail;
+    double abstol, reltol, Fmin, epshess;
+    bool hessianp;
+    Rcpp::NumericVector coef;
+    Rcpp::NumericMatrix hessian;
+  };
+
+
+  class ConstrBFGSx : public BFGSx {
+  public:
+    virtual void constr_optim(Rcpp::NumericVector init,
+			      Rcpp::NumericMatrix ui,
+			      Rcpp::NumericVector ci,
+			      double mu = 1.0e-4,
+			      int outer_iterations = 100,
+			      double outer_eps = 1.0e-5);
+    Rcpp::NumericMatrix ui;
+    Rcpp::NumericVector ci;
+    Rcpp::NumericVector theta_old;
+    double mu;
+    double R(Rcpp::NumericVector theta);
+    Rcpp::NumericVector dR(Rcpp::NumericVector theta);
+    void optim_inner(Rcpp::NumericVector theta);
+    int tot_counts, outer_iterations, convergence;
+    double barrier_value;
+    std::string message;
+  };
+  double adapt_R(int n, double * beta, void * par);
+  void adapt_dR(int n, double * beta, double * grad, void * par);
+  
   class Nlm {
   public:
     Nlm(double fscale = 1.0,    // nlm()

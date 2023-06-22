@@ -6,7 +6,7 @@ namespace rstpm2 {
   using namespace arma;
   using namespace Rcpp;
 
-  class aft {
+  class aft : public ConstrBFGSx {
   public:
     List args;
     vec init;
@@ -16,7 +16,7 @@ namespace rstpm2 {
     mat XD, XD0;
     vec event;
     vec time, time0;
-    vec gnodes, gweights;
+    vec gnodes, gweights, bhazard;
     vec boundaryKnots;
     vec interiorKnots;
     mat q_matrix;
@@ -24,7 +24,9 @@ namespace rstpm2 {
     int mixture, tvc_integrated;
     ns s;
     double kappa; // scale for the quadratic penalty for monotone splines
+    double eps1;  // minimum hazard
     uvec delayed;
+    bool add_penalties;
     aft(SEXP list);
     mat rmult(mat m, vec v);
     mat rmult(mat m, uvec v);

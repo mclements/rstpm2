@@ -18,20 +18,6 @@
 ##   require(bbmle)
 ## }
 
-## Email from Breanna M
-library(rstpm2)
-## choose knots based on user-defined quantiles for the event times
-aknots=quantile(log(subset(brcancer,censrec==1)$rectime),c(0.05,0.5,0.95))
-nknots=length(aknots)
-## fit using those knots
-stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
-      smooth.formula=~ns(log(rectime),Boundary.knots=range(aknots),knots=aknots[-c(1,nknots)]))
-## or (for shorter output)
-myns = function(rectime) ns(log(rectime),Boundary.knots=range(aknots),knots=aknots[-c(1,nknots)])
-stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
-      smooth.formula=~myns(rectime))
-
-
 ## AFT model fitting with linear constraints
 library(rstpm2)
 library(biostat3)
@@ -43,7 +29,24 @@ colon = transform(biostat3::colon,
                   Regional=0+(stage=="Regional"),
                   Distant=0+(stage=="Distant"))
 localised = subset(colon, stage=="Localised")
-fit1 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, reltol=1e-12)
+
+
+fit1 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc=list(male=2), reltol=1e-12, trace=1)
+
+## > unname(coef(fit1))
+##  [1] -0.03375423 -0.05735552  0.06377635  0.01745073 -9.39953654 -2.36382757
+##  [7] -2.99698745 -2.60188573 -2.27308078 -1.92946480  1.85277006 -8.24491243
+## [13]  3.26693743
+
+## Get the penalty matrix for the baseline splines
+fit1 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc=list(male=2), reltol=1e-12)
+fit1
+fit1@args$negll(coef(fit1))
+fit1@args$negll(-coef(fit1))
+fit1@args$gradient(coef(fit1))
+fit1@args$gradient(-coef(fit1))
+
+## fit1 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc=list(male=2), reltol=1e-10, add.penalties=FALSE)
 getui = function(object,df) {
     q.const = t(object@args$q.const)
     n.coef = length(coef(object))
@@ -53,30 +56,66 @@ getui = function(object,df) {
 ui = getui(fit1, 8)
 ## ui = (cbind(0,diag(9))-cbind(diag(9),0)) %*% cbind(matrix(0,10,5), t(fit1@args$q.const))
 
-fit1@args$gradient(coef(fit1))
-fit1@args$gradient2(coef(fit1))
-
-fit1b = constrOptim(coef(fit1)*1.1, fit1@args$negll2, fit1@args$gradient2, ui=ui, ci=0, mu=1e-12)
-fit1@args$gradient2(fit1b$par)
-fit1@args$gradient2(coef(fit1))
-summary(fit1)
-
+negll = \(coef) fit1@args$negll(coef,add.penalties=FALSE)
+grad = \(coef) fit1@args$gradient(coef, add.penalties=FALSE)
+## negll = fit1@args$negll
+## grad = fit1@args$gradient
+system.time(fit1b <- constrOptim(coef(fit1)*1.05, f=negll,
+                                 grad=grad, ui=ui, ci=0, mu=1e-10, outer.eps=1e-10))
+fit1b
+print(fit1b$value,digits=12)
+fit1@args$gradient(fit1b$par)
+##
 library(alabama)
-alabama::auglag(coef(fit1)*1.01, fn=fit1@args$negll2, gr=fit1@args$gradient2,
-                hin=function(coef) ui %*% coef,
-                hin.jac=function(coef) ui,
-                control.optim=list(reltol=1e-12))
-
+system.time(al1 <- alabama::auglag(coef(fit1)*1.05, fn=negll, gr=grad,
+                                   hin=function(coef) ui %*% coef,
+                                   hin.jac=function(coef) ui,
+                                   control.optim=list(rel.tol=1e-12),
+                                   control.outer=list(eps=1e-10,
+                                                      method="nlminb")))
+al1
+##
 library(nloptr)
-fn = function(coef) print(fit1@args$negll2(coef))
-if (FALSE)
-    nloptr::auglag(coef(fit1)*1.01, fn=fn, gr=fit1@args$gradient2,
-                   hin=function(coef) ui %*% coef,
-                   hinjac=function(coef) ui,
-                   localtol=1e-8) # fails: NAs??
+system.time(nl1 <- nloptr::auglag(coef(fit1)*1.05, fn=negll,
+                                  hin=function(coef) ui %*% coef,
+                                  gr=grad,
+                                  hinjac=function(coef) ui,
+                                  localsolver = "LBFGS",
+                                  localtol=1e-10))
+nl1
+fit1@args$gradient(nl1$par)
+##
+par(mfrow=c(2,2))
+plot(coef(fit1)/al1$par)
+plot(fit1b$par/al1$par)
+plot(nl1$par/al1$par)
 
-(cbind(0,diag(6))-cbind(diag(6),0)) %*% cbind(matrix(0,7,5), t(fit1@args$q.const)) %*% coef(fit1)
-diff(t(fit1@args$q.const) %*% coef(fit1)[-(1:5)])
+
+aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc=list(male=2), reltol=1e-12, init=-coef(fit1)) # wrong:(
+
+
+aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised)
+aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised)
+aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised)
+survreg(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
+
+aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised)
+aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male + bhazard(bhaz), df=2, data=transform(localised,bhaz=1e-4))
+
+aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised, mixture=TRUE, cure.formula=~1)
+aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised, mixture=TRUE)
+aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised, mixture=TRUE, cure.formula=~1)
+aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised, mixture=TRUE, tvc.integrated=TRUE)
+
+fit1 = aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc=list(male=2))
+fit2 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc=list(male=2))
+fit3 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc.integrated=TRUE, tvc=list(male=2))
+
+
+aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised) # ok
+aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male + bhazard(0*age), df=2, data=localised) # ok
+aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male + bhazard(0*age), df=8, data=localised, mixture=TRUE, tvc=list(male=2)) # fails
+
 
 fit2 = aft_integrated(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised)
 fit3 = survreg(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, data=localised)
@@ -309,6 +348,21 @@ plot(fit1, type="accfac", newdata=data.frame(age=50, male=0,Unknown=0,Regional=0
      exposed=function(data) transform(data,Distant=1)) # ok
 plot(fit2, type="accfac", newdata=data.frame(age=50, male=0,Unknown=0,Regional=0,Distant=0), ylim=c(0,2),
      exposed=function(data) transform(data,Distant=1)) # ok
+
+
+
+## Email from Breanna M
+library(rstpm2)
+## choose knots based on user-defined quantiles for the event times
+aknots=quantile(log(subset(brcancer,censrec==1)$rectime),c(0.05,0.5,0.95))
+nknots=length(aknots)
+## fit using those knots
+stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
+      smooth.formula=~ns(log(rectime),Boundary.knots=range(aknots),knots=aknots[-c(1,nknots)]))
+## or (for shorter output)
+myns = function(rectime) ns(log(rectime),Boundary.knots=range(aknots),knots=aknots[-c(1,nknots)])
+stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
+      smooth.formula=~myns(rectime))
 
 
 

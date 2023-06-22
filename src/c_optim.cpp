@@ -494,7 +494,202 @@ double R_zeroin2(			/* An estimate of the root */
     return q;
   }
   
-  
+  void BFGSx::optim(Rcpp::NumericVector init) {
+      n = init.size();
+      std::vector<int> mask(n,1);
+      vmmin(n,
+	    &init[0],
+	    &Fmin,
+	    &adapt_objective<This>,
+	    &adapt_gradient<This>,
+	    maxit,
+	    trace,
+	    &mask[0],
+	    abstol,
+	    reltol,
+	    report,
+	    (void *) this,
+	    &fncount,
+	    &grcount,
+	    &fail);
+      coef = clone(init);
+      if (hessianp)
+	hessian = clone(calc_hessian());
+  }
+
+    NumericMatrix mmmult(const NumericMatrix& m1, const NumericMatrix& m2){
+    if (m1.ncol() != m2.nrow()) stop ("Incompatible matrix dimensions");
+    NumericMatrix out(m1.nrow(),m2.ncol());
+    NumericVector rm1, cm2;
+    for (int i = 0; i < m1.nrow(); ++i) {
+      rm1 = m1(i,_);
+      for (int j = 0; j < m2.ncol(); ++j) {
+	cm2 = m2(_,j);
+	out(i,j) = std::inner_product(rm1.begin(), rm1.end(), cm2.begin(), 0.);              
+      }
+    }
+    return out;
+  }
+  NumericVector mvmult(const NumericMatrix& m, const NumericVector& v){
+    if (m.ncol() != v.size()) stop ("Incompatible matrix*vector dimensions");
+    NumericVector out(m.nrow());
+    NumericVector rm;
+    for (int i = 0; i < m.nrow(); ++i) {
+      rm = m(i,_);
+      out(i) = std::inner_product(rm.begin(), rm.end(), v.begin(), 0.);              
+    }
+    return out;
+  }
+  NumericMatrix mvcmult(const NumericMatrix& m, const NumericVector& v){
+    if (m.nrow() != v.size()) stop ("Incompatible matrix*vector dimensions");
+    NumericMatrix out(m.nrow(), m.ncol());
+    for (int i = 0; i < m.nrow(); ++i) {
+      for (int j = 0; j < m.ncol(); ++j) {
+	out(i,j) = m(i,j)*v(i);
+      }
+    }
+    return out;
+  }
+  NumericMatrix mminus(const NumericMatrix& m1, const NumericMatrix& m2){
+    if (m1.nrow() != m2.nrow()) stop ("Incompatible matrix dimensions");
+    if (m1.ncol() != m2.ncol()) stop ("Incompatible matrix dimensions");
+    NumericMatrix out(m1.nrow(), m1.ncol());
+    for (int i = 0; i < m1.nrow(); ++i) {
+      for (int j = 0; j < m1.ncol(); ++j) {
+	out(i,j) = m1(i,j)-m2(i,j);
+      }
+    }
+    return out;
+  }
+  NumericVector vtimes(const NumericVector& v1, const NumericVector& v2){
+    if (v1.size() != v2.size()) stop ("Incompatible vector dimensions");
+    NumericVector out(v1.size());
+    for (int i = 0; i < v1.size(); ++i) {
+      out(i) = v1(i) * v2(i);
+    }
+    return out;
+  }
+  NumericVector vlog(const NumericVector& v){
+    NumericVector out(v.size());
+    for (int i = 0; i < v.size(); ++i) {
+      out(i) = log(v(i));
+    }
+    return out;
+  }
+
+  double ConstrBFGSx::R(Rcpp::NumericVector theta) {
+    NumericVector ui_theta = mvmult(ui,theta);
+    NumericVector gi = ui_theta - ci;
+    if (min(gi)<0.0) return R_NaN;
+    NumericVector gi_old = mvmult(ui, this->theta_old) - ci;
+    double bar = sum(gi_old * vlog(gi) - ui_theta);
+    if (Rcpp::traits::is_infinite<REALSXP>(bar))
+      bar = R_NegInf;
+    double out = objective(theta) - mu*bar;
+    if (trace>0) {
+      Rprintf("theta: "); Rprint_(theta);
+      Rprintf("R: %f\n", out);
+    }
+    return out;
+  }
+  Rcpp::NumericVector ConstrBFGSx::dR(Rcpp::NumericVector theta) {
+    NumericVector ui_theta = mvmult(ui,theta);
+    NumericVector gi = ui_theta - ci;
+    NumericVector gi_old = mvmult(ui, this->theta_old) - ci;
+    NumericVector dbar = colSums(mminus(mvcmult(ui, gi_old/gi), ui));
+    return gradient(theta) - mu*dbar;
+  }
+  double adapt_R(int n, double * beta, void * par) {
+    ConstrBFGSx * model = (ConstrBFGSx *) par;
+    Rcpp::NumericVector x(beta,beta+n);
+    return model->R(x);
+  }
+  void adapt_dR(int n, double * beta, double * grad, void * par) {
+    ConstrBFGSx * model = (ConstrBFGSx *) par;
+    Rcpp::NumericVector x(beta,beta+n);
+    Rcpp::NumericVector vgrad = model->dR(x);
+    for (int i=0; i<n; ++i) grad[i] = vgrad[i];
+  }
+
+  void ConstrBFGSx::optim_inner(Rcpp::NumericVector init) {
+      n = init.size();
+      std::vector<int> mask(n,1);
+      if (trace > 0) {
+	Rprintf("optim_inner:");
+	Rprint_(init);
+      }
+      vmmin(n,
+	    &init[0],
+	    &Fmin,
+	    &adapt_R,
+	    &adapt_dR,
+	    maxit,
+	    trace,
+	    &mask[0],
+	    abstol,
+	    reltol,
+	    report,
+	    (void *) this,
+	    &fncount,
+	    &grcount,
+	    &fail);
+  }
+
+  void ConstrBFGSx::constr_optim(NumericVector theta,
+				 NumericMatrix ui,
+				 NumericVector ci,
+				 double mu,
+				 int outer_iterations,
+				 double outer_eps) {
+    double obj_old;
+    int i;
+    this->ui = ui;
+    this->ci = ci;
+    this->mu = mu;
+    bool hessianp_old = this->hessianp;
+    this->hessianp = false;
+    if (min(mvmult(ui, theta)) <= 0.0) 
+      Rf_error("initial value is not in the interior of the feasible region");
+    double obj = objective(theta);
+    this->theta_old = clone(theta);
+    double r = R(theta);
+    tot_counts = 0;
+    int s_mu = mu<0.0 ? -1 : 1;
+    for (i=0; i<outer_iterations; ++i) {
+      obj_old = obj;
+      double r_old = r;
+      this->theta_old = clone(theta);
+      optim_inner(theta); // originally object a; we now update this->coef
+      r = R(this->coef);
+      if (!Rcpp::traits::is_infinite<REALSXP>(r) &&
+	  !Rcpp::traits::is_infinite<REALSXP>(r_old) &&
+	  std::abs(r - r_old) < (0.001 + std::abs(r))*outer_eps)
+	break;
+      theta = clone(this->coef);
+      tot_counts += this->fncount;
+      obj = objective(theta);
+      if (s_mu*obj > s_mu*obj_old)
+	break;
+    }
+    if (i == outer_iterations-1) {
+      convergence = 7;
+      message = "Barrier algorithm ran out of iterations and did not converge";
+    }
+    if (mu > 0 && obj > obj_old) {
+      convergence = 11;
+      message = "Objective function increased at outer iteration " + std::to_string(i);
+    }
+    if (mu < 0 && obj < obj_old) {
+      convergence = 11;
+      message = "Objective function decreased at outer iteration " + std::to_string(i); 
+    }
+    outer_iterations = i;
+    barrier_value = R(coef);
+    Fmin = objective(coef);
+    barrier_value -= Fmin;
+    hessianp = hessianp_old; // reset it to the previous value
+  }
+
   // R CMD INSTALL ~/src/R/microsimulation
   // R -q -e "require(microsimulation); .Call('test_nmmin',1:2,PACKAGE='microsimulation')"
 

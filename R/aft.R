@@ -463,7 +463,14 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
                  data=data, lm.obj = lm.obj, glm.cure.obj = glm.cure.obj,
                  init_copy = init, return_type="optim",
                  gweights=gauss$weights, gnodes=gauss$nodes, bhazard=bhazard,
-                 add.penalties = TRUE)
+                 add.penalties = TRUE, df=df, ci=rep(0, df))
+    getui = function(args,df) {
+        q.const = t(args$q.const)
+        n.coef = length(args$init)
+        nr = nrow(q.const)
+        (cbind(0,diag(nr-1))-cbind(diag(nr-1),0)) %*% cbind(matrix(0,nr,length(args$init)-df), q.const)
+    }
+    args$ui = getui(args, nrow(args$q.const))
     negll <- function(beta, ...) {
         localargs <- args
         localargs$return_type <- "objective"
