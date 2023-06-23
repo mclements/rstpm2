@@ -544,15 +544,17 @@ namespace rstpm2 {
       model.reltol = as<double>(list("reltol"));
       NumericVector betafull = as<NumericVector>(wrap(model.init));
       model.optim(betafull);
-      betafull = as<NumericVector>(wrap(model.coef));
-      // nudge this slightly...
-      for (int i=0; i<betafull.size(); ++i)
-	betafull(i) *= 1.05;
-      model.add_penalties = false;
-      model.constr_optim(betafull,
-			 as<NumericMatrix>(list("ui")),
-			 as<NumericVector>(list("ci")),
-			 1.0e-10, 100, 1.0e-10);
+      if (as<bool>(list("constrOptim"))) {
+	betafull = as<NumericVector>(wrap(model.coef));
+	// nudge this slightly...
+	for (int i=0; i<betafull.size(); ++i)
+	  betafull(i) *= 1.05;
+	model.add_penalties = false;
+	model.constr_optim(betafull,
+			   as<NumericMatrix>(list("ui")),
+			   as<NumericVector>(list("ci")),
+			   1.0e-10, 100, 1.0e-10);
+      }
       // model.post_process();
       return List::create(_("fail")=model.fail, 
 			  _("coef")=wrap(model.coef),

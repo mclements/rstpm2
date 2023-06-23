@@ -238,12 +238,13 @@ setClass("aft", representation(args="list"), contains="mle2")
 
 aft <- function(formula, data, smooth.formula = NULL, df = 3,
                 tvc = NULL, cure.formula=~1,
-                control = list(parscale = 1, maxit = 1000), init = NULL,
+                control = list(), init = NULL,
                 weights = NULL, tvc.intercept=TRUE, tvc.integrated= FALSE, nNodes=20, 
                 timeVar = "", time0Var = "", log.time.transform=TRUE,
                 reltol=1.0e-8, trace = 0, cure = FALSE, mixture = FALSE,
                 contrasts = NULL, subset = NULL, use.gr = TRUE,
                 add.penalties = TRUE, ...) {
+    control = modifyList(list(parscale = 1, maxit = 1000, constrOptim = FALSE), control)
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
@@ -463,12 +464,14 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
                  data=data, lm.obj = lm.obj, glm.cure.obj = glm.cure.obj,
                  init_copy = init, return_type="optim",
                  gweights=gauss$weights, gnodes=gauss$nodes, bhazard=bhazard,
-                 add.penalties = TRUE, df=df, ci=rep(0, df))
+                 add.penalties = add.penalties, df=df, ci=rep(0, df),
+                 constrOptim = control$constrOptim)
     getui = function(args,df) {
         q.const = t(args$q.const)
         n.coef = length(args$init)
         nr = nrow(q.const)
-        (cbind(0,diag(nr-1))-cbind(diag(nr-1),0)) %*% cbind(matrix(0,nr,length(args$init)-df), q.const)
+        (cbind(0,diag(nr-1))-cbind(diag(nr-1),0)) %*%
+            cbind(matrix(0,nr,length(args$init)-df), q.const)
     }
     args$ui = getui(args, nrow(args$q.const))
     negll <- function(beta, ...) {
