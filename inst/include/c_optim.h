@@ -1,23 +1,50 @@
 #ifndef C_OPTIM_H
 #define C_OPTIM_H
 
-#include <Rcpp.h>
+#include <RcppArmadillo.h>
 
-namespace rstpm2 {
-
+extern "C" {
+  // main/optim.c
   typedef double optimfn(int, double *, void *);
   typedef void optimgr(int, double *, double *, void *);
 
+  void vmmin(int n, double *b, double *Fmin,
+	     optimfn fn, optimgr gr, int maxit, int trace,
+	     int *mask, double abstol, double reltol, int nREPORT,
+	     void *ex, int *fncount, int *grcount, int *fail);
+  void nmmin(int n, double *Bvec, double *X, double *Fmin, optimfn fn,
+	     int *fail, double abstol, double intol, void *ex,
+	     double alpha, double bet, double gamm, int trace,
+	     int *fncount, int maxit);
+  
   /* type of pointer to the target and gradient functions for Nlm */
   typedef void (*fcn_p)(int, double *, double *, void *);
 
   /* type of pointer to the hessian functions for Nlm */
   typedef void (*d2fcn_p)(int, int, double *, double *, void *);
 
+  /* Also used in packages nlme, pcaPP */
+  void optif9(int nr, int n, double *x,
+	      fcn_p fcn, fcn_p d1fcn, d2fcn_p d2fcn,
+	      void *state, double *typsiz, double fscale, int method,
+	      int iexp, int *msg, int ndigit, int itnlim, int iagflg,
+	      int iahflg, double dlt, double gradtl, double stepmx,
+	      double steptl, double *xpls, double *fpls, double *gpls,
+	      int *itrmcd, double *a, double *wrk, int *itncnt);
+}
+
+namespace rstpm2 {
+
+  // forward declarations
+  void Rprint(Rcpp::NumericMatrix const & m);
+  void Rprint(Rcpp::NumericVector const & v);
+
   double min(double a, double b);
   double max(double a, double b);
   double bound(double x, double lower, double upper);
 
+  arma::mat rmult(arma::mat const &m, arma::vec const &v);
+  
   /**
      Adapt a function object (functor) for NelderMead and BFGS
   **/

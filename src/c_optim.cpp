@@ -1,9 +1,7 @@
-#include <Rcpp.h>
-#include <R_ext/Applic.h>
+#include "c_optim.h"
 #include <vector>
 #include <map>
 #include <float.h> /* DBL_EPSILON */
-#include "c_optim.h"
 
 // #include "uncmin.cpp"
 
@@ -14,20 +12,6 @@ namespace rstpm2 {
   double min(double a, double b) { return a < b ? a : b; }
   double max(double a, double b) { return a < b ? b : a; }
   double bound(double x, double lower, double upper) { return x < lower ? lower : (x > upper ? upper : x); }
-
-  // print utilities
-  void Rprint_(NumericMatrix m) {
-    for (int i=0; i<m.nrow(); ++i) {
-      for (int j=0; j<m.ncol(); ++j) 
-	Rprintf("%f ", m(i,j));
-      Rprintf("\n");
-    }
-  }
-  void Rprint_(NumericVector v) {
-    for (int i=0; i<v.size(); ++i) 
-      Rprintf("%f ", v(i));
-    Rprintf("\n");
-  }
 
   // void nmmin(int n, double *Bvec, double *X, double *Fmin, optimfn fminfn,
   // 	   int *fail, double abstol, double intol, void *ex,
@@ -471,28 +455,6 @@ double R_zeroin2(			/* An estimate of the root */
     *Maxit = -1;
     return b;
 }
-
-
-  // Complete Q matrix from a QR decomposition
-  NumericMatrix qr_q(const NumericMatrix& X, double tol) 
-  {
-    // Initialize member data and allocate heap memory
-    int n=X.rows(), p=X.cols(), rank=0;
-    NumericMatrix qr(X), y(n,n), q(n,n);
-    int* pivot=(int*)R_alloc(p,sizeof(int)); 
-    double* tau=(double*)R_alloc(p,sizeof(double)); 
-    double* work=(double*)R_alloc(p*2,sizeof(double));
-    for(int i=0;i<p;i++) 
-      pivot[i]=i+1; 
-    for(int i=0;i<n;i++) 
-      for(int j=0;j<n;j++) 
-	y(i,j) = i==j ? 1.0 : 0.0;
-    // LINPACK QR factorization via householder transformations
-    F77_CALL(dqrdc2)(&qr[0], &n, &n, &p, &tol, &rank, tau, pivot, work);
-    // Compute orthogonal factor Q
-    F77_CALL(dqrqy)(&qr[0], &n, &rank, tau, &y[0], &n, &q[0]);
-    return q;
-  }
   
   void BFGSx::optim(Rcpp::NumericVector init) {
       n = init.size();
@@ -517,88 +479,6 @@ double R_zeroin2(			/* An estimate of the root */
 	hessian = clone(calc_hessian());
   }
 
-    NumericMatrix mmmult(const NumericMatrix& m1, const NumericMatrix& m2){
-    if (m1.ncol() != m2.nrow()) stop ("Incompatible matrix dimensions");
-    NumericMatrix out(m1.nrow(),m2.ncol());
-    NumericVector rm1, cm2;
-    for (int i = 0; i < m1.nrow(); ++i) {
-      rm1 = m1(i,_);
-      for (int j = 0; j < m2.ncol(); ++j) {
-	cm2 = m2(_,j);
-	out(i,j) = std::inner_product(rm1.begin(), rm1.end(), cm2.begin(), 0.);              
-      }
-    }
-    return out;
-  }
-  NumericVector mvmult(const NumericMatrix& m, const NumericVector& v){
-    if (m.ncol() != v.size()) stop ("Incompatible matrix*vector dimensions");
-    NumericVector out(m.nrow());
-    NumericVector rm;
-    for (int i = 0; i < m.nrow(); ++i) {
-      rm = m(i,_);
-      out(i) = std::inner_product(rm.begin(), rm.end(), v.begin(), 0.);              
-    }
-    return out;
-  }
-  NumericMatrix mvcmult(const NumericMatrix& m, const NumericVector& v){
-    if (m.nrow() != v.size()) stop ("Incompatible matrix*vector dimensions");
-    NumericMatrix out(m.nrow(), m.ncol());
-    for (int i = 0; i < m.nrow(); ++i) {
-      for (int j = 0; j < m.ncol(); ++j) {
-	out(i,j) = m(i,j)*v(i);
-      }
-    }
-    return out;
-  }
-  NumericMatrix mminus(const NumericMatrix& m1, const NumericMatrix& m2){
-    if (m1.nrow() != m2.nrow()) stop ("Incompatible matrix dimensions");
-    if (m1.ncol() != m2.ncol()) stop ("Incompatible matrix dimensions");
-    NumericMatrix out(m1.nrow(), m1.ncol());
-    for (int i = 0; i < m1.nrow(); ++i) {
-      for (int j = 0; j < m1.ncol(); ++j) {
-	out(i,j) = m1(i,j)-m2(i,j);
-      }
-    }
-    return out;
-  }
-  NumericVector vtimes(const NumericVector& v1, const NumericVector& v2){
-    if (v1.size() != v2.size()) stop ("Incompatible vector dimensions");
-    NumericVector out(v1.size());
-    for (int i = 0; i < v1.size(); ++i) {
-      out(i) = v1(i) * v2(i);
-    }
-    return out;
-  }
-  NumericVector vlog(const NumericVector& v){
-    NumericVector out(v.size());
-    for (int i = 0; i < v.size(); ++i) {
-      out(i) = log(v(i));
-    }
-    return out;
-  }
-
-  double ConstrBFGSx::R(Rcpp::NumericVector theta) {
-    NumericVector ui_theta = mvmult(ui,theta);
-    NumericVector gi = ui_theta - ci;
-    if (min(gi)<0.0) return R_NaN;
-    NumericVector gi_old = mvmult(ui, this->theta_old) - ci;
-    double bar = sum(gi_old * vlog(gi) - ui_theta);
-    if (Rcpp::traits::is_infinite<REALSXP>(bar))
-      bar = R_NegInf;
-    double out = objective(theta) - mu*bar;
-    if (trace>0) {
-      Rprintf("theta: "); Rprint_(theta);
-      Rprintf("R: %f\n", out);
-    }
-    return out;
-  }
-  Rcpp::NumericVector ConstrBFGSx::dR(Rcpp::NumericVector theta) {
-    NumericVector ui_theta = mvmult(ui,theta);
-    NumericVector gi = ui_theta - ci;
-    NumericVector gi_old = mvmult(ui, this->theta_old) - ci;
-    NumericVector dbar = colSums(mminus(mvcmult(ui, gi_old/gi), ui));
-    return gradient(theta) - mu*dbar;
-  }
   double adapt_R(int n, double * beta, void * par) {
     ConstrBFGSx * model = (ConstrBFGSx *) par;
     Rcpp::NumericVector x(beta,beta+n);
@@ -617,7 +497,7 @@ double R_zeroin2(			/* An estimate of the root */
       std::vector<int> mask(n,1);
       if (trace > 0) {
 	Rprintf("optim_inner:");
-	Rprint_(init);
+	Rprint(init);
       }
       vmmin(n,
 	    &cinit[0],
@@ -637,12 +517,48 @@ double R_zeroin2(			/* An estimate of the root */
       coef = clone(cinit);
   }
 
-  void ConstrBFGSx::constr_optim(NumericVector theta,
-				 NumericMatrix ui,
-				 NumericVector ci,
+  double ConstrBFGSx::R(Rcpp::NumericVector theta) {
+    using namespace arma;
+    using namespace Rcpp;
+    vec atheta = as<vec>(wrap(theta));
+    vec aci = as<vec>(wrap(ci));
+    mat aui = as<mat>(wrap(ui));
+    vec ui_theta = aui*atheta;
+    vec gi = ui_theta - aci;
+    if (min(gi)<0.0) return R_NaN;
+    vec gi_old = aui * as<vec>(wrap(theta_old)) - aci;
+    double bar = sum(gi_old % log(gi) - ui_theta);
+    if (Rcpp::traits::is_infinite<REALSXP>(bar))
+      bar = R_NegInf;
+    double out = objective(theta) - mu*bar;
+    // if (trace>0) {
+    //   Rprintf("theta: "); Rprint_(theta);
+    //   Rprintf("R: %f\n", out);
+    // }
+    return out;
+  }
+
+  Rcpp::NumericVector ConstrBFGSx::dR(Rcpp::NumericVector theta) {
+    using namespace arma;
+    using namespace Rcpp;
+    vec atheta = as<vec>(wrap(theta));
+    vec aci = as<vec>(wrap(ci));
+    mat aui = as<mat>(wrap(ui));
+    vec ui_theta = aui*atheta;
+    vec gi = ui_theta - aci;
+    vec gi_old = aui * as<vec>(wrap(theta_old)) - aci;
+    vec dbar = sum(rmult(aui, gi_old/gi) - aui, 0).t();
+    return as<NumericVector>(wrap(as<vec>(wrap(gradient(theta))) - mu*dbar));
+  }
+
+  void ConstrBFGSx::constr_optim(Rcpp::NumericVector theta,
+				 Rcpp::NumericMatrix ui,
+				 Rcpp::NumericVector ci,
 				 double mu,
 				 int outer_iterations,
 				 double outer_eps) {
+    using namespace arma;
+    using namespace Rcpp;
     double obj_old;
     int i;
     this->ui = ui;
@@ -650,7 +566,7 @@ double R_zeroin2(			/* An estimate of the root */
     this->mu = mu;
     bool hessianp_old = this->hessianp;
     this->hessianp = false;
-    if (min(mvmult(ui, theta)) <= 0.0) 
+    if (min(as<mat>(wrap(ui)) * as<vec>(wrap(theta))) <= 0.0) 
       Rf_error("initial value is not in the interior of the feasible region");
     double obj = objective(theta);
     this->theta_old = clone(theta);
