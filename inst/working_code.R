@@ -30,29 +30,9 @@ colon = transform(biostat3::colon,
                   Distant=0+(stage=="Distant"))
 localised = subset(colon, stage=="Localised")
 
-inits = c(-0.0337541964280214, -0.0592284876740126, 0.0675098773628211, 
-0.0177505356860752, -9.86987735683488, -2.36385343650789, -2.99701837777883, 
--2.6019179360345, -2.27311294610865, -1.92949788232383, 1.8527512344585, 
--8.24498588546451, 3.26691957780722)
-
-fit1 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, reltol=1e-12, trace=0)
-unname(coef(fit1))
-
-
-aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, reltol=1e-12)
-aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, reltol=1e-12, add.penalties=FALSE)
-aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, reltol=1e-12, control=list(constrOptim = TRUE), add.penalties=FALSE)
-aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, reltol=1e-12, control=list(constrOptim = TRUE))
-unname(coef(fit1))
-
-## > unname(coef(fit1))
-##  [1] -0.03375423 -0.05735552  0.06377635  0.01745073 -9.39953654 -2.36382757
-##  [7] -2.99698745 -2.60188573 -2.27308078 -1.92946480  1.85277006 -8.24491243
-## [13]  3.26693743
-
 ## Get the penalty matrix for the baseline splines
-system.time(fit1 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, reltol=1e-12, tvc=list(male=2))) # 10.3s
-system.time(fit1a <- aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, reltol=1e-12, control=list(constrOptim=TRUE), tvc=list(male=2))) # 13.5s
+system.time(fit1 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc.integrated=FALSE, reltol=1e-12, tvc=list(male=2))) # 10.3s
+system.time(fit1a <- aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc.integrated=FALSE, reltol=1e-12, control=list(constrOptim=TRUE), tvc=list(male=2))) # 13.5s
 fit1
 fit1@args$negll(coef(fit1))
 fit1@args$negll(-coef(fit1))
@@ -60,22 +40,14 @@ fit1@args$gradient(coef(fit1))
 fit1@args$gradient(coef(fit1a))
 fit1@args$gradient(-coef(fit1))
 
-## fit1 = aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc=list(male=2), reltol=1e-10, add.penalties=FALSE)
-getui = function(object,df) {
-    q.const = t(object@args$q.const)
-    n.coef = length(coef(object))
-    nr = nrow(q.const)
-    (cbind(0,diag(nr-1))-cbind(diag(nr-1),0)) %*% cbind(matrix(0,nr,length(coef(object))-df), q.const)
-}
-ui = getui(fit1, 8)
-## ui = (cbind(0,diag(9))-cbind(diag(9),0)) %*% cbind(matrix(0,10,5), t(fit1@args$q.const))
-
+ui = fit1@args$ui
 negll = \(coef) fit1@args$negll(coef,add.penalties=FALSE)
 grad = \(coef) fit1@args$gradient(coef, add.penalties=FALSE)
 ## negll = fit1@args$negll
 ## grad = fit1@args$gradient
 system.time(fit1b <- constrOptim(coef(fit1)*1.05, f=negll,
-                                 grad=grad, ui=ui, ci=0, mu=1e-10, outer.eps=1e-10))
+                                 grad=grad, ui=ui, ci=0, mu=1e-10, outer.eps=1e-10,
+                                 control=list(reltol=1e-12)))
 fit1b
 print(fit1b$value,digits=12)
 fit1@args$gradient(fit1b$par)
@@ -104,7 +76,6 @@ plot(coef(fit1)/al1$par)
 plot(coef(fit1a)/al1$par)
 plot(fit1b$par/al1$par)
 plot(nl1$par/al1$par)
-
 
 aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc=list(male=2), reltol=1e-12, init=-coef(fit1)) # wrong:(
 
