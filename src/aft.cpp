@@ -146,30 +146,31 @@ namespace rstpm2 {
     vec etaDs_old = etaDs;
     // fix bounds on etaDs
     vec eps = etaDs*0. + eps1;
-    double pen = dot(min(etaDs,eps), min(etaDs,eps));
+    double pens = dot(min(etaDs,eps), min(etaDs,eps));
     etaDs = max(etaDs, eps); // replacement
     // fix bounds on etaD
-    pen += dot(min(1.0-etaD,eps), min(1-etaD,eps));
+    double pen = dot(min(1.0-etaD,eps), min(1-etaD,eps));
     etaD = 1.0 - max(1.0-etaD, eps); // replacement
     // add penalty for monotone splines
     vec betasStar = s.q_matrix.t() * betas;
     for (size_t i=1; i<betasStar.size(); i++) {
       double delta = betasStar(i)-betasStar(i-1);
       if (delta<0.0)
-	pen += kappa*delta*delta;
+	pens += kappa*delta*delta;
     }
     vec logh = etas + log(etaDs) + log(1 - etaD) - log(time);
     vec H = exp(etas);
-    double ll = dot(event, log(exp(logh)+bhazard)) - sum(H);
-    if (add_penalties) ll -= pen;
+    double ll = dot(event, log(exp(logh)+bhazard)) - sum(H) - pen;
+    if (add_penalties) ll -= pens;
     if (mixture) {
       etac = Xc * betac;
       vec cure_frac = exp(etac)/(1+exp(etac));
       vec Hu = H, loghu=logh;
       vec S = cure_frac + (1-cure_frac) % exp(-Hu);
+      // Note: using max(eps, ...) because exp(-Hu) can be numerically zero
       vec h = max(eps, exp(-Hu) % exp(loghu) % (1.0-cure_frac) / S);
-      ll = dot(event, log(h+bhazard)) + sum(log(S));
-      if (add_penalties) ll -= pen;
+      ll = dot(event, log(h+bhazard)) + sum(log(S)) - pen;
+      if (add_penalties) ll -= pens;
     }
     if (any(delayed)) {
       vec eta0 = X0 * beta;
@@ -356,23 +357,23 @@ namespace rstpm2 {
     uvec pindexs = (etaDs < eps);
     uvec pindex = ((1.0 - etaD) < eps);
     // fix bounds on etaDs
-    mat pgrads = join_rows(X*0.0,-2*rmult(XDs,etaDs));
+    mat pgrads = join_rows(2.0*rmult(X,etaDs % etaDDs),-2*rmult(XDs,etaDs));
     // fix bounds on etaD
-    mat pgrad = join_rows(2.0*rmult(X,etaDs % etaDDs)+2.0*rmult(XD,1-etaD),Xs*0.0);
+    mat pgrad = join_rows(2.0*rmult(XD,1-etaD),Xs*0.0);
     etaDs = max(etaDs, eps);
     etaD = 1 - max(1-etaD, eps);
     vec logh = etas + log(etaDs) + log(1/time -etaD/time);
     vec h = exp(logh);
     vec ht_scale = h / (h + bhazard);
     mat dloghdbetas = Xs+rmult(XDs,1/etaDs);
-    mat dloghdbeta = -rmult(X,etaDDs/etaDs) - rmult(X,etaDs_old) - rmult(XD, 1/(1-etaD_old));
+    mat dloghdbeta = -rmult(X,etaDDs/etaDs) - rmult(X,etaDs_old) - rmult(XD, 1/(1-etaD_old) % (1-pindex));
     if (add_penalties) {
       dloghdbetas = Xs+rmult(XDs,1/etaDs % (1-pindexs));
       dloghdbeta = -rmult(X,etaDDs/etaDs % (1-pindexs)) - rmult(X,etaDs_old) - rmult(XD, 1/(1-etaD_old) % (1-pindex));
     }
     mat gradi = join_rows(rmult(dloghdbeta,event % ht_scale)-dHdbeta,
-			  rmult(dloghdbetas,event % ht_scale)-dHdbetas);
-    if (add_penalties) gradi += rmult(pgrad,pindex) + rmult(pgrads,pindexs);
+			  rmult(dloghdbetas,event % ht_scale)-dHdbetas) + rmult(pgrad,pindex);
+    if (add_penalties) gradi += rmult(pgrads,pindexs);
     vec gr = sum(gradi,0).t();
     if (add_penalties) gr -= join_cols(beta*0.0, gradientPenalty(s.q_matrix.t(), betas));
     if (mixture) {
@@ -393,9 +394,10 @@ namespace rstpm2 {
       mat pgrad = join_rows(2.0*rmult(X,etaDs_old % etaDDs)+2.0*rmult(XD,1-etaD_old),Xc*0.0,Xs*0.0);
       gradi = join_rows(rmult(dloghdbeta_mix,event % ht_scale)-dHdbeta_mix,
 			rmult(dloghdtheta_mix,event % ht_scale)-dHdtheta_mix,
-			rmult(dloghdbetas_mix,event % ht_scale)-dHdbetas_mix);
+			rmult(dloghdbetas_mix,event % ht_scale)-dHdbetas_mix) +
+	rmult(pgrad,pindex) ;
       if (add_penalties)
-	gradi += rmult(pgrad,pindex) + rmult(pgrads,pindexs);
+	gradi += rmult(pgrads,pindexs);
       gr = sum(gradi,0).t();
       if (add_penalties)
 	gr -= join_cols(beta*0.0, betac*0.0, gradientPenalty(s.q_matrix.t(), betas));
@@ -423,9 +425,9 @@ namespace rstpm2 {
       if (!mixture) {
 	mat pgrad0 = join_rows(2.0*rmult(X0,etaDs0_old % etaDDs0)+2.0*rmult(XD0,1-etaD0_old),Xs0*0.0);
 	mat pgrads0 = join_rows(X0*0.0,-2*rmult(XDs0,etaDs0_old));
-	gr += sum(join_rows(dHdbeta0, dHdbetas0), 0).t();
+	gr += sum(join_rows(dHdbeta0, dHdbetas0) + rmult(pgrad0,pindex0), 0).t();
 	if (add_penalties)
-	  gr += sum(rmult(pgrads0,pindexs0) + rmult(pgrad0,pindex0), 0).t();
+	  gr += sum(rmult(pgrads0,pindexs0), 0).t();
       } else {
 	mat Xc0 = Xc.rows(delayed);
 	vec etac0 = Xc0 * betac;
@@ -439,10 +441,10 @@ namespace rstpm2 {
 	mat pgrad0 = join_rows(2.0*rmult(X0,etaDs0_old % etaDDs0)+2.0*rmult(XD0,1-etaD0),
 			       Xc0*0.0,Xs0*0.0);
 	mat pgrads0 = join_rows(X0*0.0,Xc0*0.0,-2*rmult(XDs0,etaDs0_old));
-	gr += sum(join_rows(dHdbeta_mix0, dHdtheta_mix0, dHdbetas_mix0), 0).t();
+	gr += sum(join_rows(dHdbeta_mix0, dHdtheta_mix0, dHdbetas_mix0) +
+		  rmult(pgrad0,pindex0), 0).t();
 	if (add_penalties)
-	  gr += sum(rmult(pgrads0,pindexs0) +
-		    rmult(pgrad0,pindex0), 0).t();
+	  gr += sum(rmult(pgrads0,pindexs0), 0).t();
       }
     }
     return -gr;
