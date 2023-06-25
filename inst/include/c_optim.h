@@ -38,6 +38,8 @@ namespace rstpm2 {
   // forward declarations
   void Rprint(Rcpp::NumericMatrix const & m);
   void Rprint(Rcpp::NumericVector const & v);
+  void Rprint(arma::mat const & m);
+  void Rprint(arma::vec const & v);
 
   double min(double a, double b);
   double max(double a, double b);
@@ -63,6 +65,12 @@ namespace rstpm2 {
     Rcpp::NumericVector x(beta,beta+n);
     return model->objective(x);
   }
+  template<class T>
+    double arma_adapt_objective(int n, double * beta, void * par) {
+    T * model = (T *) par;
+    arma::vec x(&beta[0],n);
+    return model->objective(x);
+  }
   /**
      Adapt a gradient function for BFGS, BFGSx and ConstrBFGSx
   **/
@@ -71,6 +79,13 @@ namespace rstpm2 {
     T * model = (T *) par;
     Rcpp::NumericVector x(beta,beta+n);
     Rcpp::NumericVector vgrad = model->gradient(x);
+    for (int i=0; i<n; ++i) grad[i] = vgrad[i];
+  }
+  template<class T>
+    void arma_adapt_gradient(int n, double * beta, double * grad, void * par) {
+    T * model = (T *) par;
+    arma::vec x(&beta[0],n);
+    arma::vec vgrad = model->gradient(x);
     for (int i=0; i<n; ++i) grad[i] = vgrad[i];
   }
 
@@ -133,13 +148,14 @@ namespace rstpm2 {
 				   abstol(abstol), reltol(reltol),
 				   epshess(epshess), hessianp(hessianp) { }
     virtual void optim(Rcpp::NumericVector init);
-    virtual double objective(Rcpp::NumericVector coefficients) = 0; // abstract
-    virtual Rcpp::NumericVector gradient(Rcpp::NumericVector coefficients) = 0; // abstract
-    Rcpp::NumericMatrix calc_hessian() {
+    virtual void optim(arma::vec init);
+    virtual double objective(arma::vec coefficients) = 0; // abstract
+    virtual arma::vec gradient(arma::vec coefficients) = 0; // abstract
+    arma::mat calc_hessian() {
       int n = coef.size();
-      Rcpp::NumericVector df1(n);
-      Rcpp::NumericVector df2(n);
-      Rcpp::NumericMatrix hess(n,n);
+      arma::vec df1(n);
+      arma::vec df2(n);
+      arma::mat hess(n,n);
       double tmp;
       for(int i=0; i<n; ++i) {
 	tmp = coef[i];
@@ -161,26 +177,32 @@ namespace rstpm2 {
     int n, trace, maxit, report, fncount, grcount, fail;
     double abstol, reltol, Fmin, epshess;
     bool hessianp;
-    Rcpp::NumericVector coef;
-    Rcpp::NumericMatrix hessian;
+    arma::vec coef;
+    arma::mat hessian;
   };
 
 
   class ConstrBFGSx : public BFGSx {
   public:
+    virtual void constr_optim(arma::vec init,
+			      arma::mat ui,
+			      arma::vec ci,
+			      double mu = 1.0e-4,
+			      int outer_iterations = 100,
+			      double outer_eps = 1.0e-5);
     virtual void constr_optim(Rcpp::NumericVector init,
 			      Rcpp::NumericMatrix ui,
 			      Rcpp::NumericVector ci,
 			      double mu = 1.0e-4,
 			      int outer_iterations = 100,
 			      double outer_eps = 1.0e-5);
-    Rcpp::NumericMatrix ui;
-    Rcpp::NumericVector ci;
-    Rcpp::NumericVector theta_old;
+    arma::mat ui;
+    arma::vec ci;
+    arma::vec theta_old;
     double mu;
-    double R(Rcpp::NumericVector theta);
-    Rcpp::NumericVector dR(Rcpp::NumericVector theta);
-    void optim_inner(Rcpp::NumericVector theta);
+    double R(arma::vec theta);
+    arma::vec dR(arma::vec theta);
+    void optim_inner(arma::vec theta);
     int tot_counts, outer_iterations, convergence;
     double barrier_value;
     std::string message;

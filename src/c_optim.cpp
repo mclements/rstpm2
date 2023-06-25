@@ -456,14 +456,17 @@ double R_zeroin2(			/* An estimate of the root */
     return b;
 }
   
-  void BFGSx::optim(Rcpp::NumericVector init) {
+void BFGSx::optim(Rcpp::NumericVector init) {
+  optim(as<arma::vec>(wrap(init)));
+}
+void BFGSx::optim(arma::vec init) {
       n = init.size();
       std::vector<int> mask(n,1);
       vmmin(n,
 	    &init[0],
 	    &Fmin,
-	    &adapt_objective<This>,
-	    &adapt_gradient<This>,
+	    &arma_adapt_objective<This>,
+	    &arma_adapt_gradient<This>,
 	    maxit,
 	    trace,
 	    &mask[0],
@@ -474,25 +477,25 @@ double R_zeroin2(			/* An estimate of the root */
 	    &fncount,
 	    &grcount,
 	    &fail);
-      coef = clone(init);
+      coef = init;
       if (hessianp)
-	hessian = clone(calc_hessian());
+	hessian = calc_hessian();
   }
 
   double adapt_R(int n, double * beta, void * par) {
     ConstrBFGSx * model = (ConstrBFGSx *) par;
-    Rcpp::NumericVector x(beta,beta+n);
+    arma::vec x(&beta[0],n);
     return model->R(x);
   }
   void adapt_dR(int n, double * beta, double * grad, void * par) {
     ConstrBFGSx * model = (ConstrBFGSx *) par;
-    Rcpp::NumericVector x(beta,beta+n);
-    Rcpp::NumericVector vgrad = model->dR(x);
+    arma::vec x(&beta[0],n);
+    arma::vec vgrad = model->dR(x);
     for (int i=0; i<n; ++i) grad[i] = vgrad[i];
   }
 
-  void ConstrBFGSx::optim_inner(Rcpp::NumericVector init) {
-    NumericVector cinit = clone(init);
+void ConstrBFGSx::optim_inner(arma::vec init) {
+  arma::vec cinit = init;
       n = init.size();
       std::vector<int> mask(n,1);
       if (trace > 0) {
@@ -514,19 +517,16 @@ double R_zeroin2(			/* An estimate of the root */
 	    &fncount,
 	    &grcount,
 	    &fail);
-      coef = clone(cinit);
+      coef = cinit;
   }
 
-  double ConstrBFGSx::R(Rcpp::NumericVector theta) {
+double ConstrBFGSx::R(arma::vec theta) {
     using namespace arma;
     using namespace Rcpp;
-    vec atheta = as<vec>(wrap(theta));
-    vec aci = as<vec>(wrap(ci));
-    mat aui = as<mat>(wrap(ui));
-    vec ui_theta = aui*atheta;
-    vec gi = ui_theta - aci;
+    vec ui_theta = ui*theta;
+    vec gi = ui_theta - ci;
     if (min(gi)<0.0) return R_NaN;
-    vec gi_old = aui * as<vec>(wrap(theta_old)) - aci;
+    vec gi_old = ui * theta_old - ci;
     double bar = sum(gi_old % log(gi) - ui_theta);
     if (Rcpp::traits::is_infinite<REALSXP>(bar))
       bar = R_NegInf;
@@ -538,17 +538,14 @@ double R_zeroin2(			/* An estimate of the root */
     return out;
   }
 
-  Rcpp::NumericVector ConstrBFGSx::dR(Rcpp::NumericVector theta) {
+arma::vec ConstrBFGSx::dR(arma::vec theta) {
     using namespace arma;
     using namespace Rcpp;
-    vec atheta = as<vec>(wrap(theta));
-    vec aci = as<vec>(wrap(ci));
-    mat aui = as<mat>(wrap(ui));
-    vec ui_theta = aui*atheta;
-    vec gi = ui_theta - aci;
-    vec gi_old = aui * as<vec>(wrap(theta_old)) - aci;
-    vec dbar = sum(rmult(aui, gi_old/gi) - aui, 0).t();
-    return as<NumericVector>(wrap(as<vec>(wrap(gradient(theta))) - mu*dbar));
+    vec ui_theta = ui*theta;
+    vec gi = ui_theta - ci;
+    vec gi_old = ui * theta_old - ci;
+    vec dbar = sum(rmult(ui, gi_old/gi) - ui, 0).t();
+    return gradient(theta) - mu*dbar;
   }
 
   void ConstrBFGSx::constr_optim(Rcpp::NumericVector theta,
@@ -557,8 +554,18 @@ double R_zeroin2(			/* An estimate of the root */
 				 double mu,
 				 int outer_iterations,
 				 double outer_eps) {
+    constr_optim(as<arma::vec>(wrap(theta)),
+		 as<arma::mat>(wrap(ui)),
+		 as<arma::vec>(wrap(ci)),
+		 mu, outer_iterations, outer_eps);
+  }
+void ConstrBFGSx::constr_optim(arma::vec theta,
+			       arma::mat ui,
+			       arma::vec ci,
+			       double mu,
+			       int outer_iterations,
+			       double outer_eps) {
     using namespace arma;
-    using namespace Rcpp;
     double obj_old;
     int i;
     this->ui = ui;
@@ -566,24 +573,24 @@ double R_zeroin2(			/* An estimate of the root */
     this->mu = mu;
     bool hessianp_old = this->hessianp;
     this->hessianp = false;
-    if (min(as<mat>(wrap(ui)) * as<vec>(wrap(theta))) <= 0.0) 
+    if (min(ui * theta) <= 0.0) 
       Rf_error("initial value is not in the interior of the feasible region");
     double obj = objective(theta);
-    this->theta_old = clone(theta);
+    this->theta_old = theta;
     double r = R(theta);
     tot_counts = 0;
     int s_mu = mu<0.0 ? -1 : 1;
     for (i=0; i<outer_iterations; ++i) {
       obj_old = obj;
       double r_old = r;
-      this->theta_old = clone(theta);
+      this->theta_old = theta;
       optim_inner(theta); // originally object a; we now update this->coef
       r = R(this->coef);
       if (!Rcpp::traits::is_infinite<REALSXP>(r) &&
 	  !Rcpp::traits::is_infinite<REALSXP>(r_old) &&
 	  std::abs(r - r_old) < (0.001 + std::abs(r))*outer_eps)
 	break;
-      theta = clone(this->coef);
+      theta = this->coef;
       tot_counts += this->fncount;
       obj = objective(theta);
       if (s_mu*obj > s_mu*obj_old)
