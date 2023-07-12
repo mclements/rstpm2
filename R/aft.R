@@ -239,12 +239,22 @@ setClass("aft", representation(args="list"), contains="mle2")
 aft <- function(formula, data, smooth.formula = NULL, df = 3,
                 tvc = NULL, cure.formula=~1,
                 control = list(), init = NULL,
-                weights = NULL, tvc.intercept=TRUE, tvc.integrated= FALSE, nNodes=20, 
-                timeVar = "", time0Var = "", log.time.transform=TRUE,
-                reltol=1.0e-8, trace = 0, cure = FALSE, mixture = FALSE,
-                contrasts = NULL, subset = NULL, use.gr = TRUE,
-                add.penalties = TRUE, ...) {
-    control = modifyList(list(parscale = 1, maxit = 1000, constrOptim = FALSE), control)
+                weights = NULL, tvc.intercept=TRUE, tvc.integrated= FALSE,
+                timeVar = "", time0Var = "",
+                cure = FALSE, mixture = FALSE,
+                contrasts = NULL, subset = NULL, ...) {
+    dots = list(...)
+    control.defaults = list(parscale = 1, maxit = 1000, constrOptim = FALSE,
+                            use.gr = TRUE, reltol = 1.0e-8, trace = 0,
+                            nNodes = 20, add.penalties = TRUE)
+    control = modifyList(control.defaults, control)
+    if (any(ioverlap <- names(dots) %in% names(control.defaults))) {
+        overlap = names(dots)[ioverlap]
+        for (name in overlap) {
+            cat(sprintf("Deprecated argument: %s; use control argument\n", name))
+            control[[name]] = dots[[name]]
+        }
+    }
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
@@ -389,22 +399,25 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     }
     ##
     X <- lpmatrix.lm(lm.obj,data)
+    if (is.integer(X.index <- which.dim(X)))
+        warning("Design matrix for the acceleration factor is not full rank")
+    X <- X[,X.index]
     XD0 <- X0 <- XD <- matrix(0,1,ncol(X))
     X_list = list()
-    gauss = gauss.quad(nNodes)
+    gauss = gauss.quad(control$nNodes)
     if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
     if (tvc.integrated) {
-        X_list = lapply(1:nNodes, function(i)
+        X_list = lapply(1:control$nNodes, function(i)
             lpmatrix.lm(lm.obj,
-                        local({ data[[timeVar]] = (gauss$nodes[i]+1)/2*data[[timeVar]]; data})))
+                        local({ data[[timeVar]] = (gauss$nodes[i]+1)/2*data[[timeVar]]; data}))[,X.index])
         if (delayed) {
-            X_list0 = lapply(1:nNodes, function(i)
+            X_list0 = lapply(1:control$nNodes, function(i)
                 lpmatrix.lm(lm.obj,
-                            local({ data[[timeVar]] = (gauss$nodes[i]+1)/2*data[[time0Var]]; data})))
+                            local({ data[[timeVar]] = (gauss$nodes[i]+1)/2*data[[time0Var]]; data}))[,X.index])
         }
     } else { # tvc using cumulative formulation 
         XD <- grad1(loglpfunc,log(data[[timeVar]]),lm.obj,data,timeVar,log.transform=FALSE)
-        XD <- matrix(XD,nrow=nrow(X))
+        XD <- matrix(XD,nrow=nrow(X))[,X.index]
         if (delayed) {
             ind0 <- time0>0
             data0 <- data[ind0,,drop=FALSE] # data for delayed entry times
@@ -412,7 +425,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
             X0 <- lpmatrix.lm(lm.obj, data0)
             XD0 <- grad1(loglpfunc,log(data0[[timeVar]]),lm.obj,data0,timeVar,
                          log.transform=FALSE)
-            XD0 <- matrix(XD0,nrow=nrow(X0))
+            XD0 <- matrix(XD0,nrow=nrow(X))[,X.index]
             rm(data0)
         }
     }
@@ -421,16 +434,16 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         if (requireNamespace("eha", quietly = TRUE)) {
             survreg1 <- eha::aftreg(formula, data)
             coef1 <- -coef(survreg1) # reversed parameterisation
-            coef1 <- coef1[1:(length(coef1)-2)]
+            coef1 <- coef1[1:(length(coef1)-2)][X.index]
         } else coef1 <- rep(0,ncol(X))
     } else {
         survreg1 <- survival::survreg(formula, data)
         coef1 <- coef(survreg1)
-        coef1 <- coef1[-1] # assumes intercept included in the formula; ignores smooth.formula
+        coef1 <- coef1[-1] # assumes intercept included in the formula
     }
     if (ncol(X)>length(coef1)) {
         coef1 <- c(coef1,rep(0,ncol(X) - length(coef1)))
-        names(coef1) <- names(coef1b)
+        names(coef1) <- names(coef1b)[X.index]
     }
     coef2 = coef(glm.cure.obj)
     names(coef2) = paste0("cure.", names(coef2))
@@ -449,14 +462,14 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     args <- list(init=init,X=X,XD=XD,
                  X_list=X_list,
                  X_list0=if (delayed) X_list0 else list(matrix(0,0,0)),
+                 X.index=X.index,
                  wt=wt,event=ifelse(event,1,0),time=time,y=y,
                  time0 = if (delayed) time0 else 0*time,
                  timeVar=timeVar,timeExpr=timeExpr,terms=mt,
                  delayed=delayed, X0=X0, XD0=XD0,
-                 parscale=parscale, reltol=reltol,
+                 parscale=parscale, reltol=control$reltol,
                  Xc=if (mixture) Xc else matrix(0,0,0), maxit=control$maxit,
-                 log.time.transform=log.time.transform,
-                 trace = as.integer(trace),
+                 trace = as.integer(control$trace),
                  boundaryKnots=attr(design,"Boundary.knots"), q.const=t(attr(design,"q.const")),
                  interiorKnots=attr(design,"knots"), design=design, designD=designD,
                  designDD=designDD, cure=as.integer(cure), mixture = as.integer(mixture),
@@ -464,7 +477,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
                  data=data, lm.obj = lm.obj, glm.cure.obj = glm.cure.obj,
                  init_copy = init, return_type="optim",
                  gweights=gauss$weights, gnodes=gauss$nodes, bhazard=bhazard,
-                 add.penalties = add.penalties, df=df, ci=rep(0, df+1),
+                 add.penalties = control$add.penalties, df=df, ci=rep(0, df+1),
                  constrOptim = control$constrOptim)
     getui = function(args) {
         q.const = t(args$q.const) # (df+2) x df
@@ -476,6 +489,8 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     }
     args$ui = getui(args)
     negll <- function(beta, ...) {
+        stopifnot(is.numeric(beta),
+                  length(beta) == length(args$init))
         localargs <- args
         localargs$return_type <- "objective"
         localargs$init <- beta
@@ -484,6 +499,8 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         return(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
     }
     gradient <- function(beta, ...) {
+        stopifnot(is.numeric(beta),
+                  length(beta) == length(args$init))
         localargs <- args
         localargs$return_type <- "gradient"
         localargs$init <- beta
@@ -495,7 +512,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     args$negll = negll
     args$gradient = gradient
     ## MLE
-    if (delayed && use.gr) { # initial search using nmmin (conservative -- is this needed?)
+    if (delayed && control$use.gr) { # initial search using nmmin (conservative -- is this needed?)
         args$return_type <- "nmmin"
         args$maxit <- 50
         fit <- .Call("aft_model_output", args, PACKAGE="rstpm2")
@@ -512,7 +529,6 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         mle2 <- if (use.gr) bbmle::mle2(negll, coef, vecpar=TRUE, control=control,
                                         gr=gradient, ..., eval.only=TRUE)
                 else bbmle::mle2(negll, coef, vecpar=TRUE, control=control, ..., eval.only=TRUE)
-        ## browser()
         mle2@details$convergence <- fit$fail # fit$itrmcd
         vcov <- try(solve(hessian,tol=0), silent=TRUE)
         if (inherits(vcov, "try-error"))
@@ -526,10 +542,9 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         }
         mle2
     }
-    ## browser()
     ## mle2 <-  bbmle::mle2(negll, init, vecpar=TRUE, control=control, ...)
-    mle2 <- optim_step(use.gr)
-    if (all(is.na(mle2@vcov)) && use.gr) {
+    mle2 <- optim_step(control$use.gr)
+    if (all(is.na(mle2@vcov)) && control$use.gr) {
         args$init <- init
         mle2 <- optim_step(FALSE)
     }
@@ -547,10 +562,12 @@ setMethod("predict", "aft",
                    grid=FALSE,seqLength=300,level=0.95,
                    se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,...) {
               type = match.arg(type)
-              predict.aft(object, newdata, type, grid, seqLength, level, se.fit, link, exposed, var, keep.attributes, ...)
+              if (object@args$tvc.integrated)
+                  predict.aft_integrated2(object, newdata, type, grid, seqLength, level, se.fit, link, exposed, var, keep.attributes, ...)
+              else predict.aft_mixture2(object, newdata, type, grid, seqLength, level, se.fit, link, exposed, var, keep.attributes, ...)
           })
 
-predict.aft_mixture <-
+predict.aft_mixture2 <-
     function(object,newdata=NULL,
              type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link",
                     "meansurv","meansurvdiff","odds","or","meanhaz","af","fail","accfac","gradh"),
@@ -601,19 +618,19 @@ predict.aft_mixture <-
             calcX <- TRUE
         }
         if (calcX)  {
-            X <- lpmatrix.lm(args$lm.obj, newdata)
+            X <- lpmatrix.lm(args$lm.obj, newdata)[,args$X.index]
             XD <- grad1(loglpfunc,log(newdata[[object@args$timeVar]]),
                         log.transform=FALSE, newdata=newdata)
-            XD <- matrix(XD,nrow=nrow(X))
+            XD <- matrix(XD,nrow=nrow(X))[,args$X.index]
             Xc <- lpmatrix.lm(args$glm.cure.obj, newdata)
             time <- eval(args$timeExpr,newdata)
         }
         if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","af","accfac")) {
             newdata2 <- exposed(newdata)
-            X2 <- lpmatrix.lm(args$lm.obj, newdata2)
+            X2 <- lpmatrix.lm(args$lm.obj, newdata2)[,args$X.index]
             XD2 <- grad1(loglpfunc,log(newdata2[[object@args$timeVar]]),
                          log.transform=FALSE, newdata=newdata2)
-            XD2 <- matrix(XD2,nrow=nrow(X))
+            XD2 <- matrix(XD2,nrow=nrow(X))[,args$X.index]
             time2 <- eval(args$timeExpr,newdata2) # is this always equal to time?
             Xc2 = model.matrix(args$glm.cure.obj, newdata2)
         }
@@ -784,7 +801,7 @@ predict.aft_mixture <-
         return(out)
     }
 
-predict.aft_integrated =  function(object,newdata=NULL,
+predict.aft_integrated2 =  function(object,newdata=NULL,
                                 type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","odds","or","meanhaz","af","fail","accfac","gradh"),
                                 grid=FALSE,seqLength=300,level=0.95,
                                 se.fit=FALSE,link=NULL,exposed=incrVar(var),var=NULL,keep.attributes=TRUE,...) {
@@ -832,27 +849,27 @@ predict.aft_integrated =  function(object,newdata=NULL,
         calcX <- TRUE
     }
     if (calcX)  {
-        X <- lpmatrix.lm(args$lm.obj, newdata)
+        X <- lpmatrix.lm(args$lm.obj, newdata)[,args$X.index]
         XD <- grad1(loglpfunc,log(newdata[[object@args$timeVar]]),
                     log.transform=FALSE, newdata=newdata)
-        XD <- matrix(XD,nrow=nrow(X))
+        XD <- matrix(XD,nrow=nrow(X))[,args$X.index]
         Xc <- lpmatrix.lm(args$glm.cure.obj, newdata)
         time <- eval(args$timeExpr,newdata)
         X_list = lapply(args$gnodes, function(gnode)
             lpmatrix.lm(args$lm.obj,
-                    local({ newdata[[args$timeVar]] = (gnode+1)/2*newdata[[args$timeVar]]; newdata})))
+                    local({ newdata[[args$timeVar]] = (gnode+1)/2*newdata[[args$timeVar]]; newdata}))[,args$X.index])
     }
     if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","af","accfac")) {
         newdata2 <- exposed(newdata)
-        X2 <- lpmatrix.lm(args$lm.obj, newdata2)
+        X2 <- lpmatrix.lm(args$lm.obj, newdata2)[,args$X.index]
         XD2 <- grad1(loglpfunc,log(newdata2[[object@args$timeVar]]),
                      log.transform=FALSE, newdata=newdata2)
-        XD2 <- matrix(XD2,nrow=nrow(X))
+        XD2 <- matrix(XD2,nrow=nrow(X))[,args$X.index]
         time2 <- eval(args$timeExpr,newdata2) # is this always equal to time?
         Xc2 = model.matrix(args$glm.cure.obj, newdata2)
         X_list2 = lapply(args$gnodes, function(gnode)
             lpmatrix.lm(args$lm.obj,
-                    local({ newdata2[[args$timeVar]] = (gnode+1)/2*newdata2[[args$timeVar]]; newdata2})))
+                    local({ newdata2[[args$timeVar]] = (gnode+1)/2*newdata2[[args$timeVar]]; newdata2}))[,args$X.index])
     }
     if (type == "gradh") {
         return(predict.aft_integrated.ext(object, type="gradh", time=time, X=X, XD=XD,
@@ -876,7 +893,6 @@ predict.aft_integrated =  function(object,newdata=NULL,
         etas <- as.vector(predict(args$design, logtstar) %*% betas)
         H <- exp(etas)
         S <- exp(-H)
-        ## browser()
         if (type=="cumhaz")
             return(H)
         if (type=="surv")
@@ -949,7 +965,7 @@ predict.aft_integrated =  function(object,newdata=NULL,
         ## eta <- as.vector(X %*% beta)
         etac <- as.vector(Xc %*% betac)
         cure_frac <- exp(etac)/(1+exp(etac))
-        logtstar <- log(timestar)
+        logtstar <- log(tstar)
         etas <- as.vector(predict(args$design, logtstar) %*% betas)
         Hu <- exp(etas)
         Su <- exp(-Hu)
@@ -1334,7 +1350,6 @@ predict.aft.ext <- function(obj, type=c("survival","haz","gradh"),
 ##     ## transformation
 ##
 ##     g <- function(x) f(x*scale)*rep(exp(x)*scale, each = length(object@args$event))
-##     ## browser()
 ##     g(roots) %*% weights
 ##   }
 ##
