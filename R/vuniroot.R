@@ -130,3 +130,24 @@ vuniroot <-
     list(root = val[[1L]], f.root = f(val[[1L]], ...), iter = iter,
          init.it = it, estim.prec = val[[3L]])
 }
+
+
+voptimize <- function (f, interval, ...,
+                       lower=pmin(interval[,1], interval[,2]),
+                       upper=pmax(interval[,1], interval[,2]),
+                       maximum = FALSE, tol = .Machine$double.eps^0.25) 
+{
+    if (maximum) {
+        val <- .Call("voptimizeRcpp", function(arg) -f(arg, ...), 
+                     lower, upper, tol, PACKAGE="rstpm2")
+        list(maximum = val, objective = f(val, ...))
+    }
+    else {
+        val <- .Call("voptimizeRcpp", function(arg) f(arg, ...), 
+            lower, upper, tol, PACKAGE="rstpm2")
+        list(minimum = val, objective = f(val, ...))
+    }
+}
+
+voptimise <- voptimize
+

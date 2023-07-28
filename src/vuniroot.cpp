@@ -3,12 +3,12 @@
 
 namespace rstpm2 {
 
-  using namespace R;
-  using namespace Rcpp;
-  
+ 
   // List vunirootRcpp(Function f, NumericVector lower, NumericVector upper, int numiter, double tol) {
   RcppExport SEXP vunirootRcpp(SEXP __f, SEXP __lower, SEXP __upper, SEXP __fa, SEXP __fb, SEXP __numiter, SEXP __tol) {
-    Rcpp::Function f = as<Rcpp::Function>(__f);
+    using namespace R;
+    using namespace Rcpp;
+    Function f = as<Function>(__f);
     NumericVector lower = clone(as<NumericVector>(__lower));
     NumericVector upper = clone(as<NumericVector>(__upper));
     NumericVector fa = clone(as<NumericVector>(__fa));
@@ -113,6 +113,133 @@ namespace rstpm2 {
 	  ns[i] = -1;
 	}
     return wrap(List::create(_("root")  = b, _("iter") = ns, _("tol")=Tol));
+  }
+
+
+  RcppExport SEXP voptimizeRcpp(SEXP __f, SEXP __ax, SEXP __bx, SEXP __tol) {
+    using Rcpp::NumericVector;
+    using Rcpp::clone;
+    using Rcpp::as;
+    Rcpp::Function f = as<Rcpp::Function>(__f);
+    NumericVector ax = clone(as<NumericVector>(__ax));
+    NumericVector bx = clone(as<NumericVector>(__bx));
+    const double tol = as<double>(__tol);
+    const int size = ax.size();
+    /*  c is the squared inverse of the golden ratio */
+    const double c = (3. - sqrt(5.)) * .5;
+
+    /* Local variables */
+    NumericVector a = clone(ax), b=clone(bx);
+    NumericVector w, x, fx, fu, fv, fw;
+    double p, q, r;
+    double eps, tol3;
+    NumericVector d(size, 0.0), e(size, 0.0), u(size, 0.0), xm(size,0.0),
+      t2(size,0.0), tol1(size,0.0), v(size,0.0);
+
+    /*  eps is approximately the square root of the relative machine precision. */
+    eps = DBL_EPSILON;
+    tol1 = eps + 1.;/* the smallest 1.000... > 1 */
+    eps = sqrt(eps);
+
+    for (int i=0; i<size; ++i)
+      v[i] = a[i] + c * (b[i] - a[i]);
+    w = clone(v);
+    x = clone(v);
+
+    fx = f(x);
+    fv = clone(fx);
+    fw = clone(fx);
+    tol3 = tol / 3.;
+
+    /*  main loop starts here ----------------------------------- */
+
+    for(;;) {
+      
+      R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
+      
+      for (int i=0; i<size; ++i) {
+	xm[i] = (a[i] + b[i]) * .5;
+	tol1[i] = eps * fabs(x[i]) + tol3;
+	t2[i] = tol1[i] * 2.;
+      }
+
+      /* check stopping criterion -- do any fail? */
+      bool any_failures = false;
+      for (int i=0; i<size; ++i) {
+	if (fabs(x[i] - xm[i]) > t2[i] - (b[i] - a[i]) * .5) {
+	  any_failures = true;
+	  break;
+	}
+      }
+      if (!any_failures) break;
+	
+      for (int i=0; i<size; ++i) {
+	p = 0.;
+	q = 0.;
+	r = 0.;
+	if (fabs(e[i]) > tol1[i]) { /* fit parabola */
+
+	  r = (x[i] - w[i]) * (fx[i] - fv[i]);
+	  q = (x[i] - v[i]) * (fx[i] - fw[i]);
+	  p = (x[i] - v[i]) * q - (x[i] - w[i]) * r;
+	  q = (q - r) * 2.;
+	  if (q > 0.) p = -p; else q = -q;
+	  r = e[i];
+	  e[i] = d[i];
+	}
+
+	if (fabs(p) >= fabs(q * .5 * r) ||
+	    p <= q * (a[i] - x[i]) || p >= q * (b[i] - x[i])) { /* a golden-section step */
+
+	  if (x[i] < xm[i]) e[i] = b[i] - x[i]; else e[i] = a[i] - x[i];
+	  d[i] = c * e[i];
+	}
+	else { /* a parabolic-interpolation step */
+
+	  d[i] = p / q;
+	  u[i] = x[i] + d[i];
+
+	  /* f must not be evaluated too close to ax or bx */
+
+	  if (u[i] - a[i] < t2[i] || b[i] - u[i] < t2[i]) {
+	    d[i] = tol1[i];
+	    if (x[i] >= xm[i]) d[i] = -d[i];
+	  }
+	}
+
+	/* f must not be evaluated too close to x */
+
+	if (fabs(d[i]) >= tol1[i])
+	  u[i] = x[i] + d[i];
+	else if (d[i] > 0.)
+	  u[i] = x[i] + tol1[i];
+	else
+	  u[i] = x[i] - tol1[i];
+      }
+
+      fu = f(u);
+
+      /*  update  a, b, v, w, and x */
+
+      for (int i=0; i<size; ++i) {
+	if (fu[i] <= fx[i]) {
+	  if (u[i] < x[i]) b[i] = x[i]; else a[i] = x[i];
+	  v[i] = w[i];    w[i] = x[i];   x[i] = u[i];
+	  fv[i] = fw[i]; fw[i] = fx[i]; fx[i] = fu[i];
+	} else {
+	  if (u[i] < x[i]) a[i] = u[i]; else b[i] = u[i];
+	  if (fu[i] <= fw[i] || w[i] == x[i]) {
+	    v[i] = w[i]; fv[i] = fw[i];
+	    w[i] = u[i]; fw[i] = fu[i];
+	  } else if (fu[i] <= fv[i] || v[i] == x[i] || v[i] == w[i]) {
+	    v[i] = u[i]; fv[i] = fu[i];
+	  }
+	}
+      }
+    }
+    /* end of main loop */
+    
+    return Rcpp::wrap(x);
   }
   
 } // namespace

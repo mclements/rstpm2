@@ -12,7 +12,7 @@ export(stpm2, pstpm2, aft, gsm, aft_mixture, aft_integrated,
        incrVar, nsx, nsxD, "coef<-",
        eform, predictnl, coef, confint, 
        predictnl.default, confint.predictnl,
-       vuniroot, bhazard,
+       vuniroot, voptimize, voptimise, bhazard,
        smoothpwc, gsm_design)
 
 S3method(makepredictcall, nsx)

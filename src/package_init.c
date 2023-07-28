@@ -17,6 +17,7 @@ extern SEXP aft_model_output(SEXP);
 extern SEXP aft_mixture_model_output(SEXP);
 extern SEXP aft_integrated_model_output(SEXP);
 extern SEXP vunirootRcpp(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
+extern SEXP voptimizeRcpp(SEXP,SEXP,SEXP,SEXP);
 extern SEXP multistate_ddt(SEXP,SEXP,SEXP,SEXP);
 // extern SEXP runMarkovODE(SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP,SEXP);
 // extern SEXP runExpM(SEXP,SEXP,SEXP);
@@ -37,6 +38,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"aft_mixture_model_output",  (DL_FUNC) &aft_mixture_model_output,  1},
     {"aft_integrated_model_output",  (DL_FUNC) &aft_integrated_model_output,  1},
     {"vunirootRcpp",       (DL_FUNC) &vunirootRcpp,       7},
+    {"voptimizeRcpp",      (DL_FUNC) &voptimizeRcpp,      4},
     {"multistate_ddt",     (DL_FUNC) &multistate_ddt,     4},
     // {"runMarkovODE",       (DL_FUNC) &runMarkovODE,       9},
     // {"runExpM",            (DL_FUNC) &runExpM,            3},
