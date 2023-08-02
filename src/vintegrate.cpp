@@ -478,7 +478,6 @@ void vrdqagie(const F f, const vec bboun, const int inf,
   /* Local variables */
   vec area=zeros(ny), dres=zeros(ny);
   int ksgn;
-  double boun;
   int nres;
   vec area1=zeros(ny), area2=zeros(ny), area12=zeros(ny), erro12=zeros(ny);
   int k;
@@ -543,10 +542,6 @@ void vrdqagie(const F f, const vec bboun, const int inf,
 	     i1 = integral of f over (-infinity,0),
 	     i2 = integral of f over (0,+infinity). */
 
-  boun = 0.0;
-  if (inf == 2) {
-    boun = 0.;
-  }
   vrdqk15i<F>(f, bboun, inf, &c_b6, &c_b7, &result, &abserr, &defabs, &resabs);
 
   /*           test on accuracy */
