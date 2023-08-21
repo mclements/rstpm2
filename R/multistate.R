@@ -668,7 +668,7 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
     }
     if (ncov) {
         x <- model.matrix(object, newframe)[,-1,drop=FALSE] # is the intercept always first?
-        x <- sweep(x, 2, object$means)
+        ## x <- sweep(x, 2, object$means) # no longer sweep:)
         param.scale <- if (object$param=="lifeAcc") -1 else 1
         lambda <- lambda *
             exp(param.scale*(x %mv% object$coefficients[1:ncov]))
