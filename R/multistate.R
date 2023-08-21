@@ -246,7 +246,7 @@ markov_msm <-
                    state.costs.sd=state.costs.sd,
                    transition.costs.sd=transition.costs.sd,
                    coefficients=coef(x),
-                   call=call),
+                   call=call, x=x),
               class="markov_msm")
 }
 
@@ -1668,4 +1668,21 @@ as.data.frame.markov_sde <- function(x, row.names=NULL, optional=NULL, ci=TRUE,
     out$.id. <- NULL
     if(!is.null(row.names)) rownames(out) <- row.names
     out
+}
+
+## Parametric bootstrap
+pboot = function(object, m, parallel=FALSE, mc.cores=parallel::detectCores(), ...) {
+    ## do this once
+    newx = object$x
+    coefs <- lapply(object$x, function(xi) coef(xi)) # note this trick!
+    vcovs <- lapply(object$x, function(xi) vcov(xi)) # note this trick!
+    ## vcov = lapply(object$x, vcov) # fails:(
+    ## do the following m times
+    parallel::mclapply(1:m , function(i) {
+        ## update the coefs
+        for (j in 1:length(newx))
+            coef(newx[[j]]) = mvtnorm::rmvnorm(1,coefs[[j]],vcovs[[j]])
+        ## update the object
+        update(object,x=newx)
+    }, mc.cores=mc.cores)
 }
