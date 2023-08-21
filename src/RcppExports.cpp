@@ -12,14 +12,14 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // vdqagsRcpp
-Rcpp::List vdqagsRcpp(const Rcpp::Function f, const vec a, const vec b, const double epsrel, const double epsabs, const int limit, const int ny);
+Rcpp::List vdqagsRcpp(const Rcpp::Function f, const arma::vec a, const arma::vec b, const double epsrel, const double epsabs, const int limit, const int ny);
 RcppExport SEXP _rstpm2_vdqagsRcpp(SEXP fSEXP, SEXP aSEXP, SEXP bSEXP, SEXP epsrelSEXP, SEXP epsabsSEXP, SEXP limitSEXP, SEXP nySEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const Rcpp::Function >::type f(fSEXP);
-    Rcpp::traits::input_parameter< const vec >::type a(aSEXP);
-    Rcpp::traits::input_parameter< const vec >::type b(bSEXP);
+    Rcpp::traits::input_parameter< const arma::vec >::type a(aSEXP);
+    Rcpp::traits::input_parameter< const arma::vec >::type b(bSEXP);
     Rcpp::traits::input_parameter< const double >::type epsrel(epsrelSEXP);
     Rcpp::traits::input_parameter< const double >::type epsabs(epsabsSEXP);
     Rcpp::traits::input_parameter< const int >::type limit(limitSEXP);
@@ -29,13 +29,13 @@ BEGIN_RCPP
 END_RCPP
 }
 // vdqagiRcpp
-Rcpp::List vdqagiRcpp(const Rcpp::Function f, const vec bound, const int inf, const double epsrel, const double epsabs, const int limit, const int ny);
+Rcpp::List vdqagiRcpp(const Rcpp::Function f, const arma::vec bound, const int inf, const double epsrel, const double epsabs, const int limit, const int ny);
 RcppExport SEXP _rstpm2_vdqagiRcpp(SEXP fSEXP, SEXP boundSEXP, SEXP infSEXP, SEXP epsrelSEXP, SEXP epsabsSEXP, SEXP limitSEXP, SEXP nySEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const Rcpp::Function >::type f(fSEXP);
-    Rcpp::traits::input_parameter< const vec >::type bound(boundSEXP);
+    Rcpp::traits::input_parameter< const arma::vec >::type bound(boundSEXP);
     Rcpp::traits::input_parameter< const int >::type inf(infSEXP);
     Rcpp::traits::input_parameter< const double >::type epsrel(epsrelSEXP);
     Rcpp::traits::input_parameter< const double >::type epsabs(epsabsSEXP);
@@ -46,14 +46,14 @@ BEGIN_RCPP
 END_RCPP
 }
 // vrdqk21Rcpp
-Rcpp::List vrdqk21Rcpp(const Rcpp::Function f, const vec lower, const vec upper, const double a, const double b);
+Rcpp::List vrdqk21Rcpp(const Rcpp::Function f, const arma::vec lower, const arma::vec upper, const double a, const double b);
 RcppExport SEXP _rstpm2_vrdqk21Rcpp(SEXP fSEXP, SEXP lowerSEXP, SEXP upperSEXP, SEXP aSEXP, SEXP bSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const Rcpp::Function >::type f(fSEXP);
-    Rcpp::traits::input_parameter< const vec >::type lower(lowerSEXP);
-    Rcpp::traits::input_parameter< const vec >::type upper(upperSEXP);
+    Rcpp::traits::input_parameter< const arma::vec >::type lower(lowerSEXP);
+    Rcpp::traits::input_parameter< const arma::vec >::type upper(upperSEXP);
     Rcpp::traits::input_parameter< const double >::type a(aSEXP);
     Rcpp::traits::input_parameter< const double >::type b(bSEXP);
     rcpp_result_gen = Rcpp::wrap(vrdqk21Rcpp(f, lower, upper, a, b));
@@ -61,13 +61,13 @@ BEGIN_RCPP
 END_RCPP
 }
 // vrdqk15Rcpp
-Rcpp::List vrdqk15Rcpp(const Rcpp::Function f, const vec boun, const int inf, double a, double b);
+Rcpp::List vrdqk15Rcpp(const Rcpp::Function f, const arma::vec boun, const int inf, double a, double b);
 RcppExport SEXP _rstpm2_vrdqk15Rcpp(SEXP fSEXP, SEXP bounSEXP, SEXP infSEXP, SEXP aSEXP, SEXP bSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const Rcpp::Function >::type f(fSEXP);
-    Rcpp::traits::input_parameter< const vec >::type boun(bounSEXP);
+    Rcpp::traits::input_parameter< const arma::vec >::type boun(bounSEXP);
     Rcpp::traits::input_parameter< const int >::type inf(infSEXP);
     Rcpp::traits::input_parameter< double >::type a(aSEXP);
     Rcpp::traits::input_parameter< double >::type b(bSEXP);

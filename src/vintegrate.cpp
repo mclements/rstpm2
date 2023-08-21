@@ -22,6 +22,8 @@
   - Mark Clements 2023-07-31
 */
 
+//[[Rcpp::depends(RcppArmadillo)]]
+
 using namespace arma;
 using std::vector;
 
@@ -1341,7 +1343,7 @@ Rcpp::List vdqagi(const F f, const vec bound, const int inf,
 }
 
 // [[Rcpp::export]]
-Rcpp::List vdqagsRcpp(const Rcpp::Function f, const vec a, const vec b,
+Rcpp::List vdqagsRcpp(const Rcpp::Function f, const arma::vec a, const arma::vec b,
 		      const double epsrel, const double epsabs, const int limit,
 		      const int ny) {
 // RcppExport SEXP vdqagsRcpp(SEXP _f, SEXP _a, SEXP _b,
@@ -1359,7 +1361,7 @@ Rcpp::List vdqagsRcpp(const Rcpp::Function f, const vec a, const vec b,
 }
 
 // [[Rcpp::export]]
-Rcpp::List vdqagiRcpp(const Rcpp::Function f, const vec bound, const int inf,
+Rcpp::List vdqagiRcpp(const Rcpp::Function f, const arma::vec bound, const int inf,
 		      const double epsrel, const double epsabs, const int limit, const int ny) {
 // RcppExport SEXP vdqagiRcpp(SEXP _f, SEXP _bound, SEXP _inf,
 // 			   SEXP _epsrel, SEXP _epsabs, SEXP _limit, SEXP _ny) {
@@ -1375,7 +1377,7 @@ Rcpp::List vdqagiRcpp(const Rcpp::Function f, const vec bound, const int inf,
 }
 
 // [[Rcpp::export]]
-Rcpp::List vrdqk21Rcpp(const Rcpp::Function f, const vec lower, const vec upper,
+Rcpp::List vrdqk21Rcpp(const Rcpp::Function f, const arma::vec lower, const arma::vec upper,
 		       const double a, const double b) {
 // RcppExport SEXP vrdqk21Rcpp(SEXP _f, SEXP _a, SEXP _b) {
   using namespace Rcpp;
@@ -1389,7 +1391,7 @@ Rcpp::List vrdqk21Rcpp(const Rcpp::Function f, const vec lower, const vec upper,
 }
 
 // [[Rcpp::export]]
-Rcpp::List vrdqk15Rcpp(const Rcpp::Function f, const vec boun, const int inf,
+Rcpp::List vrdqk15Rcpp(const Rcpp::Function f, const arma::vec boun, const int inf,
 		       double a, double b) {
 // RcppExport SEXP vrdqk15Rcpp(SEXP _f, SEXP _boun, SEXP _inf, SEXP _a, SEXP _b) {
   using namespace Rcpp;
@@ -1404,7 +1406,7 @@ Rcpp::List vrdqk15Rcpp(const Rcpp::Function f, const vec boun, const int inf,
 		      _("abserr") = abserr);
 }
 
-vec test_f(const vec a) {
+vec test_f(const arma::vec a) {
   vec out{exp(a[0]), exp(2*a[1]), log(a[2])};
   return out;
 }
@@ -1415,7 +1417,7 @@ Rcpp::List test_vdqags() {
   return vdqags(test_f, lower, upper, 1.0e-8, 1.0e-8, 50, 3);
 }
 
-vec test_f2(const vec a) {
+vec test_f2(const arma::vec a) {
   vec out{exp(a[0]), exp(2*a[1])};
   return out;
 }
