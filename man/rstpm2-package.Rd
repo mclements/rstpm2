@@ -1,7 +1,7 @@
-\name{Rstpm2-package}
+\name{rstpm2-package}
 \Rdversion{1.1}
-\alias{Rstpm2-package}
-\alias{Rstpm2}
+\alias{rstpm2-package}
+\alias{rstpm2}
 \docType{package}
 \title{
 Flexible parametric survival models.
@@ -21,7 +21,7 @@ Flexible parametric survival models.
 
 \details{
 \tabular{ll}{
-Package: \tab Rstpm2\cr
+Package: \tab rstpm2\cr
 Type: \tab Package\cr
 Version: \tab 1.0\cr
 Date: \tab 2011-07-06\cr
