@@ -18,7 +18,7 @@ Version: 1.6.2
 Date: 2023-03-08
 Depends: R (>= 3.0.2), methods, survival, splines
 Imports: graphics, Rcpp (>= 0.10.2), stats, mgcv, bbmle (>= 1.0.20), fastGHQuad,
-  deSolve, utils, parallel
+  deSolve, utils, parallel, mvtnorm
 Suggests: eha, testthat, ggplot2, lattice, readstata13, mstate, scales, survPen,
   flexsurv, timereg
 LinkingTo: Rcpp,RcppArmadillo,BH
