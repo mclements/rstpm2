@@ -401,7 +401,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     X <- lpmatrix.lm(lm.obj,data)
     if (is.integer(X.index <- which.dim(X)))
         warning("Design matrix for the acceleration factor is not full rank")
-    X <- X[,X.index]
+    X <- X[, X.index, drop=FALSE]
     XD0 <- X0 <- XD <- matrix(0,1,ncol(X))
     X_list = list()
     gauss = gauss.quad(control$nNodes)
