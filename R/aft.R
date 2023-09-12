@@ -409,15 +409,15 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     if (tvc.integrated) {
         X_list = lapply(1:control$nNodes, function(i)
             lpmatrix.lm(lm.obj,
-                        local({ data[[timeVar]] = (gauss$nodes[i]+1)/2*data[[timeVar]]; data}))[,X.index])
+                        local({ data[[timeVar]] = (gauss$nodes[i]+1)/2*data[[timeVar]]; data}))[,X.index, drop=FALSE])
         if (delayed) {
             X_list0 = lapply(1:control$nNodes, function(i)
                 lpmatrix.lm(lm.obj,
-                            local({ data[[timeVar]] = (gauss$nodes[i]+1)/2*data[[time0Var]]; data}))[,X.index])
+                            local({ data[[timeVar]] = (gauss$nodes[i]+1)/2*data[[time0Var]]; data}))[,X.index, drop=FALSE])
         }
     } else { # tvc using cumulative formulation 
         XD <- grad1(loglpfunc,log(data[[timeVar]]),lm.obj,data,timeVar,log.transform=FALSE)
-        XD <- matrix(XD,nrow=nrow(X))[,X.index]
+        XD <- matrix(XD,nrow=nrow(X))[,X.index, drop=FALSE]
         if (delayed) {
             ind0 <- time0>0
             data0 <- data[ind0,,drop=FALSE] # data for delayed entry times
@@ -425,7 +425,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
             X0 <- lpmatrix.lm(lm.obj, data0)
             XD0 <- grad1(loglpfunc,log(data0[[timeVar]]),lm.obj,data0,timeVar,
                          log.transform=FALSE)
-            XD0 <- matrix(XD0,nrow=nrow(X))[,X.index]
+            XD0 <- matrix(XD0,nrow=nrow(X))[,X.index, drop=FALSE]
             rm(data0)
         }
     }
@@ -618,19 +618,19 @@ predict.aft_mixture2 <-
             calcX <- TRUE
         }
         if (calcX)  {
-            X <- lpmatrix.lm(args$lm.obj, newdata)[,args$X.index]
+            X <- lpmatrix.lm(args$lm.obj, newdata)[,args$X.index, drop=FALSE]
             XD <- grad1(loglpfunc,log(newdata[[object@args$timeVar]]),
                         log.transform=FALSE, newdata=newdata)
-            XD <- matrix(XD,nrow=nrow(X))[,args$X.index]
+            XD <- matrix(XD,nrow=nrow(X))[,args$X.index, drop=FALSE]
             Xc <- lpmatrix.lm(args$glm.cure.obj, newdata)
             time <- eval(args$timeExpr,newdata)
         }
         if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","af","accfac")) {
             newdata2 <- exposed(newdata)
-            X2 <- lpmatrix.lm(args$lm.obj, newdata2)[,args$X.index]
+            X2 <- lpmatrix.lm(args$lm.obj, newdata2)[,args$X.index, drop=FALSE]
             XD2 <- grad1(loglpfunc,log(newdata2[[object@args$timeVar]]),
                          log.transform=FALSE, newdata=newdata2)
-            XD2 <- matrix(XD2,nrow=nrow(X))[,args$X.index]
+            XD2 <- matrix(XD2,nrow=nrow(X))[,args$X.index, drop=FALSE]
             time2 <- eval(args$timeExpr,newdata2) # is this always equal to time?
             Xc2 = model.matrix(args$glm.cure.obj, newdata2)
         }
@@ -849,27 +849,27 @@ predict.aft_integrated2 =  function(object,newdata=NULL,
         calcX <- TRUE
     }
     if (calcX)  {
-        X <- lpmatrix.lm(args$lm.obj, newdata)[,args$X.index]
+        X <- lpmatrix.lm(args$lm.obj, newdata)[,args$X.index, drop=FALSE]
         XD <- grad1(loglpfunc,log(newdata[[object@args$timeVar]]),
                     log.transform=FALSE, newdata=newdata)
-        XD <- matrix(XD,nrow=nrow(X))[,args$X.index]
+        XD <- matrix(XD,nrow=nrow(X))[,args$X.index, drop=FALSE]
         Xc <- lpmatrix.lm(args$glm.cure.obj, newdata)
         time <- eval(args$timeExpr,newdata)
         X_list = lapply(args$gnodes, function(gnode)
             lpmatrix.lm(args$lm.obj,
-                    local({ newdata[[args$timeVar]] = (gnode+1)/2*newdata[[args$timeVar]]; newdata}))[,args$X.index])
+                    local({ newdata[[args$timeVar]] = (gnode+1)/2*newdata[[args$timeVar]]; newdata}))[,args$X.index, drop=FALSE])
     }
     if (type %in% c("hr","sdiff","hdiff","meansurvdiff","or","af","accfac")) {
         newdata2 <- exposed(newdata)
-        X2 <- lpmatrix.lm(args$lm.obj, newdata2)[,args$X.index]
+        X2 <- lpmatrix.lm(args$lm.obj, newdata2)[,args$X.index, drop=FALSE]
         XD2 <- grad1(loglpfunc,log(newdata2[[object@args$timeVar]]),
                      log.transform=FALSE, newdata=newdata2)
-        XD2 <- matrix(XD2,nrow=nrow(X))[,args$X.index]
+        XD2 <- matrix(XD2,nrow=nrow(X))[,args$X.index, drop=FALSE]
         time2 <- eval(args$timeExpr,newdata2) # is this always equal to time?
         Xc2 = model.matrix(args$glm.cure.obj, newdata2)
         X_list2 = lapply(args$gnodes, function(gnode)
             lpmatrix.lm(args$lm.obj,
-                    local({ newdata2[[args$timeVar]] = (gnode+1)/2*newdata2[[args$timeVar]]; newdata2}))[,args$X.index])
+                    local({ newdata2[[args$timeVar]] = (gnode+1)/2*newdata2[[args$timeVar]]; newdata2}))[,args$X.index, drop=FALSE])
     }
     if (type == "gradh") {
         return(predict.aft_integrated.ext(object, type="gradh", time=time, X=X, XD=XD,
