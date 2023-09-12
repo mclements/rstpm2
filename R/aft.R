@@ -255,6 +255,14 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
             control[[name]] = dots[[name]]
         }
     }
+    ## Special case
+    if (mixture && df>2) {
+        Call = match.call()
+        Call$df = 2
+        fitWeibullMixture = eval(Call,parent.frame())
+    } else {
+        fitWeibullMixture = NULL
+    }
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
@@ -511,6 +519,23 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     parnames(negll) <- names(init)
     args$negll = negll
     args$gradient = gradient
+    if (!is.null(fitWeibullMixture)) {
+        this.index = (length(coef1)+1):(length(coef1)+length(coef2))
+        fixed = as.list(coef(fitWeibullMixture)[this.index])
+        this.control = control
+        for (name in c("constrOptim", "use.gr", "nNodes", "add.penalties"))
+            this.control[[name]] = NULL
+        this.control$parscale = this.control$parscale[-this.index]
+        fixedfit <- if (control$use.gr) {
+                    bbmle::mle2(negll, init, vecpar=TRUE, control=this.control,
+                                fixed=fixed, gr=gradient, ...)
+                } else {
+                    bbmle::mle2(negll, init, vecpar=TRUE, control=this.control,
+                                fixed=fixed, ...)
+                }
+        init = coef(fixedfit)
+        rm(fixedfit)
+    }
     ## MLE
     if (delayed && control$use.gr) { # initial search using nmmin (conservative -- is this needed?)
         args$return_type <- "nmmin"
