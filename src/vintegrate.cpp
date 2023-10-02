@@ -846,7 +846,7 @@ void vrdqagie(const F f, const vec bboun, const int inf,
 
 
 template<typename F>
-static void vrdqk15i(const F f,
+void vrdqk15i(const F f,
 		     const vec bboun,
 		     const int inf, double *a, double *b,
 		     vec *result,
