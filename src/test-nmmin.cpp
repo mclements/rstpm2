@@ -478,7 +478,7 @@ namespace rstpm2 {
   };
   class NelderMead2 : public NelderMead {
   public:
-    NumericMatrix calc_hessian(optimfn fn, void * ex, int debug = 0) {
+    NumericMatrix calc_hessian(optimfn fn, void * ex, int debug) {
       if (parscale.size()==0) REprintf("parscale is not defined for NelderMead2::calc_hessian.");
       if (debug>1) Rprintf("In NelderMead2->calc_hessian()...\n");
       int n = coef.size();
