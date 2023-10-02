@@ -101,7 +101,7 @@ namespace rstpm2 {
       void optim(Rcpp::NumericVector init, T object) {
       optim(&adapt_objective<T>,init,(void *) &object);
     }
-    virtual Rcpp::NumericMatrix calc_hessian(optimfn fn, void * ex);
+    virtual Rcpp::NumericMatrix calc_hessian(optimfn fn, void * ex, int debug=0);
     int n, trace, maxit, fail, fncount;
     double abstol, reltol, alpha, beta, gamma, Fmin, epshess;
     bool hessianp;
