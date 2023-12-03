@@ -1230,7 +1230,7 @@ namespace rstpm2 {
 	sp[i] = exp(bound(logsp[i],lsp,usp));
       if (this->bfgs.trace > 0) {
 	for (size_t i = 0; i < sp.size(); ++i)
-	  Rprintf("sp[%i]=%f\t",i,sp[i]);
+	  Rprintf("sp[%i]=%f\t",(int)i,sp[i]);
       }
       this->optimWithConstraint(this->init);
       this->bfgs.hessian = this->bfgs.calc_hessian(&optimgradient<This>, (void *) this);
