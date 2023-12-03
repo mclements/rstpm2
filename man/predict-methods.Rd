@@ -46,7 +46,7 @@
                regular set of event times (i.e. newdata would \emph{not}
                include the event times). }
   \item{type}{specify the type of prediction:
-    \itemize{
+    \describe{
       \item{"surv"}{survival probabilities}
       \item{"cumhaz"}{cumulative hazard}
       \item{"hazard"}{hazard}
