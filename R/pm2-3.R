@@ -266,6 +266,10 @@ setGeneric("predictnl")
     x$coefficients <- value
     x
 }
+"coef<-.mle2" <- function(x,value) {
+    x@fullcoef <- value
+    x
+}
 predictnl.default <- function(object,fun,newdata=NULL,gd=NULL,...)
   {
       if (!is.null(newdata) || "newdata" %in% names(formals(fun))) {
