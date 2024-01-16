@@ -256,7 +256,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         }
     }
     ## Special case
-    if (mixture && df>2) {
+    if (is.null(init) && mixture && df>2) {
         Call = match.call()
         Call$df = 2
         fitWeibullMixture = eval(Call,parent.frame())
