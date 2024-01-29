@@ -809,7 +809,7 @@ predict.aft_mixture2 <-
                } else {
                    if (is.null(link))
                        link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                                      hdiff="I",loghazard="I",link="I",odds="log",or="log",meansurv="I",meanhaz="I",af="I",accfac="log")
+                                      hdiff="I",loghazard="I",link="I",odds="log",or="log",meansurv="I",meanhaz="I",af="I",accfac="log", density = "log")
                    invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
                    pred <- predictnl(object,local,link=link,newdata=newdata,type=type,gd=NULL,
                                      exposed=exposed,...)
@@ -1063,7 +1063,7 @@ predict.aft_integrated2 =  function(object,newdata=NULL,
            } else {
                if (is.null(link))
                    link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                                  hdiff="I",loghazard="I",link="I",odds="log",or="log",meansurv="I",meanhaz="I",af="I",accfac="log")
+                                  hdiff="I",loghazard="I",link="I",odds="log",or="log",meansurv="I",meanhaz="I",af="I",accfac="log", density = "log")
                invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
                pred <- predictnl(object,local,link=link,newdata=newdata,type=type,gd=NULL,
                                  exposed=exposed,...)
