@@ -445,9 +445,9 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
             coef1 <- coef1[1:(length(coef1)-2)][X.index]
         } else coef1 <- rep(0,ncol(X))
     } else {
-        survreg1 <- survival::survreg(formula, data)
-        coef1 <- coef(survreg1)
-        coef1 <- coef1[-1] # assumes intercept included in the formula
+        survreg1 <- survival::coxph(formula, data)
+        coef1 <- -coef(survreg1) # -beta * X
+       # coef1 <- coef1[-1] # assumes intercept included in the formula
     }
     if (ncol(X)>length(coef1)) {
         coef1 <- c(coef1,rep(0,ncol(X) - length(coef1)))
