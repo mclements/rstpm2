@@ -1,8 +1,8 @@
 useDynLib(rstpm2, .registration=TRUE)
 
-exportClasses(stpm2,pstpm2,tvcCoxph,aft,aft_mixture, aft_integrated)
+exportClasses(stpm2,pstpm2,tvcCoxph,aft)
 
-export(stpm2, pstpm2, aft, gsm, aft_mixture, aft_integrated,
+export(stpm2, pstpm2, aft, gsm,
        cox.tvc, # experimental --- don't export?
        markov_msm, ratio_markov_msm,
        zeroModel, hrModel, aftModel, addModel, # stratifiedModel,
@@ -33,7 +33,9 @@ S3method(coef, stpm2)
 S3method(vcov, stpm2)
 S3method(coef, pstpm2)
 S3method(vcov, pstpm2)
+S3method("coef<-", default)
 S3method("coef<-", mle2)
+S3method("coef<-", survPen)
 
 S3method(as.data.frame, markov_msm)
 S3method(as.data.frame, markov_sde)
@@ -78,6 +80,6 @@ importFrom(mgcv,gam,s)
 importFrom(Rcpp,sourceCpp)
 importFrom(deSolve,ode)
 import(bbmle,methods,survival,splines)
-importFrom(utils,str,head,tail)
+importFrom(utils,str,head,tail,modifyList)
 
 

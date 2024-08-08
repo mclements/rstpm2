@@ -5,12 +5,16 @@
 \title{Extract design information from an stpm2/gsm object and newdata
 for use in C++}
 \usage{
-gsm_design(object, newdata, inflate = 100)
+gsm_design(object, newdata, newdata0 = NULL, t0 = NULL, inflate = 100)
 }
 \arguments{
 \item{object}{stpm2/gsm object}
 
 \item{newdata}{list or data-frame used for evaluation}
+
+\item{newdata0}{list or data-frame used for evaluation at the entry time}
+
+\item{t0}{possible delayed entry time (numeric scalar)}
 
 \item{inflate}{double value to inflate minimum and maximum times for root finding}
 }

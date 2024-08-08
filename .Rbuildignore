@@ -12,3 +12,7 @@ jss\.bst
 jss\.cls
 ^.*\.dvi$
 ^inst/doc/.*[~]$
+inst/a.out
+auto
+R/aft_mixture.R
+R/aft_integrated.R

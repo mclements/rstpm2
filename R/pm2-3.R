@@ -1,6 +1,6 @@
 ## Utilities
 ## copied from stats:::format.perc
-format.perc <- 
+formating.perc <- 
     function (probs, digits) 
         paste(format(100 * probs, trim = TRUE, scientific = FALSE, digits = digits), 
               "%")
@@ -313,7 +313,7 @@ confint.predictnl <- function(object,parm,level=0.95,...) {
         parm <- pnames[parm]
     a <- (1 - level)/2
     a <- c(a, 1 - a)
-    pct <- format.perc(a, 3)
+    pct <- formating.perc(a, 3)
     fac <- qnorm(a)
     ci <- array(NA, dim = c(length(parm), 2L), dimnames = list(parm, 
         pct))
@@ -1616,8 +1616,6 @@ predictnl.aft <- function(object,fun,newdata=NULL,link=c("I","log","cloglog","lo
   }
 
 setMethod("predictnl", "aft", predictnl.aft)
-setMethod("predictnl", "aft_mixture", predictnl.aft)
-setMethod("predictnl", "aft_integrated", predictnl.aft)
 
 residuals.stpm2.base <- function(object, type=c("li","gradli")) {
     type <- match.arg(type)

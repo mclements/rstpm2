@@ -6,10 +6,12 @@
 voptimize(f, interval, \dots,
           lower=pmin(interval[,1], interval[,2]),
           upper=pmax(interval[,1], interval[,2]),
+          maximum = FALSE,
           tol = .Machine$double.eps^0.25)
 voptimise(f, interval, \dots,
           lower=pmin(interval[,1], interval[,2]),
           upper=pmax(interval[,1], interval[,2]),
+          maximum = FALSE,
           tol = .Machine$double.eps^0.25)
 }
 \arguments{

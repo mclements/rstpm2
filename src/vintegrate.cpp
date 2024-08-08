@@ -145,8 +145,8 @@ void vrdqagse(const F f, const vec lower, const vec upper, const double
   int numrl2;
   int jupbnd;
   int maxerr;
-  double res3la[3*ny];
-  double rlist2[52*ny];
+  double *res3la = R_Calloc(3*ny, double);;
+  double *rlist2 = R_Calloc(52*ny, double);
   vec abseps= zeros(ny), area1= zeros(ny), area2= zeros(ny), area12= zeros(ny);
   double epmach;
   double a, b, a1, a2, b1, b2, oflow, uflow;
@@ -160,7 +160,7 @@ void vrdqagse(const F f, const vec lower, const vec upper, const double
   // vec abserr(abserrp, limit, false); 
   mat elist(elistp, ny, limit, false);
   mat rlist(rlistp, ny, limit, false);
-  double elistSum[limit];
+  double *elistSum = R_Calloc(limit, double);;
     
   /* Parameter adjustments */
   --iord;
@@ -466,6 +466,9 @@ void vrdqagse(const F f, const vec lower, const vec upper, const double
     resultp[i] = result[i]*(upper[i]-lower[i]);
     abserrp[i] = abserr[i]*(upper[i]-lower[i]);
   }
+  R_Free(res3la);
+  R_Free(rlist2);
+  R_Free(elistSum);
   return;
 } /* vrdqagse_ */
 
@@ -491,10 +494,10 @@ void vrdqagie(const F f, const vec bboun, const int inf,
   double uflow;
   Rboolean noext;
   int iroff1, iroff2, iroff3;
-  double res3la[3*ny];
+  double *res3la = R_Calloc(3*ny, double);
   vec error1=zeros(ny), error2=zeros(ny);
   int id;
-  double rlist2[52*ny];
+  double *rlist2 = R_Calloc(52*ny, double);
   int numrl2;
   vec correc=zeros(ny), abseps=zeros(ny), errbnd=zeros(ny), resabs=zeros(ny), erlarg=zeros(ny), defabs=zeros(ny);
   double epmach;
@@ -508,8 +511,8 @@ void vrdqagie(const F f, const vec bboun, const int inf,
 
   mat elist(elistp, ny, limit, false);
   mat rlist(rlistp, ny, limit, false);
-  double elistSum[limit];
-    
+  double *elistSum = R_Calloc(limit, double);
+
   /* ***first executable statement  dqagie */
   /* Parameter adjustments */
   --iord;
@@ -841,6 +844,9 @@ void vrdqagie(const F f, const vec bboun, const int inf,
     resultp[i] = result[i];
     abserrp[i] = abserr[i];
   }
+  R_Free(res3la);
+  R_Free(rlist2);
+  R_Free(elistSum);
   return;
 } /* vrdqagie_ */
 
@@ -1308,15 +1314,20 @@ Rcpp::List vdqags(const F f, const vec a, const vec b,
 		  const double epsrel, const double epsabs, const int limit,
 		  const int ny) {
   using namespace Rcpp;
-  double result[ny], abserr[ny];
+  double *result = R_Calloc(ny, double);
+  double *abserr = R_Calloc(ny, double);
   int lenw, ier, neval, last;
   lenw = 2*limit*ny + 2*limit;
-  int iwork[limit];
-  double work[lenw];
+  int *iwork = R_Calloc(limit, int);
+  double *work = R_Calloc(lenw, double);
   vRdqags<F>(f, a, b, epsabs, epsrel, ny,
 	     result, abserr, &neval, &ier, limit, &lenw, &last, iwork, work);
   vec result2(result,ny);
   vec abserr2(abserr,ny);
+  R_Free(result);
+  R_Free(abserr);
+  R_Free(iwork);
+  R_Free(work);
   return List::create(_("value") = result2,
 		      _("abs.err") = abserr2,
 		      _("subdivisions") = last,
@@ -1327,15 +1338,20 @@ template<typename F>
 Rcpp::List vdqagi(const F f, const vec bound, const int inf,
 		  const double epsrel, const double epsabs, const int limit, const int ny) {
   using namespace Rcpp;
-  double result[ny], abserr[ny];
+  double *result = R_Calloc(ny, double);
+  double *abserr = R_Calloc(ny, double);
   int lenw, ier, neval, last;
   lenw = 2*limit*ny + 2*limit;
-  int iwork[limit];
-  double work[lenw];
+  int *iwork = R_Calloc(limit, int);
+  double *work = R_Calloc(lenw, double);
   vRdqagi(f, bound, inf, epsabs, epsrel, limit, ny,
 	  result, abserr, &neval, &ier, &lenw, &last, iwork, work);
   vec resultnv(result, ny);
   vec abserrnv(abserr, ny);
+  R_Free(result);
+  R_Free(abserr);
+  R_Free(iwork);
+  R_Free(work);
   return List::create(_("value") = resultnv,
 		      _("abs.err") = abserrnv,
 		      _("subdivisions") = last,
