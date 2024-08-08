@@ -660,7 +660,7 @@ predict.aft_mixture2 <-
             Xc2 = model.matrix(args$glm.cure.obj, newdata2)
         }
         if (type %in% c("grad")) {
-            return(predict.aft_mixture.ext(object, type=type, time=time, X=X, XD=XD))
+            return(predict.aft.ext(object, type=type, time=time, X=X, XD=XD))
         }
         ## colMeans <- function(x) colSums(x)/apply(x,2,length)
         local <-  function (object, newdata=NULL, type="surv", exposed, ...)
@@ -897,7 +897,7 @@ predict.aft_integrated2 =  function(object,newdata=NULL,
                     local({ newdata2[[args$timeVar]] = (gnode+1)/2*newdata2[[args$timeVar]]; newdata2}))[,args$X.index, drop=FALSE])
     }
     if (type == "gradh") {
-        return(predict.aft_integrated.ext(object, type="gradh", time=time, X=X, XD=XD,
+        return(predict.aft.ext(object, type="gradh", time=time, X=X, XD=XD,
                                           Xc=Xc, X_list=X_list))
     }
     ## colMeans <- function(x) colSums(x)/apply(x,2,length)
@@ -1011,7 +1011,7 @@ predict.aft_integrated2 =  function(object,newdata=NULL,
         h <- (1-cure_frac)*exp(-Hu)*hu/(cure_frac + (1-cure_frac)*exp(-Hu))
         Sigma = vcov(object)
         if (type=="link")
-            return(eta)
+            return(logtstar) # is this correct?
         if (type=="density")
             return (S*h)
         if (type=="hazard")
@@ -1192,13 +1192,16 @@ setMethod("plot", signature(x="aft", y="missing"),
           )
 
 predict.aft.ext <- function(obj, type=c("survival","haz","gradh"),
-                            time=obj@args$time, X=obj@args$X, XD=obj@args$XD) {
+                            time=obj@args$time, X=obj@args$X, XD=obj@args$XD,
+                            X_list=obj@args$X_list, Xc=obj@args$Xc) {
     type <- match.arg(type)
     localargs <- obj@args
     localargs$return_type <- type
     localargs$X <- X
     localargs$XD <- XD
     localargs$time <- time
+    localargs$Xc <- Xc
+    localargs$X_list <- X_list
     as.matrix(.Call("aft_model_output", localargs, PACKAGE="rstpm2"))
 }
 

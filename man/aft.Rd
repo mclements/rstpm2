@@ -12,11 +12,11 @@ predictor using natural splines.
 }
 \usage{
 aft(formula, data, smooth.formula = NULL, df = 3,
-    tvc = NULL, control = list(parscale = 1, maxit = 1000),
-    init = NULL, weights = NULL, timeVar = "", time0Var = "",
-    log.time.transform = TRUE,
-    reltol = 1e-08, trace = 0, cure = FALSE, contrasts = NULL, subset = NULL,
-    use.gr = TRUE, ...)
+    tvc = NULL, cure.formula = ~1, control = list(),
+    init = NULL, weights = NULL, tvc.intercept = TRUE,
+    tvc.integrated = FALSE,
+    timeVar = "", time0Var = "",
+    cure = FALSE, mixture = FALSE, contrasts = NULL, subset = NULL, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -47,6 +47,9 @@ a list with the names of the time-varying coefficients. This uses natural spline
 \code{smooth.formula=~...+hormon:nsx(log(time),df=3)}), which by default
 does \emph{not} include an intercept (or main effect) term. 
 }
+  \item{cure.formula}{
+a formula for describing the cure fraction.
+}
   \item{control}{
 \code{control} argument passed to \code{optim}.
 }
@@ -59,6 +62,15 @@ does \emph{not} include an intercept (or main effect) term.
   an optional vector of 'prior weights' to be used in the
   fitting process. Should be \code{NULL} or a numeric vector.
 }
+  \item{tvc.intercept}{
+logical for whether to include an intercept in the time-varying
+acceleration factor (defaults to TRUE)
+}
+  \item{tvc.integrated}{
+logical for whether the time-varying
+acceleration factor should be based on a integration, rather than a
+cumulative effect (defaults to FALSE)
+}
   \item{timeVar}{
 string variable defining the time variable. By default, this is
 determined from the survival object, however this may be ambiguous if
@@ -68,18 +80,11 @@ two variables define the time.
   string variable to determine the entry variable; useful
   for when more than one data variable is used in the entry time.
 }
-\item{log.time.transform}{
-  logical for whether to log-transform time when calculating the
-  design matrix for the derivative of S_0 with respect to time. 
-}
-  \item{reltol}{
-relative tolerance for the model convergence
-}
-  \item{trace}{
-integer for whether to provide trace information from the optim procedure
-}
   \item{cure}{
-logical for whether to model for cure (default=FALSE)
+logical for whether to model for cure using a non-mixture model (default=FALSE)
+}
+  \item{mixture}{
+logical for whether to model for cure using a mixture model (default=FALSE)
 }
   \item{contrasts}{
 an optional list. See the \code{contrasts.arg}
@@ -88,9 +93,6 @@ an optional list. See the \code{contrasts.arg}
   \item{subset}{
 an optional vector specifying a subset of observations to
   be used in the fitting process.
-}
-  \item{use.gr}{
-logical indicating whether to use gradients in the calculation
 }
   \item{\dots}{
   additional arguments to be passed to the \code{\link{mle2}}.
