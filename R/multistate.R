@@ -505,7 +505,7 @@ standardise.markov_msm <- function(x,
     dimnames(Pu) <- dimnames(Lu) <-
         list(time=x$time, state=state.names, coef=oldnames[[3]], obs=1)
     ## update x
-    x$newdata <- x$newdata[0,]
+    x$newdata <- x$newdata[0,,drop=FALSE]
     x$P <- P
     x$Pu <- Pu
     x$L <- L
