@@ -1,5 +1,6 @@
 #+title: Equations for the rstpm2 package
 #+author: Mark Clements
+#+latex_header: \usepackage[landscape,margin=1cm]{geometry}
 
 * Generalised survival model
 
@@ -8,7 +9,7 @@ logexpand:all;
 derivsubst:true;
 load(pdiff)$
 assume(t>0)$
-S : G(eta(t,z,theta));
+S : S0(t)*G(eta(t,z,theta));
 H : -log(S);
 h : diff(H,t);
 print("H:");
@@ -36,7 +37,7 @@ tex(diff(ll, beta));
 logexpand:all;
 derivsubst:true;
 load(pdiff)$
-S : pi(theta)+(1-pi(theta))*exp(-Hu(t,theta));
+S : S0(t)*(pi(theta)+(1-pi(theta))*exp(-Hu(t,theta)));
 H : -log(S);
 h : diff(H,t);
 h : subst(hu(t,theta), diff(Hu(t,theta),t), h);

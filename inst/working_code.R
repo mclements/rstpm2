@@ -18,6 +18,821 @@
 ##   require(bbmle)
 ## }
 
+library(survival)
+library(rstpm2)
+brcancer = transform(rstpm2::brcancer, id=1:(nrow(brcancer)/2))
+survreg(Surv(rectime,censrec==1)~hormon+cluster(id),data=brcancer)
+survreg(Surv(rectime,censrec==1)~hormon,data=brcancer)
+
+
+## Andreas's bug report
+library(rstpm2)
+two_states <- function(model, ...) {
+  transmat = matrix(c(NA,1,NA,NA),2,2,byrow=TRUE)
+  rownames(transmat) <- colnames(transmat) <- c("Initial","Final")
+  rstpm2::markov_msm(list(model), ..., trans = transmat)
+}
+## ERROR
+death = gsm(Surv(time,status)~factor(rx), 
+            data=survival::colon, subset=(etype==2), df=3)
+ts = two_states(death, newdata=data.frame(rx = levels(survival::colon$rx)), 
+                t = seq(0,2500, length = 51))
+sts <- standardise(ts)
+as.data.frame(sts)
+##
+## OK
+death = gsm(Surv(time,status)~factor(rx) + age, 
+            data=survival::colon, subset=(etype==2), df=3)
+ts = two_states(death, newdata=data.frame(rx="Obs",
+                                          age = c(65, 70, 75)), 
+                t = seq(0,2500, length = 51))
+sts <- standardise(ts)
+as.data.frame(sts)
+
+
+## predictions
+library(rstpm2)
+fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer, df=3, tvc=list(hormon=2))
+plot(fit, type="hr", newdata=data.frame(hormon=0), var="hormon")
+predict(fit, newdata=data.frame(hormon=0, rectime=c(250,500,1000)), type="hr", var="hormon", full=TRUE, se.fit=TRUE)
+##
+fit0 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer, df=3)
+anova(fit0,fit)
+
+Y = 10
+T = 1000
+poisson.test(Y,T)
+## log(theta)~normal
+exp(log(Y)+c(-1.96,1.96)/sqrt(Y))
+## theta~gamma
+qgamma(c(0.025,0.975), c(Y,Y+1), 1)
+Ys = rgamma(1e6, Y+1, 1)/T
+quantile(Ys, c(0.025,0.975))
+rates = exp(rnorm(1e5, log(Y), 1/sqrt(Y)))/T
+quantile(rates, c(0.025,0.975))
+
+## left truncated
+library(rstpm2)
+brcancer2 <- transform(brcancer,
+                       startTime=ifelse(hormon==0,rectime/2,0))
+##debug(stpm2)
+summary(fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2, df=3))
+tmp=predict(fit, newdata=data.frame(hormon=0), type="hazard", grid=TRUE, full=TRUE, se.fit=TRUE)
+
+
+library(rstpm2)
+library(biostat3)
+library(survival)
+colon = transform(biostat3::colon,
+                  male=0+(sex=="Male"),
+                  Unknown=0+(stage=="Unknown"),
+                  Localised=0+(stage=="Localised"),
+                  Regional=0+(stage=="Regional"),
+                  Distant=0+(stage=="Distant"))
+localised = subset(colon, stage=="Localised")
+system.time(fit1 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=4,
+                        data=localised, mixture=TRUE, tvc.integrated=TRUE,
+                        control=list(reltol=1e-12), tvc=list(male=2)))
+
+system.time(fit2 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=4,
+                        data=localised, tvc=list(male=2)))
+
+
+
+library(Rcpp)
+library(RcppArmadillo)
+sourceCpp(file = "~/src/R/rstpm2/inst/vintegrateRcpp2.cpp")
+vintegrate = function(f, lower, upper, ..., subdivisions = 100L, rel.tol=.Machine$double.eps^0.25,
+                       abs.tol=rel.tol) {
+    f <- match.fun(f)
+    ff <- function(x) f(x, ...)
+    ny = max(length(lower), length(upper))
+    if (ny>1 && length(lower)==1) lower = rep(lower,ny)
+    if (ny>1 && length(upper)==1) upper = rep(upper,ny)
+    limit <- as.integer(subdivisions)
+    if (limit < 1L || (abs.tol <= 0 && rel.tol < max(50 * .Machine$double.eps, 
+                                                     5e-29))) 
+        stop("invalid parameter values")
+    if (any(is.na(lower) | is.na(upper)))
+        stop("a limit is NA or NaN")
+    if (!(all(is.finite(lower)) || all(!is.finite(lower))))
+        stop("lower bounds are a mix of finite and infinite values")
+    if (!(all(is.finite(upper)) || all(!is.finite(upper))))
+        stop("upper bounds are a mix of finite and infinite values")
+    if (all(is.finite(lower)) && all(is.finite(upper))) {
+        res = vdqagsRcpp(ff, lower, upper, rel.tol, abs.tol, limit, ny)
+        res$value = drop(res$value)
+        res$abs.err = drop(res$abs.err)
+        res$abserr = NULL
+    } else {
+        if (all(is.finite(lower))) {
+            inf <- 1L
+            bound <- lower
+        }
+        else if (all(is.finite(upper))) {
+            inf <- -1L
+            bound <- upper
+        }
+        else {
+            inf <- 2L
+            bound <- rep(0,ny) # ignored:)
+        }
+        res = vdqagiRcpp(ff, bound, inf, rel.tol, abs.tol, limit, ny)
+        res$value = drop(res$value)
+        res$abserr = drop(res$abserr)
+    }
+    res
+}
+        
+vintegrate(exp, -Inf, 1)$value - exp(1) # ok (scalar)
+vintegrate(function(x) exp(c(x[1],2*x[2])), -Inf, c(1,1))$value - c(exp(1),exp(2)/2)
+vintegrate(exp, -Inf, 1:2)$value - exp(1:2) # ok (one function and two bounds)
+vintegrate(function(x) exp(x*1:2), -Inf, 1:2)$value - c(exp(1),exp(4)/2) # ok (vector function with vector bounds)
+vintegrate(function(x) exp(2*x), -Inf, 1:2)$value - exp(c(2,4))/2
+vintegrate(function(x) c(exp(x[1]),log(x[2])), 0, c(1,1))$value - c(exp(1)-1, -1)
+vintegrate(function(x) c(exp(x[1]),log(2*x[2])), c(0,1), 2:3)$value
+
+integrate(exp, 0, 2)
+integrate(function(x) log(2*x), 1, 3)
+
+vintegrate(function(x) c(exp(x[1]),log(2*x[2])), c(0,1), 2:3)
+
+test_vdqags()
+test_vdqags()$result- c(exp(1)-1, (exp(2)-1)/2, -1)
+
+tm1 <- system.time(for (i in 1:10000) integrate(function(x) exp(2*x), -Inf, 0))
+tm2 <- system.time(tmp <- vintegrate(function(x) exp(2*x), -Inf, rep(0,10000), subdivisions = 10))
+tm1/tm2
+head(tmp$abs.err)
+
+vintegrate(function(x) log(2*x), 0, 10)
+unclass(integrate(function(x) log(2*x), 0, 10))
+tm1 <- system.time(for (i in 1:10000) integrate(function(x) log(2*x), 0, 10))
+tm2 <- system.time(tmp <- vintegrate(function(x) log(2*x), rep(0,10000), 10, subdivisions = 20))
+tm1/tm2
+lapply(tmp,head)
+
+vrdqk21Rcpp(function(x) log(c(x,x)), 0, 1)
+## Rcpp::List vrdqk15Rcpp(Rcpp::Function f, double boun, int inf, double a, double b);
+           ## inf    - int
+           ##          indicating the kind of integration range involved
+           ##          inf = 1 corresponds to  (bound,+infinity),
+           ##          inf = -1            to  (-infinity,bound),
+           ##          inf = 2             to (-infinity,+infinity).
+vrdqk15Rcpp(f=function(x) exp(c(x,x)), boun=1.0, inf=-1, a=0, b=1)
+integrate(exp, -Inf, 1)
+
+(tmp <- vdqagsRcpp(function(x) log(c(x,2*x)), 0, 1, 1e-6, 1e-6, 15, 2))
+
+vdqagsRcpp(function(x) exp(c(x,2*x)), 0, 1, 1e-6, 1e-6, 50, 2)
+c(exp(1)-1,(exp(2)-1)/2)
+
+vdqagsRcpp(log, 0, 1, 1e-6, 1e-6, 50, 1)
+vdqagsRcpp(function(x) log(rep(x,2)), 0, 1, 1e-6, 1e-6, 50, 2)
+
+
+## tm1 <- system.time(vdqagsRcpp(function(x) log(rep(x,10000)), 0, 1, 1e-6, 1e-6, 50, 10000)) # FAILS
+tm1 <- system.time(vdqagsRcpp(function(x) log(rep(x,10000)), 0, 1, 1e-6, 1e-6, 10, 10000))
+tm2 <- system.time(for (i in 1:10000) integrate(log, 0, 1))
+tm2/tm1 # Only 3 times faster -- and does not scale for memory:(
+
+## Nicely behaved functions are faster:
+tm1 <- system.time(vdqagsRcpp(function(x) exp(rep(x,10000)), 0, 1, 1e-6, 1e-6, 10, 10000))
+tm2 <- system.time(for (i in 1:10000) integrate(exp, 0, 1))
+tm2/tm1 # 30 times faster:)
+
+
+
+
+## testing for voptimize
+library(rstpm2)
+voptimize(function(x) {y=dnorm(x, c(0,1), log=TRUE); cat("x:",x,"\n","y:",y,"\n"); y}, lower=c(-5,-5), upper=c(5,5), maximum=TRUE, tol=1e-5)
+
+set.seed(12345)
+z=rnorm(1e4)
+tm1 <- system.time(tmp <- voptimize(function(x) dnorm(x, z, log=TRUE), lower=c(-10,-10), upper=c(10,10), maximum=TRUE, tol=1e-5))
+tm2 <- system.time(for (i in 1:length(z)) optimize(function(x) dnorm(x, z[i], log=TRUE), lower=c(-10,-10), upper=c(10,10), maximum=TRUE, tol=1e-5))
+tm2/tm1
+
+## Conditional distributions
+set.seed(12345)
+grs_variance = 0.68 ## variance on the log scale or on the frailty scale??
+other_variance = 1.14
+grs_log_mean = -grs_variance/2
+other_log_mean = -other_variance/2
+grs_log_sd = sqrt(grs_variance)
+other_log_sd = sqrt(grs_variance)
+## conditional on the sum (on the log scale), what is the GRS?
+f1g = function(g,k,mu1=0,sigma1=1,mu2=0,sigma2=1)
+    integrate(function(y1) g(y1)*dnorm(y1,mu1,sigma1)*dnorm(k-y1,mu2,sigma2), -Inf, Inf)$value
+f1c = function(y1,k,mu1=0,sigma1=1,mu2=0,sigma2=1) {
+    denom = f1g(function(x) 1, k, mu1, sigma1, mu2, sigma2)
+    dnorm(y1,mu1,sigma1)*dnorm(k-y1,mu2,sigma2)/denom
+}
+dbinorm_total = function(x,k,mu1=0,sigma1=1,mu2=0,sigma2=1)
+    dnorm(x,mu1,sigma1)*dnorm(k-x,mu2,sigma2)
+integrate(f1c, -Inf, Inf, k=2,mu1=1,sigma1=2) # check: value==1
+print(muc<-integrate(function(x) x*f1c(x,k=2,mu1=1,sigma1=2), -Inf, Inf))
+print(varc<-integrate(function(x) (x-muc$value)^2*f1c(x,k=2,mu1=1,sigma1=2), -Inf, Inf))
+y1=seq(-10,10,length=1001)
+plot(y1, f1c(y1, 2,mu1=1,sigma1=2), type="l")
+lines(y1,dnorm(y1,muc$value,sqrt(varc$value)),col="blue")
+abline(v=1.8,lty=2)
+##
+set.seed(12345)
+r1 = rnorm(1e5, muc$value, sqrt(varc$value))
+r2 = 2-r1
+c(mean(r1),sd(r1))
+c(mean(r2),sd(r2))
+plot(density(r1),xlim=c(-10,10))
+lines(density(r2),lty=2)
+
+library(Rcpp)
+code = "#include <R_ext/Applic.h>
+#include <Rcpp.h>
+struct sbinorm_total { double k, mu1, sd1, mu2, sd2, norm, mean; };
+void dbinorm_total(double *x, int n, void *ex) {
+  sbinorm_total *p = (sbinorm_total *) ex;
+  for (int i=0; i<n; ++i) 
+    x[i] = R::dnorm(x[i], p->mu1, p->sd1, 0)*R::dnorm(p->k-x[i], p->mu2, p->sd2, 0);
+}
+void dbinorm_total_expected(double *x, int n, void *ex) {
+  sbinorm_total *p = (sbinorm_total *) ex;
+  // for (int i=0; i<n; ++i) Rprintf(\"%g\\n\",x[i]);
+  for (int i=0; i<n; ++i) 
+    x[i] = x[i]*R::dnorm(x[i], p->mu1, p->sd1, 0)*R::dnorm(p->k-x[i], p->mu2, p->sd2, 0)/p->norm;
+}
+void dbinorm_total_var(double *x, int n, void *ex) {
+  sbinorm_total *p = (sbinorm_total *) ex;
+  // for (int i=0; i<n; ++i) Rprintf(\"%g\\n\",x[i]);
+  for (int i=0; i<n; ++i) 
+    x[i] = (x[i]-p->mean)*(x[i]-p->mean)*R::dnorm(x[i], p->mu1, p->sd1, 0)*R::dnorm(p->k-x[i], p->mu2, p->sd2, 0)/p->norm;
+}
+// [[Rcpp::export]]
+Rcpp::NumericVector test(Rcpp::NumericVector x, double k=2.0, double mu1=0.0, double sd1=1.0, double mu2=0.0, double sd2=1.0) {
+  double * xx = &x[0];
+  int n = x.size();
+  sbinorm_total p{k, mu1, sd1, mu2, sd2, 0.0, 0.0};
+  dbinorm_total(&xx[0], n, (void *) &p);
+  Rcpp::NumericVector out(xx, xx+n);
+  return out;
+}
+// [[Rcpp::export]]
+double binorm_total_norm(double k=2.0, double mu1=0.0, double sd1=1.0, double mu2=0.0, double sd2=1.0) {
+  sbinorm_total p{k, mu1, sd1, mu2, sd2};
+  int inf=2, neval=0, ier=0, limit=1000, last=0, lenw;
+  double epsabs = 1.0e-6, epsrel = 1.0e-6, result = 0.0,
+    abserr = 0.0, bound = 0.0;
+  lenw = 4 * limit;
+  int *iwork =   (int *) R_alloc(limit, sizeof(int));
+  double *work = (double *) R_alloc(lenw,  sizeof(double));
+  Rdqagi(dbinorm_total, (void *) &p, &bound, &inf,
+            &epsabs, &epsrel,
+            &result, &abserr, &neval, &ier,
+            &limit, &lenw, &last,
+            iwork, work);
+  return result;
+}
+// [[Rcpp::export]]
+double binorm_total_expected(double k=2.0, double mu1=0.0, double sd1=1.0, double mu2=0.0, double sd2=1.0) {
+  int inf=2, neval=0, ier=0, limit=1000, last=0, lenw;
+  double epsabs = 1.0e-4, epsrel = 1.0e-4, result = 0.0, 
+    abserr = 0.0, bound = 0.0;
+  lenw = 4 * limit;
+  int *iwork =   (int *) R_alloc(limit, sizeof(int));
+  double *work = (double *) R_alloc(lenw,  sizeof(double));
+  double norm=binorm_total_norm(k,mu1,sd1,mu2,sd2);
+  sbinorm_total p2{k, mu1, sd1, mu2, sd2, norm, 0.0};
+  Rdqagi(dbinorm_total_expected, (void *) &p2, &bound, &inf,
+            &epsabs, &epsrel,
+            &result, &abserr, &neval, &ier,
+            &limit, &lenw, &last,
+            iwork, work);
+  return result;
+}
+// [[Rcpp::export]]
+Rcpp::NumericVector binorm_total_sd(double k=2.0, double mu1=0.0, double sd1=1.0, double mu2=0.0, double sd2=1.0) {
+  int inf=2, neval=0, ier=0, limit=1000, last=0, lenw;
+  double epsabs = 1.0e-6, epsrel = 1.0e-6, result = 0.0, 
+    abserr = 0.0, bound = 0.0;
+  lenw = 4 * limit;
+  int *iwork =   (int *) R_alloc(limit, sizeof(int));
+  double *work = (double *) R_alloc(lenw,  sizeof(double));
+  sbinorm_total p{k, mu1, sd1, mu2, sd2, 0.0, 0.0};
+  Rdqagi(dbinorm_total, (void *) &p, &bound, &inf,
+            &epsabs, &epsrel,
+            &result, &abserr, &neval, &ier,
+            &limit, &lenw, &last,
+            iwork, work);
+  p.norm = result;
+  Rdqagi(dbinorm_total_expected, (void *) &p, &bound, &inf,
+            &epsabs, &epsrel,
+            &result, &abserr, &neval, &ier,
+            &limit, &lenw, &last,
+            iwork, work);
+  p.mean = result;
+  Rdqagi(dbinorm_total_var, (void *) &p, &bound, &inf,
+            &epsabs, &epsrel,
+            &result, &abserr, &neval, &ier,
+            &limit, &lenw, &last,
+            iwork, work);
+  Rcpp::NumericVector out{p.mean, std::sqrt(result)};
+  return out;
+}
+// [[Rcpp::export]]
+Rcpp::NumericMatrix test2(Rcpp::NumericVector k, double mu1=0.0, double sd1=1.0, double mu2=0.0, double sd2=1.0) {
+  Rcpp::NumericMatrix out(k.size(),3);
+  Rcpp::NumericVector y(2);
+  for (int i=0; i<k.size(); ++i) {
+    y = binorm_total_sd(k[i], mu1, sd1, mu2, sd2);
+    out(i,0) = k[i];
+    out(i,1) = y[0];
+    out(i,2) = y[1];
+  }
+  return out;
+}
+"
+sourceCpp(code=code)
+test(0:1,2,1,2,0,1)
+dbinorm_total(0:1, 2, 1, 2)
+binorm_total_norm(2,1,2,0,1)
+f1g(function(x) 1, 2, mu1=1, sigma1=2, mu2=0, sigma2=1)
+binorm_total_expected(2,1,2)
+print(mu <- integrate(function(x) x*f1c(x,k=2,mu1=1,sigma1=2), -Inf, Inf))
+binorm_total_var(2,1,2)
+integrate(function(x) (x-mu$value)^2*f1c(x,k=2,mu1=1,sigma1=2), -Inf, Inf)
+
+binorm_total_sd(k=2,mu1=1,sd1=2,mu2=0,sd2=1)
+binorm_total_sd(k=0,mu1=0,sd1=1,mu2=0,sd2=1)
+
+
+print(mu <- integrate(function(x) x*f1c(x,k=0,mu1=1,sigma1=2), -Inf, Inf))
+binorm_total_var(0,1,2)
+integrate(function(x) (x-mu$value)^2*f1c(x,k=0,mu1=1,sigma1=2), -Inf, Inf)
+
+system.time(test2(seq(-6,6,length=1e5), mu1=grs_log_mean, sd1=grs_log_sd, mu2=other_log_mean, sd2=other_log_sd))
+system.time(tmp <- test2(seq(-6,6,0.1), mu1=grs_log_mean, sd1=grs_log_sd, mu2=other_log_mean, sd2=other_log_sd))
+tmp
+
+y = rnorm(1e5, grs_log_mean+other_log_mean, sqrt(grs_log_sd^2+other_log_sd^2))
+range(y)
+
+system.time(for (i in 1:1000) binorm_total_var(i))
+
+## Integration
+f = function(x) {cat(sort(x), "\n"); log(x)}
+integrate(f, 0, 1)
+f = (function() {n=0; xs = c(); function(x) {n <<- n+1; xs <<- c(xs,x); log(x)}})()
+integrate(f, 0, 1)
+get("n",environment(f))
+length(get("xs",environment(f)))
+plot(density(get("xs",environment(f)),from=0,to=1))
+##
+stats::integrate(log,0,1)
+rmutil::int(function(x) log(x),0,1, eps=1e-10)+1
+system.time(for (i in 1:100) integrate(log,0,1))
+
+myintegrate = function(f, a, b, control=list()) {
+    control = modifyList(list(tol=1e-8,maxn=20, debug=FALSE),
+                         control)
+    xi = c(.995657163025808080735527280689003,
+            .973906528517171720077964012084452,
+            .930157491355708226001207180059508,
+            .865063366688984510732096688423493,
+            .780817726586416897063717578345042,
+            .679409568299024406234327365114874,
+            .562757134668604683339000099272694,
+            .433395394129247190799265943165784,
+            .294392862701460198131126603103866,
+            .14887433898163121088482600112972,
+            0.)
+    xi = c(-xi, xi[10:1])
+    w = c(.066671344308688137593568809893332,
+	    .149451349150580593145776339657697,
+	    .219086362515982043995534934228163,
+	    .269266719309996355091226921569469,
+	    .295524224714752870173892994651338)
+    w = c(w, w[5:1]) / 2
+    wk = c(.011694638867371874278064396062192,
+            .03255816230796472747881897245939,
+            .05475589657435199603138130024458,
+            .07503967481091995276704314091619,
+            .093125454583697605535065465083366,
+            .109387158802297641899210590325805,
+            .123491976262065851077958109831074,
+            .134709217311473325928054001771707,
+            .142775938577060080797094273138717,
+            .147739104901338491374841515972068,
+            .149445554002916905664936468389821)
+    wk = c(wk, wk[10:1]) / 2
+    step = function(a,b,n) {
+        if (control$debug)
+            cat(sprintf("(%g,%g), n=%i\n",a,b,n))
+        fx = f ( a + (b - a ) * ( xi + 1)/2)
+        qb1 = (b - a ) * sum(w * fx[seq.int(2,20,2)])
+        qa1 = (b - a ) * sum(wk * fx)
+        xi2 = c( ( xi - 1)/2 , ( xi + 1)/2 )
+        fx2 = f ( a + (b - a )*( xi2 +1)/2)
+        qb2 = (b - a ) * sum(c( w , w ) * fx2[ c(seq(2,20,2) , seq(23,41,2))]) / 2
+        qa2 = (b - a ) * sum(c( wk , wk ) * fx2) / 2
+        int = qa2
+        qab1 = qa1 - qb1 ; qaa = qa2 - qa1 ;
+        qab2 = qa2 - qb2 ; qbb = qb2 - qb1 ;
+        noise = 21 * .Machine$double.eps * (b - a ) * max ( abs( fx ))
+        if (abs( qab1 ) <= noise) qab1 = 0
+        if (abs( qab2 ) <= noise) qab2 = 0
+        if (abs( qaa ) <= noise) qaa = 0
+        if (abs( qbb ) <= noise) qbb = 0
+        if ((qab1==0 || (0<=qab2/qab1 && qab2/qab1 <= 1)) &&
+            (qaa==0 || abs(qaa) <= abs(qbb))) {
+            serr = if(qaa==0) 0 else qab2*qaa/(qbb-qaa)
+        } else serr = 2*tol
+        attr(int,"serr") = serr
+        attr(int,"err") = abs(serr)
+        if (abs(serr)<=control$tol || n>=control$maxn) {
+            if (n>=control$maxn) warning("Exceeded the maximum recursive depth")
+            return(int)
+        } else {
+            m = a+(b-a)/2
+            int1 = step(a, m, n+1)
+            int2 = step(m, b, n+1)
+            int = int1+int2
+            attr(int,"serr") = attr(int1,"serr")+attr(int2,"serr")
+            attr(int,"err") = attr(int1,"err")+attr(int2,"err")
+            return(int)
+        }
+    }
+    out = step(a,b,0)
+    out+attr(out,"serr")
+}
+myintegrate(log,0,1,control=list(tol=1e-12)) + 1
+
+## Based on gsl/integration/{qag.c,qk.c}: see integration.cpp and vintegration*.cpp
+library(Rcpp)
+library(RcppArmadillo)
+sourceCpp(file="~/src/R/rstpm2/inst/vintegrationRcpp.cpp")
+vintegrate = function(f, a, b, abstol=1e-8, reltol=1e-8, maxit=1000) {
+    ff = function(x) f(a+(b-a)*x)
+    res = vintegrationRcpp(ff, abstol, reltol, maxit)
+    res$value = drop(res$value*(b-a))
+    res$abserr = drop(res$abserr*(b-a))
+    res
+}
+vintegrate(log, 0, 1)
+vintegrate(function(x) log(c(x,x,x,x)), 0, 1)
+system.time(vintegrate(function(x) rep(log(x),100), 0, 1))
+system.time(for (i in 1:100) integrate(log, 0, 1))
+
+sourceCpp(file="~/src/R/rstpm2/inst/integrateRcpp.cpp")
+integrateRcpp = function(f, lower, upper, ..., rel.tol=.Machine$double.eps^0.25, abs.tol=rel.tol, subdivisions = 100L) {
+    f <- match.fun(f)
+    ff <- function(x) f(x, ...)
+    limit <- as.integer(subdivisions)
+    if (limit < 1L || (abs.tol <= 0 && rel.tol < max(50 * .Machine$double.eps, 
+                                                     5e-29))) 
+        stop("invalid parameter values")
+    stopifnot(length(lower) == 1, length(upper) == 1)
+    dqagsRcpp(f, lower, upper, abs.tol, rel.tol, subdivisions)
+}
+integrateRcpp(log, 0, 1)
+rdqk21Rcpp(function(x) {cat(x,"\n"); exp(x)}, 0, 1)
+integrate(function(x) {cat(x,"\n"); exp(x)}, 0, 1)
+
+sourceCpp(file="~/src/R/rstpm2/inst/vintegrateRcpp.cpp")
+vintegrateRcpp = function(f, lower, upper, ..., rel.tol=.Machine$double.eps^0.25, abs.tol=rel.tol, subdivisions = 100L) {
+    f <- match.fun(f)
+    ff <- function(x) f(lower+(upper-lower)*x, ...)
+    fmid = ff(0.5)
+    limit <- as.integer(subdivisions)
+    if (limit < 1L || (abs.tol <= 0 && rel.tol < max(50 * .Machine$double.eps, 
+                                                     5e-29))) 
+        stop("invalid parameter values")
+    stopifnot(length(lower) == 1, length(upper) == 1)
+    res = vdqagsRcpp(ff, lower, upper, abs.tol, rel.tol, subdivisions)
+    
+}
+vintegrateRcpp(log, 0, 1)
+integrate(function(x) {cat(x,"\n"); exp(x)}, 0, 1)
+
+rdqk21Rcpp(function(x) {cat(x,"\n"); log(x)}, 0, 1)
+vrdqk21Rcpp(function(x) {cat(x,"\n"); log(x)}, 0, 1)
+vrdqk21Rcpp(function(x) log(c(x,x)), 0, 1)
+
+
+## Based on https://github.com/jacobwilliams/quadpack/blob/master/src/quadpack_generic.F90
+dqk21 = function(f, a, b, ...) {
+    ## n = 11
+    xgk = c(.995657163025808080735527280689003,
+            .973906528517171720077964012084452,
+            .930157491355708226001207180059508,
+            .865063366688984510732096688423493,
+            .780817726586416897063717578345042,
+            .679409568299024406234327365114874,
+            .562757134668604683339000099272694,
+            .433395394129247190799265943165784,
+            .294392862701460198131126603103866,
+            .14887433898163121088482600112972,
+            0.)
+    ## xgk = c(-xgk, xgk[10:1])
+    wgk = c(.011694638867371874278064396062192,
+            .03255816230796472747881897245939,
+            .05475589657435199603138130024458,
+            .07503967481091995276704314091619,
+            .093125454583697605535065465083366,
+            .109387158802297641899210590325805,
+            .123491976262065851077958109831074,
+            .134709217311473325928054001771707,
+            .142775938577060080797094273138717,
+            .147739104901338491374841515972068,
+            .149445554002916905664936468389821)
+    ## wgk = c(wgk, wgk[10:1]) / 2
+    wg = c(.066671344308688137593568809893332,
+	    .149451349150580593145776339657697,
+	    .219086362515982043995534934228163,
+	    .269266719309996355091226921569469,
+           .295524224714752870173892994651338)
+    ## wg = c(wg, wg[5:1]) / 2
+    fv1 <- fv2 <- vector("numeric",10)
+    epmach = .Machine$double.eps
+    centr = 0.5*(a+b)
+    hlgth = 0.5*(b-a)
+    dhlgth = abs(hlgth)
+    ##
+    resg = 0.0
+    fc = f(centr, ...)
+    resk = wgk[11]*fc
+    Resabs = abs(resk)
+    for (j in 1:5) {
+        jtw = 2L*j
+        absc = hlgth*xgk[jtw]
+        fval1 = f(centr - absc, ...)
+        fval2 = f(centr + absc, ...)
+        fv1[jtw] = fval1
+        fv2[jtw] = fval2
+        fsum = fval1 + fval2
+        resg = resg + wg[j]*fsum
+        resk = resk + wgk[jtw]*fsum
+        Resabs = Resabs + wgk[jtw]*(abs(fval1) + abs(fval2))
+    }
+    for (j in 1:5) {
+        jtwm1 = 2L*j - 1L
+        absc = hlgth*xgk[jtwm1]
+        fval1 = f(centr - absc, ...)
+        fval2 = f(centr + absc, ...)
+        fv1[jtwm1] = fval1
+        fv2[jtwm1] = fval2
+        fsum = fval1 + fval2
+        resk = resk + wgk[jtwm1]*fsum
+        Resabs = Resabs + wgk[jtwm1]*(abs(fval1) + abs(fval2))
+    }
+    reskh = resk*0.5
+    Resasc = wgk[11]*abs(fc - reskh)
+    for (j in 1:10) 
+        Resasc = Resasc + wgk[j]*(abs(fv1[j] - reskh) + abs(fv2[j] - reskh))
+    Result = resk*hlgth
+    Resabs = Resabs*dhlgth
+    Resasc = Resasc*dhlgth
+    Abserr = abs((resk - resg)*hlgth)
+    if (Resasc != 0.0 && Abserr != 0.0) 
+            Abserr = Resasc*min(1.0, (200.0*Abserr/Resasc)^1.5)
+    if (Resabs > uflow/(50.0*epmach))
+        Abserr = max((epmach*50.0)*Resabs, Abserr)
+    c(Result=Result, Abserr=Abserr, Resabs=Resabs, Resasc=Resasc)
+}
+dqage = function(f, a, b, Epsabs=1e-10, Epsrel=1e-10, Limit=15L, ...) {
+    epmach = .Machine$double.eps
+    uflow = .Machine$double.xmin
+    Key = 2
+    Alist <- Blist <- Elist <- Rlist <- vector("numeric", Limit)
+    Iord <- vector("integer", Limit)
+    Ier = 0L
+    Neval = 0L
+    Last = 0L
+    Result = 0.0
+    Abserr = 0.0
+    Alist[1] = a
+    Blist[1] = b
+    Rlist[1] = 0.0
+    Elist[1] = 0.0
+    Iord[1] = 0L
+    if (Epsabs <= 0.0 && Epsrel < max(50.0*epmach, 0.5e-28)) Ier = 6L
+    if (Ier != 6) then
+    Neval = 0L
+    res = dqk21(f, a, b, ...)
+    Last = 1L
+    Rlist[1] = res$Result
+    Elist[1] = res$Abserr
+    Iord[1] = 1L
+    errbnd = max(Epsabs, Epsrel*abs(Result))
+    if (Abserr <= 50.0*epmach*defabs && Abserr > errbnd) Ier = 2L
+    if (Limit == 1) Ier = 1L
+    if (! (Ier != 0 || (Abserr <= errbnd && Abserr != resabs) 
+        || Abserr == 0.0)) {
+        errmax = Abserr
+        maxerr = 1L
+        area = Result
+        errsum = Abserr
+        nrmax = 1L
+        iroff1 = 0L
+        iroff2 = 0L
+        for (Last in 2:Limit) {
+            a1 = Alist[maxerr]
+            b1 = 0.5*(Alist[maxerr] + Blist[maxerr])
+            a2 = b1
+            b2 = Blist[maxerr]
+            ## call dqk21(f, a1, b1, area1, error1, resabs, defab1)
+            ## call dqk21(f, a2, b2, area2, error2, resabs, defab2)
+            ## c(Result=Result, Abserr=Abserr, Resabs=Resabs, Resasc=Resasc)
+            res1 = dqk21(f, a1, b1, ...)
+            area1 = res1$Result
+            error1 = res1$Abserr
+            defab1 = res1$Resasc
+            res2 = dqk21(f, a2, b2, ...)
+            area2 = res2$Result
+            error2 = res2$Abserr
+            defab2 = res2$Resasc
+            Neval = Neval + 1L
+            area12 = area1 + area2
+            erro12 = error1 + error2
+            errsum = errsum + erro12 - errmax
+            area = area + area12 - Rlist[maxerr]
+            if (defab1 != error1 && defab2 != error2) {
+                if (abs(Rlist[maxerr] - area12) <= 0.1e-4*abs(area12) 
+                            && erro12 >= 0.99*errmax) iroff1 = iroff1 + 1L
+                if (Last > 10 && erro12 > errmax) iroff2 = iroff2 + 1L
+            }
+            Rlist[maxerr] = area1
+            Rlist[Last] = area2
+            errbnd = max(Epsabs, Epsrel*abs(area))
+            if (errsum > errbnd) {
+                if (iroff1 >= 6L || iroff2 >= 20L) Ier = 2L
+                if (Last == Limit) Ier = 1L
+                if (max(abs(a1), abs(b2)) <=
+                    (1.0 + 100.0*epmach)*(abs(a2) + 1000.0*uflow)) Ier = 3L
+            }
+            if (error2 > error1) {
+                Alist[maxerr] = a2
+                Alist[Last] = a1
+                Blist[Last] = b1
+                Rlist[maxerr] = area2
+                Rlist[Last] = area1
+                Elist[maxerr] = error2
+                Elist[Last] = error1
+            } else {
+                Alist[Last] = a2
+                Blist[maxerr] = b1
+                Blist[Last] = b2
+                Elist[maxerr] = error1
+                Elist[Last] = error2
+            }
+        }
+    }
+}
+
+myintegrate = function(f, a, b, control=list()) {
+    control = modifyList(list(tol=1e-8,maxn=20, debug=FALSE),
+                         control)
+    step = function(a,b,n) {
+        if (control$debug)
+            cat(sprintf("(%g,%g), n=%i\n",a,b,n))
+        fx = f ( a + (b - a ) * ( xi + 1)/2)
+        qb1 = (b - a ) * sum(w * fx[seq.int(2,20,2)])
+        qa1 = (b - a ) * sum(wk * fx)
+        xi2 = c( ( xi - 1)/2 , ( xi + 1)/2 )
+        fx2 = f ( a + (b - a )*( xi2 +1)/2)
+        qb2 = (b - a ) * sum(c( w , w ) * fx2[ c(seq(2,20,2) , seq(23,41,2))]) / 2
+        qa2 = (b - a ) * sum(c( wk , wk ) * fx2) / 2
+        int = qa2
+        qab1 = qa1 - qb1 ; qaa = qa2 - qa1 ;
+        qab2 = qa2 - qb2 ; qbb = qb2 - qb1 ;
+        noise = 21 * .Machine$double.eps * (b - a ) * max ( abs( fx ))
+        if (abs( qab1 ) <= noise) qab1 = 0
+        if (abs( qab2 ) <= noise) qab2 = 0
+        if (abs( qaa ) <= noise) qaa = 0
+        if (abs( qbb ) <= noise) qbb = 0
+        if ((qab1==0 || (0<=qab2/qab1 && qab2/qab1 <= 1)) &&
+            (qaa==0 || abs(qaa) <= abs(qbb))) {
+            serr = if(qaa==0) 0 else qab2*qaa/(qbb-qaa)
+        } else serr = 2*tol
+        attr(int,"serr") = serr
+        attr(int,"err") = abs(serr)
+        if (abs(serr)<=control$tol || n>=control$maxn) {
+            if (n>=control$maxn) warning("Exceeded the maximum recursive depth")
+            return(int)
+        } else {
+            m = a+(b-a)/2
+            int1 = step(a, m, n+1)
+            int2 = step(m, b, n+1)
+            int = int1+int2
+            attr(int,"serr") = attr(int1,"serr")+attr(int2,"serr")
+            attr(int,"err") = attr(int1,"err")+attr(int2,"err")
+            return(int)
+        }
+    }
+    out = step(a,b,0)
+    out+attr(out,"serr")
+}
+myintegrate(log,0,1,control=list(tol=1e-12)) + 1
+
+
+mintegrate = function(f, a, b, control=list(), ...) {
+    stopifnot(length(f(a))==length(a),
+              length(a) == length(b))
+    control = modifyList(list(tol=1e-8,maxn=20, debug=FALSE),
+                         control)
+    xi = c(.995657163025808080735527280689003,
+            .973906528517171720077964012084452,
+            .930157491355708226001207180059508,
+            .865063366688984510732096688423493,
+            .780817726586416897063717578345042,
+            .679409568299024406234327365114874,
+            .562757134668604683339000099272694,
+            .433395394129247190799265943165784,
+            .294392862701460198131126603103866,
+            .14887433898163121088482600112972,
+            0.)
+    xi = c(-xi, xi[10:1])
+    w = c(.066671344308688137593568809893332,
+	    .149451349150580593145776339657697,
+	    .219086362515982043995534934228163,
+	    .269266719309996355091226921569469,
+	    .295524224714752870173892994651338)
+    w = c(w, w[5:1]) / 2
+    wk = c(.011694638867371874278064396062192,
+            .03255816230796472747881897245939,
+            .05475589657435199603138130024458,
+            .07503967481091995276704314091619,
+            .093125454583697605535065465083366,
+            .109387158802297641899210590325805,
+            .123491976262065851077958109831074,
+            .134709217311473325928054001771707,
+            .142775938577060080797094273138717,
+            .147739104901338491374841515972068,
+            .149445554002916905664936468389821)
+    wk = c(wk, wk[10:1]) / 2
+    width = b-a
+    olda = a
+    oldb = b
+    ff = function(x) f(olda+x*width, ...)
+    ## fmid = ff(0.5)
+    step = function(a,b,n,side) {
+        if (control$debug)
+            cat(sprintf("(%g,%g), n=%i\n",a,b,n))
+        fx = t(sapply(xi, function(xii) ff ( a + (b - a ) * ( xii + 1)/2)))
+        qb1 = (b - a ) * colSums(w * fx[seq.int(2,20,2),])
+        qa1 = (b - a ) * colSums(wk * fx)
+        xi2 = c( ( xi - 1)/2 , ( xi + 1)/2 )
+        fx2 = t(sapply(xi2, function(xii2) ff ( a + (b - a )*( xii2 +1)/2)))
+        qb2 = (b - a ) * colSums(c( w , w ) * fx2[ c(seq(2,20,2) , seq(23,41,2)),]) / 2
+        qa2 = (b - a ) * colSums(c( wk , wk ) * fx2) / 2
+        int = qa2
+        qab1 = qa1 - qb1 ; qaa = qa2 - qa1 ;
+        qab2 = qa2 - qb2 ; qbb = qb2 - qb1 ;
+        noise = 21 * .Machine$double.eps * (b - a ) * max ( abs( fx ))
+        qab1 = ifelse(abs( qab1 ) <= noise, 0, qab1)
+        qab2 = ifelse(abs( qab2 ) <= noise, 0, qab2)
+        qaa = ifelse(abs( qaa ) <= noise, 0, qaa)
+        qbb = ifelse(abs( qbb ) <= noise, 0, qbb)
+        serr = ifelse((qab1==0 | (0<=qab2/qab1 & qab2/qab1 <= 1)) &
+                      (qaa==0 | abs(qaa) <= abs(qbb)),
+               ifelse(qaa==0, 0, qab2*qaa/(qbb-qaa)),
+               rep(2*tol,length(qaa)))
+        attr(int,"serr") = serr
+        attr(int,"err") = abs(serr)
+        if (all(abs(serr)<=control$tol) || n>=control$maxn) {
+            if (n>=control$maxn && side==TRUE) warning("Exceeded the maximum recursive depth")
+            return(int)
+        } else {
+            m = a+(b-a)/2
+            int1 = step(a, m, n+1, TRUE)
+            int2 = step(m, b, n+1, FALSE)
+            int = int1+int2
+            attr(int,"serr") = attr(int1,"serr")+attr(int2,"serr")
+            attr(int,"err") = attr(int1,"err")+attr(int2,"err")
+            return(int)
+        }
+    }
+    out = step(0,1,0, TRUE)
+    out+attr(out,"serr")
+}
+system.time(mintegrate(function(x) c(rep(exp(x),10000), log(x)),c(rep(0,10000),1),c(rep(1,10000),2),control=list(tol=1e-12)) - c(rep(exp(1)-1,10000), 2*log(2) - 1))
+system.time(mintegrate(function(x) c(rep(exp(x),10), log(x)),c(rep(0,10),1),c(rep(1,10),2),control=list(tol=1e-12)) - c(rep(exp(1)-1,10), 2*log(2) - 1))
+system.time({for (i in 1:10000) integrate(log,0,1); integrate(exp,0,1)})
+
+system.time(mintegrate(function(x) c(exp(x[1:10000]), log(x[11])),c(rep(0,10000),1),c(rep(1,10000),2),control=list(tol=1e-12)) - c(rep(exp(1)-1,10000), 2*log(2) - 1))
+mintegrate(function(x) c(exp(x[1:10]), log(x[11])),c(rep(0,10),1),c(rep(1,10),2),control=list(tol=1e-12)) - c(rep(exp(1)-1,10), 2*log(2) - 1)
+
+myintegrate(function(x) rep(1,length(x)),0,1) - 1
+myintegrate(function(x) x,0,1) - 1/2
+myintegrate(function(x) x^2,0,1) - 1/3
+myintegrate(function(x) x^3,0,1) - 1/4
+myintegrate(function(x) x*log(x),0,1,control=list(tol=1e-6)) + 1/4
+myintegrate(function(x) 1/x,0,1) - 1
+myintegrate(function(x) 1/sqrt(x),0,1) - 2
+integrate(function(x) 1/sqrt(x),0,1)
+integrate(function(x) 1/sqrt(x),0,1)$value -2
+
+
 ## AFT model fitting with linear constraints
 library(rstpm2)
 library(biostat3)
@@ -30,12 +845,17 @@ colon = transform(biostat3::colon,
                   Distant=0+(stage=="Distant"))
 localised = subset(colon, stage=="Localised")
 
+system.time(fit1 <- stpm2(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + factor(stage), df=4, data=colon))
+pred=predict(fit1,newdata=transform(colon,stage="Localised"),type='meansurvdiff',grid=TRUE,full=TRUE,se.fit=TRUE,exposed=function(data) transform(data, stage="Distant"))
+
 ## Get the penalty matrix for the baseline splines
-system.time(fit1 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc.integrated=FALSE, reltol=1e-12, tvc=list(male=2))) # 10.3s
-system.time(fit1a <- aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc.integrated=FALSE, reltol=1e-12, control=list(constrOptim=TRUE), tvc=list(male=2))) # 13.5s
+system.time(fit1 <- aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=4, data=localised, mixture=TRUE, tvc.integrated=TRUE, control=list(reltol=1e-12), tvc=list(male=2))) # 10.3s
+plot(fit1, newdata=data.frame(age=50, male=1))
+system.time(fit1a <- aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50), df=4, data=localised, mixture=TRUE, tvc.integrated=FALSE, control=list(constrOptim=TRUE, reltol=1e-12), tvc=list(male=2))) # 13.5s
 fit1
 fit1@args$negll(coef(fit1))
 fit1@args$negll(-coef(fit1))
+fit1@args$negll(coef(fit1a))
 fit1@args$gradient(coef(fit1))
 fit1@args$gradient(coef(fit1a))
 fit1@args$gradient(-coef(fit1))
@@ -77,8 +897,15 @@ plot(coef(fit1a)/al1$par)
 plot(fit1b$par/al1$par)
 plot(nl1$par/al1$par)
 
-aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=8, data=localised, mixture=TRUE, tvc=list(male=2), reltol=1e-12, init=-coef(fit1)) # wrong:(
+aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50), df=8, data=localised, mixture=TRUE, tvc=list(male=2), reltol=1e-12, init=-coef(fit1)) # wrong:(
 
+print(fit1@args$negll(coef(fit1)), digits=12)
+print(fit1@args$negll(coef(fit1a)), digits=12)
+print(fit1@args$negll(fit1b$par), digits=12)
+print(fit1@args$negll(coef(fit1b)), digits=12)
+
+coef(fit1)
+coef(fit1a)
 
 aft(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised)
 aft_mixture(Surv(surv_mm, status=="Dead: cancer") ~ I(age-50) + male, df=2, data=localised)
@@ -2665,7 +3492,8 @@ hiv2 <- transform(hiv,
                          ifelse(Event==0,NA,
                                 Right)))
 library(rstpm2)
-summary(stpm2(Surv(Left,Right,Event,type="interval")~Stage, data=hiv2, df=2))[2]
+summary(stpm2(Surv(Left,Right,Event,type="interval")~Stage, data=hiv2, df=2))
+summary(stpm2(Surv(Left,Right,Event,type="interval")~Stage, data=hiv2, df=1))
 survreg(Surv(Left, Right, Event, type = "interval")~Stage, data=hiv2,dist="exponential")
 library(rms)
 psm(Surv(Left, Right, Event, type = "interval")~Stage, data=hiv2,dist="exponential")

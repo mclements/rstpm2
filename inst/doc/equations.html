@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2023-05-08 Mon 11:12 -->
+<!-- 2023-06-03 Sat 16:55 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Equations for the rstpm2 package</title>
@@ -269,26 +269,26 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org15c5f64">1. Generalised survival model</a></li>
-<li><a href="#org9ad5ab5">2. Mixture cure models</a></li>
-<li><a href="#org75e1f2f">3. Integral equation for AFT models</a></li>
-<li><a href="#org555a738">4. Integral equation for AFT models with functional constraints on gamma</a></li>
-<li><a href="#orga9f7d87">5. Non-integral equation for AFT models</a></li>
-<li><a href="#org6b7ae36">6. Non-integral equation for AFT models without time-varying effect</a></li>
-<li><a href="#orgef9e397">7. Integral equations for AFT models with \(H = B(\ldots)\)</a></li>
+<li><a href="#orgfa17b91">1. Generalised survival model</a></li>
+<li><a href="#org92fd60c">2. Mixture cure models</a></li>
+<li><a href="#orgab1b650">3. Integral equation for AFT models</a></li>
+<li><a href="#org9f78459">4. Integral equation for AFT models with functional constraints on gamma</a></li>
+<li><a href="#orgf26dba5">5. Non-integral equation for AFT models</a></li>
+<li><a href="#org3f1b7de">6. Non-integral equation for AFT models without time-varying effect</a></li>
+<li><a href="#org806037c">7. Integral equations for AFT models with \(H = B(\ldots)\)</a></li>
 </ul>
 </div>
 </div>
 
-<div id="outline-container-org15c5f64" class="outline-2">
-<h2 id="org15c5f64"><span class="section-number-2">1</span> Generalised survival model</h2>
+<div id="outline-container-orgfa17b91" class="outline-2">
+<h2 id="orgfa17b91"><span class="section-number-2">1</span> Generalised survival model</h2>
 <div class="outline-text-2" id="text-1">
 <div class="org-src-container">
 <pre class="src src-maxima"><span style="color: #a020f0;">logexpand:all</span>;
 <span style="color: #a020f0;">derivsubst:</span><span style="color: #008b8b;">true</span>;
 <span style="color: #483d8b;">load</span>(pdiff)$
 <span style="color: #483d8b;">assume</span>(t<span style="color: #a020f0;">&gt;</span><span style="color: #008b8b;">0</span>)$
-S <span style="color: #a020f0;">:</span> G(eta(t,z,theta));
+S <span style="color: #a020f0;">:</span> G(eta(t,z,theta))<span style="color: #a020f0;">*</span>S0(t);
 H <span style="color: #a020f0;">:</span> <span style="color: #a020f0;">-</span><span style="color: #483d8b;">log</span>(S);
 h <span style="color: #a020f0;">:</span> <span style="color: #483d8b;">diff</span>(H,t);
 <span style="color: #483d8b;">print</span>(<span style="color: #8b2252;">"H:"</span>);
@@ -312,29 +312,38 @@ ll <span style="color: #a020f0;">:</span> <span style="color: #483d8b;">delta</s
 
 <p>
 H: 
-\[-\log G\left(\eta\left(t , z , \vartheta\right)\right)\]
+\[-\log G\left(\eta\left(t , z , \vartheta\right)\right)-\log S_{0}
+ \left(t\right)\]
 h: 
 \[-{{\eta_{\left(1 , 0 , 0\right)}(t,z,\vartheta)\,G_{\left(1\right)}
  (\eta\left(t , z , \vartheta\right))}\over{G\left(\eta\left(t , z , 
- \vartheta\right)\right)}}\]
+ \vartheta\right)\right)}}-{{S_{0}_{\left(1\right)}(t)}\over{S_{0}
+ \left(t\right)}}\]
 diff(H,theta): 
 \[-{{\eta_{\left(0 , 0 , 1\right)}(t,z,\vartheta)\,G_{\left(1\right)}
  (\eta\left(t , z , \vartheta\right))}\over{G\left(\eta\left(t , z , 
  \vartheta\right)\right)}}\]
 diff(log(h),theta): 
-\[{{\eta_{\left(0 , 0 , 1\right)}(t,z,\vartheta)\,G_{\left(2\right)}(
- \eta\left(t , z , \vartheta\right))}\over{G_{\left(1\right)}(\eta
- \left(t , z , \vartheta\right))}}-{{\eta_{\left(0 , 0 , 1\right)}(t,
- z,\vartheta)\,G_{\left(1\right)}(\eta\left(t , z , \vartheta\right))
- }\over{G\left(\eta\left(t , z , \vartheta\right)\right)}}+{{\eta_{
- \left(1 , 0 , 1\right)}(t,z,\vartheta)}\over{\eta_{\left(1 , 0 , 0
- \right)}(t,z,\vartheta)}}\]
+\[{{-{{\eta_{\left(0 , 0 , 1\right)}(t,z,\vartheta)\,\eta_{\left(1 , 
+ 0 , 0\right)}(t,z,\vartheta)\,G_{\left(2\right)}(\eta\left(t , z , 
+ \vartheta\right))}\over{G\left(\eta\left(t , z , \vartheta\right)
+ \right)}}+{{\eta_{\left(0 , 0 , 1\right)}(t,z,\vartheta)\,\eta_{
+ \left(1 , 0 , 0\right)}(t,z,\vartheta)\,G_{\left(1\right)}(\eta
+ \left(t , z , \vartheta\right))^2}\over{G\left(\eta\left(t , z , 
+ \vartheta\right)\right)^2}}-{{\eta_{\left(1 , 0 , 1\right)}(t,z,
+ \vartheta)\,G_{\left(1\right)}(\eta\left(t , z , \vartheta\right))
+ }\over{G\left(\eta\left(t , z , \vartheta\right)\right)}}}\over{-{{
+ \eta_{\left(1 , 0 , 0\right)}(t,z,\vartheta)\,G_{\left(1\right)}(
+ \eta\left(t , z , \vartheta\right))}\over{G\left(\eta\left(t , z , 
+ \vartheta\right)\right)}}-{{S_{0}_{\left(1\right)}(t)}\over{S_{0}
+ \left(t\right)}}}}\]
 ll: 
-\[\delta\,\left(\log G_{\left(1\right)}(\eta\left(t , z , \vartheta
- \right))-\log G\left(\eta\left(t , z , \vartheta\right)\right)+\log 
- \eta_{\left(1 , 0 , 0\right)}(t,z,\vartheta)+\log \left(-1\right)
- \right)+\log G\left(\eta\left(t , z , \vartheta\right)\right)-\eta_{
- \left(1 , 0 , 0\right)}(t,z,\beta)^2\]
+\[\delta\,\log \left(-{{\eta_{\left(1 , 0 , 0\right)}(t,z,\vartheta)
+ \,G_{\left(1\right)}(\eta\left(t , z , \vartheta\right))}\over{G
+ \left(\eta\left(t , z , \vartheta\right)\right)}}-{{S_{0}_{\left(1
+ \right)}(t)}\over{S_{0}\left(t\right)}}\right)+\log G\left(\eta
+ \left(t , z , \vartheta\right)\right)+\log S_{0}\left(t\right)-\eta
+ _{\left(1 , 0 , 0\right)}(t,z,\beta)^2\]
 diff(ll, beta) 
 \[-2\,\eta_{\left(1 , 0 , 0\right)}(t,z,\beta)\,\eta_{\left(1 , 0 , 1
  \right)}(t,z,\beta)\]
@@ -343,14 +352,14 @@ diff(ll, beta)
 </div>
 
 
-<div id="outline-container-org9ad5ab5" class="outline-2">
-<h2 id="org9ad5ab5"><span class="section-number-2">2</span> Mixture cure models</h2>
+<div id="outline-container-org92fd60c" class="outline-2">
+<h2 id="org92fd60c"><span class="section-number-2">2</span> Mixture cure models</h2>
 <div class="outline-text-2" id="text-2">
 <div class="org-src-container">
 <pre class="src src-maxima"><span style="color: #a020f0;">logexpand:all</span>;
 <span style="color: #a020f0;">derivsubst:</span><span style="color: #008b8b;">true</span>;
 <span style="color: #483d8b;">load</span>(pdiff)$
-S <span style="color: #a020f0;">:</span> pi(theta)<span style="color: #a020f0;">+</span>(<span style="color: #008b8b;">1</span><span style="color: #a020f0;">-</span>pi(theta))<span style="color: #a020f0;">*</span><span style="color: #483d8b;">exp</span>(<span style="color: #a020f0;">-</span>Hu(t,theta));
+S <span style="color: #a020f0;">:</span> S0(t)<span style="color: #a020f0;">*</span>(pi(theta)<span style="color: #a020f0;">+</span>(<span style="color: #008b8b;">1</span><span style="color: #a020f0;">-</span>pi(theta))<span style="color: #a020f0;">*</span><span style="color: #483d8b;">exp</span>(<span style="color: #a020f0;">-</span>Hu(t,theta)));
 H <span style="color: #a020f0;">:</span> <span style="color: #a020f0;">-</span><span style="color: #483d8b;">log</span>(S);
 h <span style="color: #a020f0;">:</span> <span style="color: #483d8b;">diff</span>(H,t);
 h <span style="color: #a020f0;">:</span> <span style="color: #483d8b;">subst</span>(hu(t,theta), <span style="color: #483d8b;">diff</span>(Hu(t,theta),t), h);
@@ -372,12 +381,14 @@ h <span style="color: #a020f0;">:</span> <span style="color: #483d8b;">subst</sp
 <p>
 H: 
 \[-\log \left(\pi\left(\vartheta\right)+e^ {- {\it Hu}\left(t , 
- \vartheta\right) }\,\left(1-\pi\left(\vartheta\right)\right)\right)\]
+ \vartheta\right) }\,\left(1-\pi\left(\vartheta\right)\right)\right)-
+ \log S_{0}\left(t\right)\]
 h: 
 \[{{e^ {- {\it Hu}\left(t , \vartheta\right) }\,{\it hu}\left(t , 
  \vartheta\right)\,\left(1-\pi\left(\vartheta\right)\right)}\over{\pi
  \left(\vartheta\right)+e^ {- {\it Hu}\left(t , \vartheta\right) }\,
- \left(1-\pi\left(\vartheta\right)\right)}}\]
+ \left(1-\pi\left(\vartheta\right)\right)}}-{{S_{0}_{\left(1\right)}(
+ t)}\over{S_{0}\left(t\right)}}\]
 diff(H,theta): 
 \[-{{-e^ {- {\it Hu}\left(t , \vartheta\right) }\,\pi_{\left(1\right)
  }(\vartheta)+\pi_{\left(1\right)}(\vartheta)-e^ {- {\it Hu}\left(t
@@ -386,21 +397,37 @@ diff(H,theta):
  \right)+e^ {- {\it Hu}\left(t , \vartheta\right) }\,\left(1-\pi
  \left(\vartheta\right)\right)}}\]
 diff(log(h),theta): 
-\[-{{-e^ {- {\it Hu}\left(t , \vartheta\right) }\,\pi_{\left(1\right)
- }(\vartheta)+\pi_{\left(1\right)}(\vartheta)-e^ {- {\it Hu}\left(t
-  , \vartheta\right) }\,{\it Hu}_{\left(0 , 1\right)}(t,\vartheta)\,
+\[{{-{{e^ {- {\it Hu}\left(t , \vartheta\right) }\,{\it hu}\left(t , 
+ \vartheta\right)\,\left(1-\pi\left(\vartheta\right)\right)\,\left(-e
+ ^ {- {\it Hu}\left(t , \vartheta\right) }\,\pi_{\left(1\right)}(
+ \vartheta)+\pi_{\left(1\right)}(\vartheta)-e^ {- {\it Hu}\left(t , 
+ \vartheta\right) }\,{\it Hu}_{\left(0 , 1\right)}(t,\vartheta)\,
+ \left(1-\pi\left(\vartheta\right)\right)\right)}\over{\left(\pi
+ \left(\vartheta\right)+e^ {- {\it Hu}\left(t , \vartheta\right) }\,
+ \left(1-\pi\left(\vartheta\right)\right)\right)^2}}-{{e^ {- {\it Hu}
+ \left(t , \vartheta\right) }\,{\it hu}\left(t , \vartheta\right)\,
+ \pi_{\left(1\right)}(\vartheta)}\over{\pi\left(\vartheta\right)+e
+ ^ {- {\it Hu}\left(t , \vartheta\right) }\,\left(1-\pi\left(
+ \vartheta\right)\right)}}+{{e^ {- {\it Hu}\left(t , \vartheta\right)
+  }\,{\it hu}_{\left(0 , 1\right)}(t,\vartheta)\,\left(1-\pi\left(
+ \vartheta\right)\right)}\over{\pi\left(\vartheta\right)+e^ {- 
+ {\it Hu}\left(t , \vartheta\right) }\,\left(1-\pi\left(\vartheta
+ \right)\right)}}-{{e^ {- {\it Hu}\left(t , \vartheta\right) }\,
+ {\it Hu}_{\left(0 , 1\right)}(t,\vartheta)\,{\it hu}\left(t , 
+ \vartheta\right)\,\left(1-\pi\left(\vartheta\right)\right)}\over{\pi
+ \left(\vartheta\right)+e^ {- {\it Hu}\left(t , \vartheta\right) }\,
+ \left(1-\pi\left(\vartheta\right)\right)}}}\over{{{e^ {- {\it Hu}
+ \left(t , \vartheta\right) }\,{\it hu}\left(t , \vartheta\right)\,
  \left(1-\pi\left(\vartheta\right)\right)}\over{\pi\left(\vartheta
  \right)+e^ {- {\it Hu}\left(t , \vartheta\right) }\,\left(1-\pi
- \left(\vartheta\right)\right)}}-{{\pi_{\left(1\right)}(\vartheta)
- }\over{1-\pi\left(\vartheta\right)}}+{{{\it hu}_{\left(0 , 1\right)}
- (t,\vartheta)}\over{{\it hu}\left(t , \vartheta\right)}}-{\it Hu}_{
- \left(0 , 1\right)}(t,\vartheta)\]
+ \left(\vartheta\right)\right)}}-{{S_{0}_{\left(1\right)}(t)}\over{
+ S_{0}\left(t\right)}}}}\]
 </p>
 </div>
 </div>
 
-<div id="outline-container-org75e1f2f" class="outline-2">
-<h2 id="org75e1f2f"><span class="section-number-2">3</span> Integral equation for AFT models</h2>
+<div id="outline-container-orgab1b650" class="outline-2">
+<h2 id="orgab1b650"><span class="section-number-2">3</span> Integral equation for AFT models</h2>
 <div class="outline-text-2" id="text-3">
 <div class="org-src-container">
 <pre class="src src-maxima"><span style="color: #a020f0;">logexpand:all</span>;
@@ -524,8 +551,8 @@ diff(ll, gamma)
 </div>
 </div>
 
-<div id="outline-container-org555a738" class="outline-2">
-<h2 id="org555a738"><span class="section-number-2">4</span> Integral equation for AFT models with functional constraints on gamma</h2>
+<div id="outline-container-org9f78459" class="outline-2">
+<h2 id="org9f78459"><span class="section-number-2">4</span> Integral equation for AFT models with functional constraints on gamma</h2>
 <div class="outline-text-2" id="text-4">
 <div class="org-src-container">
 <pre class="src src-maxima"><span style="color: #a020f0;">logexpand:all</span>;
@@ -614,8 +641,8 @@ diff(log(h),gamma0):
 </div>
 
 
-<div id="outline-container-orga9f7d87" class="outline-2">
-<h2 id="orga9f7d87"><span class="section-number-2">5</span> Non-integral equation for AFT models</h2>
+<div id="outline-container-orgf26dba5" class="outline-2">
+<h2 id="orgf26dba5"><span class="section-number-2">5</span> Non-integral equation for AFT models</h2>
 <div class="outline-text-2" id="text-5">
 <div class="org-src-container">
 <pre class="src src-maxima"><span style="color: #a020f0;">logexpand:all</span>;
@@ -729,8 +756,8 @@ diff(ll, gamma)
 </div>
 
 
-<div id="outline-container-org6b7ae36" class="outline-2">
-<h2 id="org6b7ae36"><span class="section-number-2">6</span> Non-integral equation for AFT models without time-varying effect</h2>
+<div id="outline-container-org3f1b7de" class="outline-2">
+<h2 id="org3f1b7de"><span class="section-number-2">6</span> Non-integral equation for AFT models without time-varying effect</h2>
 <div class="outline-text-2" id="text-6">
 <div class="org-src-container">
 <pre class="src src-maxima"><span style="color: #a020f0;">logexpand:all</span>;
@@ -832,8 +859,8 @@ diff(ll, gamma)
 </div>
 
 
-<div id="outline-container-orgef9e397" class="outline-2">
-<h2 id="orgef9e397"><span class="section-number-2">7</span> Integral equations for AFT models with \(H = B(\ldots)\)</h2>
+<div id="outline-container-org806037c" class="outline-2">
+<h2 id="org806037c"><span class="section-number-2">7</span> Integral equations for AFT models with \(H = B(\ldots)\)</h2>
 <div class="outline-text-2" id="text-7">
 <div class="org-src-container">
 <pre class="src src-maxima"><span style="color: #a020f0;">logexpand:all</span>;
@@ -889,7 +916,7 @@ diff(log(h),gamma):
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Mark Clements</p>
-<p class="date">Created: 2023-05-08 Mon 11:12</p>
+<p class="date">Created: 2023-06-03 Sat 16:55</p>
 </div>
 </body>
 </html>
