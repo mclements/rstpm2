@@ -256,7 +256,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         }
     }
     ## Special case
-    if (mixture && df>2) {
+    if (is.null(init) && mixture && df>2) {
         Call = match.call()
         Call$df = 2
         fitWeibullMixture = eval(Call,parent.frame())
@@ -445,9 +445,9 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
             coef1 <- coef1[1:(length(coef1)-2)][X.index]
         } else coef1 <- rep(0,ncol(X))
     } else {
-        survreg1 <- survival::survreg(formula, data)
-        coef1 <- coef(survreg1)
-        coef1 <- coef1[-1] # assumes intercept included in the formula
+        survreg1 <- survival::coxph(formula, data)
+        coef1 <- -coef(survreg1) # -beta * X
+       # coef1 <- coef1[-1] # assumes intercept included in the formula
     }
     if (ncol(X)>length(coef1)) {
         coef1 <- c(coef1,rep(0,ncol(X) - length(coef1)))
@@ -809,7 +809,7 @@ predict.aft_mixture2 <-
                } else {
                    if (is.null(link))
                        link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                                      hdiff="I",loghazard="I",link="I",odds="log",or="log",meansurv="I",meanhaz="I",af="I",accfac="log")
+                                      hdiff="I",loghazard="I",link="I",odds="log",or="log",meansurv="I",meanhaz="I",af="I",accfac="log", density = "log")
                    invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
                    pred <- predictnl(object,local,link=link,newdata=newdata,type=type,gd=NULL,
                                      exposed=exposed,...)
@@ -1063,7 +1063,7 @@ predict.aft_integrated2 =  function(object,newdata=NULL,
            } else {
                if (is.null(link))
                    link <- switch(type,surv="cloglog",cumhaz="log",hazard="log",hr="log",sdiff="I",
-                                  hdiff="I",loghazard="I",link="I",odds="log",or="log",meansurv="I",meanhaz="I",af="I",accfac="log")
+                                  hdiff="I",loghazard="I",link="I",odds="log",or="log",meansurv="I",meanhaz="I",af="I",accfac="log", density = "log")
                invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
                pred <- predictnl(object,local,link=link,newdata=newdata,type=type,gd=NULL,
                                  exposed=exposed,...)
