@@ -515,9 +515,9 @@ standardise.markov_msm <- function(x,
     x
 }
 vcov.survPen <- function(object) object$Vp
-"coef<-.survPen" <- function(this,value) {
-    this$coefficients <- value
-    this
+"coef<-.survPen" <- function(x,value) {
+    x$coefficients <- value
+    x
 }
 survPenWrap <- function(object) {
     stopifnot(inherits(object, "survPen"))
