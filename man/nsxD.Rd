@@ -31,7 +31,7 @@ nsxD(x, df = NULL, knots = NULL, intercept = FALSE,
     2 giving the derivative constraint order at
     the left and right boundary knots; an order of 2 constrains the
     second derivative to zero (f''(x)=0); an order of 1 constrains the
-    first and second derivatives to zero (f'(x)=f''(x)=0); an order of 1
+    first and second derivatives to zero (f'(x)=f''(x)=0); an order of 0
   constrains the zero, first and second derivatives to zero (f(x)=f'(x)=f''(x)=0)}
   \item{log}{a Boolean indicating whether the underlying values have been
     log transformed; (deprecated: only used to calculate derivatives in rstpm2:::stpm2Old}

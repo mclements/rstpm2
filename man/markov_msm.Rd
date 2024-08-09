@@ -143,10 +143,10 @@ Adams method (\code{"adams"}) for non-stiff differential equations.
 For \code{splineFun}, the method jused for spline interpolation; see \code{splinefun}.
 }
   \item{rtol }{relative error tolerance, either a
-    scalar or an array as long as the number of states. Passed to \code{\link{lsode}}
+    scalar or an array as long as the number of states. Passed to \code{\link[deSolve]{lsode}}
   }
   \item{atol }{absolute error tolerance, either a scalar or an array as
-    long as the number of states. Passed to \code{\link{lsode}}
+    long as the number of states. Passed to \code{\link[deSolve]{lsode}}
   }
   \item{slow}{
 logical to show whether to use the slow \code{R}-only
@@ -197,7 +197,7 @@ and costs
   logical flag for whether to keep the full output from the ordinary differential equation in the \code{res} component (default=\code{FALSE}). 
 }
   \item{\dots}{
-other arguments. For \code{markov_msm}, these are passed to the \code{\link{ode}} solver from the
+other arguments. For \code{markov_msm}, these are passed to the \code{\link[deSolve]{ode}} solver from the
 \code{deSolve} package. For \code{plot.markov_msm}, these arguments are passed to \code{\link{plot.default}}
 }
 

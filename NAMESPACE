@@ -27,6 +27,7 @@ S3method(confint, predictnl)
 
 S3method(lines, stpm2)
 S3method(lines, pstpm2)
+S3method(lines, aft)
 S3method(eform, stpm2)
 S3method(eform, default)
 S3method(coef, stpm2)

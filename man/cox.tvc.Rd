@@ -24,7 +24,7 @@ cox.tvc(obj, var=NULL, method="logt")
   Returns a \code{tvcCoxph} object (which inherits from the \code{mle2} class) of the re-fitted model.
 }
 \seealso{
-  \code{\link{coxph}}, \code{\link{cox.zph}}
+  \code{\link[survival]{coxph}}, \code{\link[survival]{cox.zph}}
 }
 %% \references{
 %% }

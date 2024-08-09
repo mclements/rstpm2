@@ -1640,7 +1640,7 @@ setMethod("residuals", "stpm2",
 
 predict.stpm2.base <- 
           function(object, newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH","rmstdiff"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH","rmstdiff","lpmatrixD"),
                    grid=FALSE, seqLength=300,
                    type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us,
                    rmap, scale=365.24,
@@ -1672,7 +1672,7 @@ predict.stpm2.base <-
                            meansurvdiff = "I",
                            fail = "cloglog", uncured = "log", density = "log",
                            rmst = "I", probcure = "cloglog", lpmatrix="I", gradh="I",
-                           gradH="I", rmstdiff="I")
+                           gradH="I", rmstdiff="I", lpmatrixD="I")
         } else {
             link <- switch(type, surv = "cloglog", cumhaz = "log",
                            hazard = "log", hr = "log", sdiff = "I", hdiff = "I",
@@ -1682,7 +1682,7 @@ predict.stpm2.base <-
                            meansurvdiff = "I",
                            fail = "cloglog", uncured = "cloglog", density = "log",
                            rmst = "I", probcure = "cloglog", lpmatrix="I", gradh="I",
-                           gradH="I", rmstdiff="I")
+                           gradH="I", rmstdiff="I", lpmatrixD="I")
         }
     }
     invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
@@ -1988,6 +1988,9 @@ predict.stpm2.base <-
         }
         if (type=="lpmatrix") {
           return(X)
+        }
+        if (type=="lpmatrixD") {
+          return(XD)
         }
         if (type=="cumhaz") {
             ## if (object@delayed) {
@@ -2315,7 +2318,7 @@ predict.cumhaz <-
 
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH","rmstdiff"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH","rmstdiff","lpmatrixD"),
                    grid=FALSE,seqLength=300,
                    type.relsurv=c("excess","total","other"), scale=365.24, rmap, ratetable=survival::survexp.us,
                    se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,n.gauss.quad=100,full=FALSE,...) {
@@ -2844,7 +2847,7 @@ setMethod("predictnl", "pstpm2",
 ##
 setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst","lpmatrix","gradh","gradH","rmstdiff"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst","lpmatrix","gradh","gradH","rmstdiff","lpmatrixD"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95, n.gauss.quad=100, full=FALSE, ...) {
               type <- match.arg(type)

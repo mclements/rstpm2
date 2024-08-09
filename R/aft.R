@@ -1475,3 +1475,16 @@ KL_not_vectorized <- function(object, true_density = "Weibull",
     }
     return(out)
 }
+
+lines.aft <-
+    function(x,newdata=NULL,type="surv",
+             col=1,ci.col="grey",lty=par("lty"),
+             ci=FALSE,rug=FALSE,
+             var=NULL,exposed=NULL,times=NULL,
+             ...)
+        plot.aft.base(x=x, newdata=newdata, type=type,
+                      line.col=col, ci.col=ci.col, lty=lty,
+                      add=TRUE,
+                      ci=ci, rug=rug, var=var, exposed=exposed,
+                      times=times, ...)
+setMethod("lines", signature(x="aft"), lines.aft)

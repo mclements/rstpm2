@@ -18,6 +18,24 @@
 ##   require(bbmle)
 ## }
 
+## test for predict(..., type="lpmatrixD")
+library(rstpm2)
+fit = aft(Surv(rectime,censrec==1)~hormon,data=brcancer)
+plot(fit, newdata=data.frame(hormon=1))
+lines(fit, newdata=data.frame(hormon=0), lty=2)
+
+
+## test for predict(..., type="lpmatrixD")
+library(rstpm2)
+fit = stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)
+m = predict(fit, newdata=data.frame(hormon=1), grid=TRUE, type="lpmatrix")
+m2 = predict(fit, newdata=data.frame(hormon=1), grid=TRUE, type="lpmatrixD")
+
+## check that offset works
+library(rstpm2)
+stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer)
+stpm2(Surv(rectime,censrec==1)~hormon+offset(hormon),data=brcancer)
+
 library(survival)
 library(rstpm2)
 brcancer = transform(rstpm2::brcancer, id=1:(nrow(brcancer)/2))

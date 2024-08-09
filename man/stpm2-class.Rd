@@ -53,7 +53,7 @@ Objects can be created by calls of the form \code{new("stpm2", ...)} and
   }
 }
 \section{Extends}{
-Class \code{"\linkS4class{mle2}"}, directly.
+Class \code{\link[bbmle]{mle2}}, directly.
 }
 \section{Methods}{
   \describe{

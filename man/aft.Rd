@@ -23,7 +23,7 @@ aft(formula, data, smooth.formula = NULL, df = 3,
   \item{formula}{
 a formula object, with the response on the left of a \code{~} operator,
 and the regression terms (excluding time) on the right. The response
-should be a survival object as returned by the \code{\link{Surv}}
+should be a survival object as returned by the \code{\link[survival]{Surv}}
 function. The terms can include linear effects for any time-varying
 coefficients. [required]
 }
@@ -95,7 +95,7 @@ an optional vector specifying a subset of observations to
   be used in the fitting process.
 }
   \item{\dots}{
-  additional arguments to be passed to the \code{\link{mle2}}.
+  additional arguments to be passed to the \code{\link[bbmle]{mle2}}.
 }
 }
 \details{
@@ -119,7 +119,7 @@ Mark Clements.
 %% ~Make other sections like Warning with \section{Warning }{....} ~
 
 \seealso{
-\code{\link{survreg}}, \code{\link{coxph}}
+\code{\link[survival]{survreg}}, \code{\link[survival]{coxph}}
 }
 \examples{
 summary(aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=4))
