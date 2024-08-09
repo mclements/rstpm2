@@ -25,3 +25,11 @@ test_vdqagi <- function() {
     .Call(`_rstpm2_test_vdqagi`)
 }
 
+vunirootRcpp <- function(f, lower, upper, fa, fb, numiter, tol) {
+    .Call(`_rstpm2_vunirootRcpp`, f, lower, upper, fa, fb, numiter, tol)
+}
+
+voptimizeRcpp <- function(f, ax, bx, tol) {
+    .Call(`_rstpm2_voptimizeRcpp`, f, ax, bx, tol)
+}
+

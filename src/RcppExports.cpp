@@ -95,3 +95,34 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// vunirootRcpp
+Rcpp::List vunirootRcpp(Rcpp::Function f, Rcpp::NumericVector lower, Rcpp::NumericVector upper, Rcpp::NumericVector fa, Rcpp::NumericVector fb, int numiter, double tol);
+RcppExport SEXP _rstpm2_vunirootRcpp(SEXP fSEXP, SEXP lowerSEXP, SEXP upperSEXP, SEXP faSEXP, SEXP fbSEXP, SEXP numiterSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::Function >::type f(fSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type lower(lowerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type upper(upperSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type fa(faSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type fb(fbSEXP);
+    Rcpp::traits::input_parameter< int >::type numiter(numiterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(vunirootRcpp(f, lower, upper, fa, fb, numiter, tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// voptimizeRcpp
+Rcpp::NumericVector voptimizeRcpp(Rcpp::Function f, Rcpp::NumericVector ax, Rcpp::NumericVector bx, double tol);
+RcppExport SEXP _rstpm2_voptimizeRcpp(SEXP fSEXP, SEXP axSEXP, SEXP bxSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::Function >::type f(fSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type ax(axSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type bx(bxSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(voptimizeRcpp(f, ax, bx, tol));
+    return rcpp_result_gen;
+END_RCPP
+}

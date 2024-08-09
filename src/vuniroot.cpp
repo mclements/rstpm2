@@ -1,20 +1,15 @@
 #include <cfloat>
 #include <Rcpp.h>
 
-namespace rstpm2 {
-
- 
-  // List vunirootRcpp(Function f, NumericVector lower, NumericVector upper, int numiter, double tol) {
-  RcppExport SEXP vunirootRcpp(SEXP __f, SEXP __lower, SEXP __upper, SEXP __fa, SEXP __fb, SEXP __numiter, SEXP __tol) {
-    using namespace R;
-    using namespace Rcpp;
-    Function f = as<Function>(__f);
-    NumericVector lower = clone(as<NumericVector>(__lower));
-    NumericVector upper = clone(as<NumericVector>(__upper));
-    NumericVector fa = clone(as<NumericVector>(__fa));
-    NumericVector fb = clone(as<NumericVector>(__fb));
-    int numiter = as<int>(__numiter);
-    double tol = as<double>(__tol);
+//[[Rcpp::export]]
+Rcpp::List vunirootRcpp(Rcpp::Function f,
+			Rcpp::NumericVector lower,
+			Rcpp::NumericVector upper,
+			Rcpp::NumericVector fa,
+			Rcpp::NumericVector fb,
+			int numiter,
+			double tol) {
+  using namespace Rcpp;
     int size = lower.size();
     NumericVector a(clone(lower)), b(clone(upper)), c(clone(a)), Tol(size,0.0);
     NumericVector fc(clone(fa));
@@ -112,18 +107,18 @@ namespace rstpm2 {
 	  Tol[i]=fabs(c[i]-b[i]);
 	  ns[i] = -1;
 	}
-    return wrap(List::create(_("root")  = b, _("iter") = ns, _("tol")=Tol));
+    return Rcpp::List::create(_("root")  = b, _("iter") = ns, _("tol")=Tol);
   }
 
 
-  RcppExport SEXP voptimizeRcpp(SEXP __f, SEXP __ax, SEXP __bx, SEXP __tol) {
+//[[Rcpp::export]]
+Rcpp::NumericVector voptimizeRcpp(Rcpp::Function f,
+				    Rcpp::NumericVector ax,
+				    Rcpp::NumericVector bx,
+				    double tol) {
     using Rcpp::NumericVector;
     using Rcpp::clone;
     using Rcpp::as;
-    Rcpp::Function f = as<Rcpp::Function>(__f);
-    NumericVector ax = clone(as<NumericVector>(__ax));
-    NumericVector bx = clone(as<NumericVector>(__bx));
-    const double tol = as<double>(__tol);
     const int size = ax.size();
     /*  c is the squared inverse of the golden ratio */
     const double c = (3. - sqrt(5.)) * .5;
@@ -239,7 +234,6 @@ namespace rstpm2 {
     }
     /* end of main loop */
     
-    return Rcpp::wrap(x);
+    return x;
   }
   
-} // namespace
