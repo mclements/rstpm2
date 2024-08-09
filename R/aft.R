@@ -411,7 +411,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
         warning("Design matrix for the acceleration factor is not full rank")
     X <- X[, X.index, drop=FALSE]
     XD0 <- X0 <- XD <- matrix(0,1,ncol(X))
-    X_list = list()
+    X_list <- X_list0 <- list()
     gauss = gauss.quad(control$nNodes)
     if (delayed && all(time0==0)) delayed <- FALSE # CAREFUL HERE: delayed redefined
     if (tvc.integrated) {

@@ -18,6 +18,15 @@
 ##   require(bbmle)
 ## }
 
+## Bug report: aft with left truncation
+library(rstpm2)
+brcancer$start <- 0
+fit <- aft(Surv(start, rectime,censrec==1)~hormon,data=brcancer,df=4) # now okay:)
+brcancer$start <- 1
+fit <- aft(Surv(start, rectime,censrec==1)~hormon,data=brcancer,df=4) # now okay:)
+
+length(rstpm2:::lhs(Surv(start, rectime, censrec == 1) ~ hormon))
+
 ## test for predict(..., type="lpmatrixD")
 library(rstpm2)
 fit = aft(Surv(rectime,censrec==1)~hormon,data=brcancer)
