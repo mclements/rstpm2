@@ -18,6 +18,26 @@
 ##   require(bbmle)
 ## }
 
+## marginaleffects
+library(rstpm2)
+library(marginaleffects)
+test1 <- stpm2(Surv(rectime, censrec == 1) ~ hormon * x3, data = brcancer, df = 3)
+nd <- data.frame(rectime=1000, hormon=c(0,1), x3=50)
+pred1 <- predict(m, type = "surv", newdata = nd)
+pred2 <- predictions(m, type = "surv", newdata = nd)
+all(pred1 == pred2$estimate)
+
+pred3 <- predict(m, newdata=nd, type="meansurv")
+pred4 <- avg_predictions(m, type="surv", newdata=nd, by="x3")
+pred3 == pred4$estimate
+
+## Bug fix: aft with factor
+library(rstpm2)
+summary(fit1 <- aft(Surv(rectime,censrec==1)~hormon,data=rstpm2::brcancer,df=4))
+summary(fit2 <- aft(Surv(rectime,censrec==1)~factor(hormon),data=rstpm2::brcancer,df=4))
+vcov(fit1) |> cov2cor() |> "rownames<-"(NULL) |> "colnames<-"(NULL)
+vcov(fit2) |> cov2cor() |> "rownames<-"(NULL) |> "colnames<-"(NULL)
+
 ## Bug report: aft with left truncation
 library(rstpm2)
 brcancer$start <- 0
