@@ -79,7 +79,7 @@ importFrom(stats, quantile, lm, as.formula, coef, makepredictcall, na.fail, pred
            aggregate, dgamma, dlogis, dnorm, dweibull, integrate)
 importFrom(mgcv,gam,s)
 importFrom(Rcpp,sourceCpp)
-importFrom(deSolve,ode)
+## importFrom(deSolve,ode)
 import(bbmle,methods,survival,splines)
 importFrom(utils,str,head,tail,modifyList)
 

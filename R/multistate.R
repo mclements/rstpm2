@@ -16,6 +16,7 @@ markov_msm <-
               debug = FALSE,
               ...)
 {
+    stopifnot(requireNamespace("deSolve", quietly=TRUE))
     call <- match.call()
     inherits <- function(x, ...)
         base::inherits(x, ...) ||
@@ -206,7 +207,7 @@ markov_msm <-
                              rep(0,3*nobs*nstates+3*nobs*nstates*ncoef+nobs*nstates*ntr))
             else
                 c(rep(init,nobs),rep(0,2*nobs*nstates+2*nobs*nstates*ncoef))
-    res <- ode(y = init, times = t, func = dp, method=method, atol=atol, rtol=rtol,
+    res <- deSolve::ode(y = init, times = t, func = dp, method=method, atol=atol, rtol=rtol,
                ...)
     P <- array(res[,1+1:(nstates*nobs)],c(nt,nstates,nobs))
     Pu <- array(res[,1+nobs*nstates+1:(nobs*nstates*ncoef)],c(nt,nstates,ncoef,nobs))
