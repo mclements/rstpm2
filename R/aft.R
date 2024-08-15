@@ -263,6 +263,13 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     } else {
         fitWeibullMixture = NULL
     }
+    ## parse the function call
+    Call <- match.call()
+    mf <- match.call(expand.dots = FALSE)
+    m <- match(c("formula", "data", "subset", "contrasts", "weights"),
+               names(mf), 0L)
+    mf <- mf[c(1L, m)]
+    ##
     ## parse the event expression
     eventInstance <- eval(lhs(formula),envir=data)
     stopifnot(length(lhs(formula))>=2)
@@ -280,7 +287,8 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     full.formula <- formula
     if (!is.null(smooth.formula))
         rhs(full.formula) <- rhs(formula) %call+% rhs(smooth.formula)
-    rhs(full.formula) <- rhs(full.formula) %call+% quote(0)
+    ## NB: we want to keep the intercept and drop later
+    rhs(full.formula) <- rhs(full.formula) %call+% quote(1) 
     if (!is.null(tvc)) {
         tvc.formulas <-
             lapply(names(tvc), function(name)
@@ -299,16 +307,36 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     ## ensure that data is a data frame
     ## data <- get_all_vars(full.formula, data) # but this loses the other design information
     ## restrict to non-missing data (assumes na.action=na.omit)
-    .include <- apply(model.matrix(formula, data, na.action = na.pass), 1, function(row) !any(is.na(row))) &
-        !is.na(eval(eventExpr,data)) & !is.na(eval(timeExpr,data))
+    ## missingness
+    ## browser()
+    time = eval(timeExpr,data)
+    if (any(is.na(time))) warning("Some event times are NA")
+    if (any(ifelse(is.na(time),FALSE,time<=0))) warning("Some event times <= 0")
+    ## set na.action=na.pass (and then reset)
+    na.action.old <- options()[["na.action"]]
+    options(na.action = "na.pass")
+    .include <- apply(model.matrix(formula, data), 1,
+                      function(row) !any(is.na(row))) &
+        !is.na(eval(eventExpr,data)) &
+        ifelse(is.na(time), FALSE, time>0)
+    if (!is.null(substitute(weights)))
+        .include <- .include & !is.na(eval(substitute(weights),data,parent.frame()))
+    rm(time)
+    options(na.action = na.action.old)
+    time0Expr <- NULL # initialise
+    if (delayed) {
+        time0Expr <- lhs(formula)[[2]]
+        if (time0Var == "")
+            time0Var <- all.vars(time0Expr)
+        time0 <- eval(time0Expr, data, parent.frame())
+        if (any(is.na(time0))) warning("Some entry times are NA")
+        if (any(ifelse(is.na(time0),FALSE,time0<0))) warning("Some entry times < 0")
+        .include <- .include & ifelse(is.na(time0), FALSE, time0>=0)
+        rm(time0)
+    ## } else {
+    ##     time0 <- NULL
+    }
     data <- data[.include, , drop=FALSE]
-    ##
-    ## parse the function call
-    Call <- match.call()
-    mf <- match.call(expand.dots = FALSE)
-    m <- match(c("formula", "data", "subset", "contrasts", "weights"),
-               names(mf), 0L)
-    mf <- mf[c(1L, m)]
     ##
     ## Specials:
     bhazard = rep(0,nrow(data))
@@ -335,15 +363,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     }
     ## get variables
     time <- eval(timeExpr, data, parent.frame())
-    time0Expr <- NULL # initialise
-    if (delayed) {
-        time0Expr <- lhs(formula)[[2]]
-        if (time0Var == "")
-            time0Var <- all.vars(time0Expr)
-        time0 <- eval(time0Expr, data, parent.frame())
-    } else {
-        time0 <- NULL
-    }
+    time0 <- if (delayed) eval(time0Expr, data, parent.frame()) else NULL
     event <- eval(eventExpr,data)
     ## if all the events are the same, we assume that they are all events, else events are those greater than min(event)
     event <- if (length(unique(event))==1) rep(TRUE, length(event)) else event <- event > min(event)
@@ -353,21 +373,26 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     coxph.call[[1L]] <- as.name("coxph")
     coxph.call$formula = formula
     coxph.call$model <- TRUE
-    coxph.obj <- eval(coxph.call, envir=parent.frame())
+    coxph.call$data <- quote(coxph.data)
+    coxph.data = data 
+    coxph.obj <- eval(coxph.call, coxph.data)
+    rm(coxph.data)
     y <- model.extract(model.frame(coxph.obj),"response")
     data$logHhat <- pmax(-18,log(-log(S0hat(coxph.obj))))
     ## now for the cure fraction
     glm.cure.call = coxph.call
     glm.cure.call[[1]] = as.name("glm")
     glm.cure.call$family = as.name("binomial")
-    glm.cure.call$data = as.name("data")
+    glm.data = data
+    glm.cure.call$data = as.name("glm.data")
     glm.cure.call$model = NULL
-    data["*event*"] = event 
+    glm.data["*event*"] = event 
     lhs(glm.cure.call$formula) = as.name("*event*")
     rhs(glm.cure.call$formula) = rhs(cure.formula)
     ## glm(y ~ X, family=binomial)
-    glm.cure.obj <- eval(glm.cure.call, envir=as.list(environment()), enclos=parent.frame())
+    glm.cure.obj <- eval(glm.cure.call, glm.data)
     Xc = model.matrix(glm.cure.obj, data)
+    rm(glm.data)
     ##
     ## pred1 <- predict(survreg1)
     data$logtstar <- log(time)
@@ -382,7 +407,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     lm.call$data <- quote(dataEvents) # events only
     lm.obj <- eval(lm.call)
     coef1b <- coef(lm.obj)
-    if (names(coef1b)[1]=="(Intercept)") coef1b <- coef1b[-1] # ???
+    ## if (names(coef1b)[1]=="(Intercept)") coef1b <- coef1b[-1] # ???
     ## if (is.null(init)) {
     ##   init <- coef(lm.obj)
     ## }
@@ -407,8 +432,12 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
     }
     ##
     X <- lpmatrix.lm(lm.obj,data)
-    if (is.integer(X.index <- which.dim(X)))
+    if (is.integer(X.index <- which.dim(X))) {
         warning("Design matrix for the acceleration factor is not full rank")
+        if (!(1 %in% X.index))
+            stop("Not full rank and the intercept is not included - I'm confused:(")
+        X.index = setdiff(X.index,1) 
+    } else X.index = -1
     X <- X[, X.index, drop=FALSE]
     XD0 <- X0 <- XD <- matrix(0,1,ncol(X))
     X_list <- X_list0 <- list()
@@ -431,32 +460,41 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
             data0 <- data[ind0,,drop=FALSE] # data for delayed entry times
             data0[[timeVar]] <- data0[[time0Var]]
             X0 <- lpmatrix.lm(lm.obj, data0)
+            X0 <- matrix(X0,nrow=nrow(data0))[,X.index, drop = FALSE]
             XD0 <- grad1(loglpfunc,log(data0[[timeVar]]),lm.obj,data0,timeVar,
                          log.transform=FALSE)
-            XD0 <- matrix(XD0,nrow=nrow(X))[,X.index, drop = FALSE]
+            XD0 <- matrix(XD0,nrow=nrow(data0))[,X.index, drop = FALSE]
             rm(data0)
         }
     }
     ## Weibull regression
-    if (delayed) {
-        if (requireNamespace("eha", quietly = TRUE)) {
-            survreg1 <- eha::aftreg(formula, data)
-            coef1 <- -coef(survreg1) # reversed parameterisation
-            coef1 <- coef1[1:(length(coef1)-2)][X.index]
-        } else coef1 <- rep(0,ncol(X))
-    } else {
-        survreg1 <- survival::coxph(formula, data)
-        coef1 <- -coef(survreg1) # -beta * X
-       # coef1 <- coef1[-1] # assumes intercept included in the formula
-    }
-    if (ncol(X)>length(coef1)) {
-        coef1 <- c(coef1,rep(0,ncol(X) - length(coef1)))
-        names(coef1) <- names(coef1b)[X.index]
+    coef1 = NULL
+    if (ncol(X) > 0) {
+        if (delayed) {
+            if (requireNamespace("eha", quietly = TRUE)) {
+                ## browser()
+                survreg1 <- eha::aftreg(formula, data)
+                coef1 <- -coef(survreg1) # reversed parameterisation
+                coef1 <- c(0,coef1[1:(length(coef1)-2)])[X.index]
+            } else coef1 <- rep(0,ncol(X))
+        } else {
+            survreg1 <- survival::coxph(formula, data)
+            if (!is.null(coef(survreg1)))
+                coef1 <- -coef(survreg1) # -beta * X
+            if (any(is.na(coef1)))
+                coef1 = coef1[!is.na(coef1)]
+            ## coef1 <- coef1[-1] # assumes intercept included in the formula
+        }
+        if (ncol(X)>length(coef1)) {
+            coef1 <- c(coef1,rep(0,ncol(X) - length(coef1)))
+            names(coef1) <- names(coef1b)[X.index]
+        }
     }
     coef2 = coef(glm.cure.obj)
     names(coef2) = paste0("cure.", names(coef2))
     if (is.null(init))
         init <- if (mixture) c(coef1, -coef2, coef0) else c(coef1, coef0) # -coef2 because the glm models for uncured!
+    ## browser()
     if (any(is.na(init) | is.nan(init)))
         stop("Some missing initial values - check that the design matrix is full rank.")
     if (!is.null(control) && "parscale" %in% names(control)) {
@@ -487,6 +525,7 @@ aft <- function(formula, data, smooth.formula = NULL, df = 3,
                  gweights=gauss$weights, gnodes=gauss$nodes, bhazard=bhazard,
                  add.penalties = control$add.penalties, df=df, ci=rep(0, df+1),
                  constrOptim = control$constrOptim)
+    ## browser()
     getui = function(args) {
         q.const = t(args$q.const) # (df+2) x df
         n.coef = length(args$init)

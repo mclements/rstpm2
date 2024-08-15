@@ -50,7 +50,6 @@ test_that("probit", {
     expect_eps(coef(fit)[2], -0.282318, 1e-5)
 })
 
-
 test_that("interval", {
     ## ICPHREG example
     read.textConnection <- function(text, ...) {
@@ -104,6 +103,27 @@ test_that("interval", {
     expect_eps(coef(fit)[2], 1.917699, 1e-4)
 })
 
+context("aft")
+##
+test_that("base", {
+    fit <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer)
+    expect_eps(coef(fit)[1], 0.267370, 1e-5)
+    fit2 <- aft(Surv(rectime,censrec==1)~factor(hormon),data=brcancer)
+    expect_true(all(coef(fit)==coef(fit2)))
+    expect_warning(fit3 <- aft(Surv(rectime,censrec==1)~hormon+factor(hormon),data=brcancer))
+    expect_true(all(coef(fit)==coef(fit3)))
+})
+test_that("tvc", {
+    ## main effect IS needed for the parametric case (else constrained to be 0 at first event time)
+    expect_warning(fit <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,tvc=list(hormon=2)))
+    expect_eps(coef(fit)[1], 1.693524, 1e-5)
+})
+test_that("Cure", {
+    fit <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3,mixture=TRUE)
+    expect_eps(coef(fit)[2], -5.635997, 1e-5)
+    fit <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3,cure=TRUE)
+    expect_eps(coef(fit)[1], 0.37021943, 1e-5)
+})
 
 context("stpm2 + frailty")
 ##

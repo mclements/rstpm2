@@ -33,7 +33,7 @@ namespace rstpm2 {
     s = ns(boundaryKnots, interiorKnots, q_matrix, 1, cure);
     kappa = 1.0e3;
     eps1 = 1.0e-100;
-    delayed = time0>0.0;
+    delayed = arma::find(time0>0.0);
   }
   mat aft::rmult(mat m, vec v) {
     mat out(m);
@@ -174,6 +174,7 @@ namespace rstpm2 {
     }
     if (any(delayed)) {
       vec eta0 = X0 * beta;
+      vec tmp = time0(delayed);
       vec logtstar0 = log(time0(delayed)) - eta0;
       vec etas0 = s.basis(logtstar0) * betas;
       vec etaDs0 = s.basis(logtstar0,1) * betas;
@@ -418,7 +419,7 @@ namespace rstpm2 {
       mat dHdbetas0 = rmult(Xs0,H0);
       mat dHdbeta0 = -rmult(X0,H0 % etaDs0);
       vec eps0 = etaDs0*0. + eps1;
-      uvec pindex0 = ((1.0/time0 - etaD0) < eps0);
+      uvec pindex0 = ((1.0/time0(delayed) - etaD0) < eps0);
       uvec pindexs0 = (etaDs0 < eps0);
       etaDs0 = max(etaDs0, eps0);
       etaD0 = 1 - max(1-etaD0, eps0);

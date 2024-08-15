@@ -18,6 +18,16 @@
 ##   require(bbmle)
 ## }
 
+model.matrix(~factor(x)-1, data.frame(x=1:2))
+
+library(rstpm2)
+aft(Surv(rectime,censrec==1)~hormon,data=rstpm2::brcancer,df=3) # ok
+aft(Surv(rectime,censrec==1)~factor(hormon),data=rstpm2::brcancer,df=3) # ok
+aft(Surv(rectime,censrec==1)~hormon+factor(hormon),data=rstpm2::brcancer,df=3) # ok
+aft(Surv(rectime,censrec==1)~factor(hormon),data=rstpm2::brcancer,df=3,tvc=list(hormon=2)) # ok (drops second spline term)
+aft(Surv(rectime,censrec==1)~hormon,data=rstpm2::brcancer,df=3,tvc=list(hormon=2)) # ok (drops hormon)
+aft(Surv(rectime,censrec==1)~1,data=rstpm2::brcancer,df=3,tvc=list(hormon=2)) # ok
+
 ## marginaleffects
 library(rstpm2)
 library(marginaleffects)
