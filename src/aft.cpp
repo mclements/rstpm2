@@ -99,7 +99,7 @@ namespace rstpm2 {
       vec S = cure_frac + (1-cure_frac) % exp(-Hu);
       vec h = max(eps, exp(-Hu) % exp(loghu) % (1.0-cure_frac) / S);
       ll = dot(event, log(h+bhazard)) + sum(log(S));
-      if (add_penalties) ll -= pen;
+      // if (add_penalties) ll -= pen;
     }
     if (any(delayed)) {
       vec tstar0 = time0(delayed)*0.0;
