@@ -967,6 +967,9 @@ predict.aft_integrated2 =  function(object,newdata=NULL,
             return((1-S)/S)
         if (type=="meansurv")
             return(tapply(S,newdata[[object@args$timeVar]],mean))
+        if (type=="accfac") {
+            return(exp(-(X2-X) %*% beta))
+        }
         etaDs <- as.vector(predict(args$designD, logtstar) %*% betas)
         etaD <- as.vector(XD %*% beta)
         h <- drop(H*etaDs*exp(X %*% beta))
@@ -1007,9 +1010,6 @@ predict.aft_integrated2 =  function(object,newdata=NULL,
             meanS <- tapply(S,newdata[[object@args$timeVar]],mean)
             meanS2 <- tapply(S2,newdata[[object@args$timeVar]],mean)
             return((meanS2 - meanS)/(1-meanS))
-        }
-        if (type=="accfac") {
-            return(exp(-(X2-X) %*% beta))
         }
     }
     local2 <-  function (object, newdata=NULL, type="surv", exposed, ...)
