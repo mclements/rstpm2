@@ -18,6 +18,14 @@
 ##   require(bbmle)
 ## }
 
+
+library(rstpm2)
+library(broom)
+test1 <- stpm2(Surv(rectime, censrec == 1) ~ hormon, data = brcancer, df = 3)
+tidy(test1)
+tidy(test1, conf.int=TRUE, exponentiate=TRUE)
+
+
 model.matrix(~factor(x)-1, data.frame(x=1:2))
 
 library(rstpm2)
