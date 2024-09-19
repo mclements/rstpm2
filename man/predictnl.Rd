@@ -3,7 +3,6 @@
 \alias{predictnl.default}
 \alias{predictnl.lm}
 \alias{predict.formula}
-\alias{print.predictnl}
 \alias{confint.predictnl}
 %- Also NEED an '\alias' for EACH other topic documented here.
 \title{
@@ -21,7 +20,6 @@ predictions from GLMs).
 \usage{
 \method{predictnl}{default}(object, fun, newdata=NULL, gd=NULL, ...)
 \method{predictnl}{lm}(object, fun, newdata=NULL, ...)
-\method{print}{predictnl}(x, ...)
 \method{predict}{formula}(object,data,newdata,na.action,type="model.matrix",...)
 \method{confint}{predictnl}(object, parm, level=0.95, ...)
 }
@@ -48,9 +46,6 @@ gradients are calculated using finite differences.
 }
   \item{level}{
     significance level for 2-sided confidence intervals
-}
-  \item{x}{
-    a \code{predictnl} object to be printed.
 }
   \item{data}{
     object used to define the model frame
