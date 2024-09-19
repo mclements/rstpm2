@@ -241,7 +241,8 @@ lpmatrix.lm <-
   }
 ## fun: takes coef as its first argument
 ## requires: coef() and vcov() on the object
-numDeltaMethod <- function(object, fun, gd=NULL, ...) {
+numDeltaMethod <- function(object, fun, gd=NULL,
+                           conf.int=FALSE, level=0.95, ...) {
   coef <- coef(object)
   Sigma <- vcov(object)
   fit <- fun(coef,...)
@@ -254,6 +255,13 @@ numDeltaMethod <- function(object, fun, gd=NULL, ...) {
   df <- data.frame(fit = as.numeric(fit), se.fit = as.numeric(se.fit),
                    Estimate = as.numeric(fit), SE = as.numeric(se.fit))
   row.names(df) <- names(fit)
+  if (conf.int) {
+      a <- (1 - level)/2
+      a <- cbind(a, 1 - a)
+      fac <- qnorm(a)
+      df$conf.low <-  df$fit+fac[,1]*df$se.fit
+      df$conf.high <- df$fit+fac[,2]*df$se.fit
+  }
   structure(df, # vcov=Sigma,
             class=c("predictnl","data.frame"))
 }
@@ -300,8 +308,6 @@ setMethod("predictnl", "mle2", function(object,fun,newdata=NULL,gd=NULL,...)
       }
     numDeltaMethod(object,localf,newdata=newdata,gd=gd,...)
   })
-print.predictnl <- function(x, ...)
-    print(data.frame(fit=x$fit, se.fit=x$se.fit), ...)
 confint.predictnl <- function(object,parm,level=0.95,...) {
     cf <- object$fit
     pnames <- names(cf)

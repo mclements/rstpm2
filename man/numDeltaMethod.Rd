@@ -11,7 +11,7 @@
   standard errors 
 }
 \usage{
-numDeltaMethod(object, fun, gd=NULL, ...)
+numDeltaMethod(object, fun, gd=NULL, conf.int=FALSE, level=0.95, ...)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -25,6 +25,12 @@ numDeltaMethod(object, fun, gd=NULL, ...)
   \item{gd}{
     Specified gradients
 }
+  \item{conf.int}{
+    Logical for whether to also calculate the confidence interval
+}
+  \item{level}{
+    Numeric for the level of the confidence interval
+}
   \item{\dots}{
     Other arguments passed to \code{fun}.
 }
@@ -33,8 +39,12 @@ numDeltaMethod(object, fun, gd=NULL, ...)
   A more user-friendly interface is provided by \code{predictnl}.
 }
 \value{
+  \item{fit}{Point estimates}
+  \item{se.fit}{Standard errors}
   \item{Estimate}{Point estimates}
   \item{SE}{Standard errors}
+  \item{conf.low}{Lower confidence interval (if conf.int=TRUE)}
+  \item{conf.high}{Upper confidence interval (if conf.int=TRUE)}
 }
 %% \references{
 %% %% ~put references to the literature/web site here ~

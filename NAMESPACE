@@ -22,7 +22,6 @@ S3method(predict, nsxD)
 S3method(predict, formula)
 S3method(predictnl, default)
 S3method(predictnl, lm)
-S3method(print, predictnl)
 S3method(confint, predictnl)
 
 S3method(lines, stpm2)
