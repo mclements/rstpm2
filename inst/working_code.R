@@ -18,6 +18,49 @@
 ##   require(bbmle)
 ## }
 
+## bug in tinyplot
+library(tinyplot)
+x=y=0:1
+conf.low=y-0.5
+conf.high=y+0.5
+par(mfrow=1:2)
+plt(y~x,ymin=conf.low,ymax=conf.high,type="ribbon")
+plt(y~x,ymin=conf.low,ymax=conf.high,type="ribbon",xlim=c(0,0.5),ylim=c(0,0.5))
+
+plt(y~x,type="l") |> names()
+plt(y~x,type="l",xlim=c(0,0.5),ylim=c(0,0.5)) # ok
+plt(y~x,ymin=conf.low,ymax=conf.high,type="l")
+plt(y~x,ymin=conf.low,ymax=conf.high,type="l",xlim=c(0,0.5),ylim=c(0,0.5))
+
+
+## Bug report
+library(rstpm2)
+colon3 <- data.frame(
+    sex = ifelse(colon$sex == "Female", 0, 1),
+    status = ifelse(colon$status %in% c("Dead: cancer", "Dead: other"), 1, ifelse(colon$status == "Alive", 0, NA)),
+    persontime = as.numeric(colon$exit - colon$dx))
+modvc <- stpm2(Surv(persontime, status) ~ sex, df = 3, tvc = list(sex = 3),
+               data = colon3)
+
+plot(modvc,
+     newdata = data.frame(sex = 0),
+     type = "hr",
+     var = "sex",
+     ci = TRUE, rug = FALSE,
+     las = 1, ylim = c(0.8,1.5), lwd = 2,
+     main = "Hazard Ratio (TVC)",
+     xaxt = "n",
+     xlab = "Time (years)")
+axis(1, at = c(seq(0, 365*20, 365)), labels = c(0:20))
+abline(v=365,lty=2)
+df = data.frame(sex=0,persontime=365*c(1,2,5))
+predict(modvc, type="hr", var="sex", newdata=df, se.fit=TRUE,full=TRUE) |>
+    transform(labels=sprintf("%.3f\n(%.3f, %.3f)", Estimate, lower, upper)) |>
+    with({abline(v=persontime,lty=2)
+        use.upper=c(TRUE,FALSE,TRUE)
+        text(x=persontime,upper*use.upper+lower*(!use.upper),labels=labels,
+             pos=ifelse(use.upper,3,1))})
+
 
 library(rstpm2)
 library(broom)
