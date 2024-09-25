@@ -133,7 +133,8 @@ Rcpp::NumericVector voptimizeRcpp(Rcpp::Function f,
 
     /*  eps is approximately the square root of the relative machine precision. */
     eps = DBL_EPSILON;
-    tol1 = eps + 1.;/* the smallest 1.000... > 1 */
+    for (int i=0; i<size; ++i)
+      tol1[i] = eps + 1.;/* the smallest 1.000... > 1 */
     eps = sqrt(eps);
 
     for (int i=0; i<size; ++i)

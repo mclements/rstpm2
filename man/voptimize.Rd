@@ -96,7 +96,7 @@ voptimise(f, interval, \dots,
   \code{\link{nlm}}, \code{\link{uniroot}}.
 }
 \examples{
-require(graphics)
+library(graphics)
 
 f <- function (x, a) (x - a)^2
 xmin <- voptimize(f, lower=c(0, 0), upper=c(1,1), tol = 0.0001, a = c(1/3,2/3))

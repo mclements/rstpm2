@@ -131,12 +131,15 @@ vuniroot <-
          init.it = it, estim.prec = val[[3L]])
 }
 
-
 voptimize <- function (f, interval, ...,
                        lower=pmin(interval[,1], interval[,2]),
                        upper=pmax(interval[,1], interval[,2]),
                        maximum = FALSE, tol = .Machine$double.eps^0.25) 
 {
+    if (!missing(interval) && ncol(interval) != 2L)
+        stop("'interval' must be a matrix with two columns")
+    if (all(!is.numeric(lower) | !is.numeric(upper) | lower >= upper))
+        stop("lower < upper  is not fulfilled")
     if (maximum) {
         val <- voptimizeRcpp(function(arg) -f(arg, ...), 
                      lower, upper, tol)
