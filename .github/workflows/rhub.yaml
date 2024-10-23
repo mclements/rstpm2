@@ -74,6 +74,8 @@ jobs:
       fail-fast: false
       matrix:
         config: ${{ fromJson(needs.setup.outputs.platforms) }}
+          - platform: "windows-x86_64-devel"
+            job-config: "args = c('--no-build-vignettes', '--no-manual')"
 
     steps:
       - uses: r-hub/actions/checkout@v1
