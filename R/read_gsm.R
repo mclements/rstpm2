@@ -18,11 +18,13 @@ grep_call = function(name,x) {
 #' @rdname gsm_design
 #' @importFrom stats predict
 #' @export
-gsm_design = function(object, newdata, inflate=100) {
+gsm_design = function(object, newdata, newdata0=NULL, t0=NULL, inflate=100) {
     stopifnot(inherits(object, "stpm2"),
               is.list(newdata),
               is.numeric(inflate),
-              length(inflate) == 1)
+              length(inflate) == 1,
+              is.null(t0) || (is.numeric(t0) && length(t0)==1),
+              is.null(newdata0) || all(dim(newdata)==dim(newdata0)))
     ## Assumed patterns:
     ## timeEffect := (ns|nsx)(log(timeVar),knots,Boundary.knots,centre=FALSE,derivs=(c(2,2)|c(2,1)))
     ## effect := timeEffect | otherEffect:timeEffect | timeEffect:otherEffect
@@ -90,12 +92,19 @@ gsm_design = function(object, newdata, inflate=100) {
     Xp = predict(object, newdata=newdata, type="lpmatrix")
     index2 = which(!(coef_index %in% index_time_effects))
     etap = drop(Xp[, index2, drop=FALSE] %*% coef(object)[index2])
+    if (!is.null(newdata0)) {
+        newdata0[[object@timeVar]] = mean(time) # NB: time not used
+        Xp0 = predict(object, newdata=newdata0, type="lpmatrix")
+        etap0 = drop(Xp0[, index2, drop=FALSE] %*% coef(object)[index2])
+    }
     list(type="gsm",
          link_name=object@args$link,
          tmin = min(time), # not currently used?
          tmax = max(time),
          inflate=as.double(inflate),
          etap=etap,
+         etap0= if(!is.null(newdata0)) etap0 else etap*0,
+         t0 = if(!is.null(t0)) pmax(1e-10,t0) else Inf,
          coefp = coef(object)[index2], # for debugging
          log_time=TRUE,
          terms =

@@ -5,9 +5,9 @@ bibentry(
     volume="27",
     number="5",
     pages="1531-1546",
-    author=personList(as.person("X.-R. Liu"),
-                      as.person("Y. Pawitan"),
-                      as.person("M. Clements")),
+    author=c(person("X.-R. Liu"),
+             person("Y. Pawitan"),
+             person("M. Clements")),
     journal="Statistical Methods in Medical Research"
 )
 
@@ -18,9 +18,9 @@ bibentry(
     volume="39",
     number="29",
     pages="4743-4762",
-    author=personList(as.person("X.-R. Liu"),
-                      as.person("Y. Pawitan"),
-                      as.person("M. S. Clements")),
+    author=c(person("X.-R. Liu"),
+             person("Y. Pawitan"),
+             person("M. S. Clements")),
     journal="Statistics in Medicine"
 )
 
@@ -28,9 +28,9 @@ bibentry(
     bibtype="Article",
     title="Generalized parametric cure models for relative survival",
     year="2020",
-    author=personList(as.person("L. H. Jakobsen"),
-                      as.person("M. Bøgsted"),
-                      as.person("M. Clements")),
+    author=c(person("L. H. Jakobsen"),
+             person("M. Bøgsted"),
+             person("M. Clements")),
     journal="Biometrical Journal"
 )
 
@@ -38,7 +38,7 @@ bibentry(
     bibtype="MastersThesis",
     title="Generalized survival models applied to interval censored data",
     year="2018",
-    author=personList(as.person("A. N. Printz")),
+    author=c(person("A. N. Printz")),
     school="Stockholm University",
     url="https://kurser.math.su.se/pluginfile.php/20130/mod_folder/content/0/Kandidat/2018/2018_10_report.pdf"
 )
@@ -47,12 +47,12 @@ bibentry(
     bibtype="Article",
     title="Leukocyte telomere length and all-cause mortality: A between-within twin study with time-dependent effects using generalized survival models",
     year="2018",
-    author=personList(as.person("Y. Zhan"),
-                      as.person("X.-R. Liu"),
-                      as.person("C. A. Reynolds"),
-                      as.person("N. L. Pedersen"),
-                      as.person("S. Hägg"),
-                      as.person("M. S. Clements")),
+    author=c(person("Y. Zhan"),
+             person("X.-R. Liu"),
+             person("C. A. Reynolds"),
+             person("N. L. Pedersen"),
+             person("S. Hägg"),
+             person("M. S. Clements")),
     journal="American Journal of Epidemiology",
     volume="187",
     number="10",

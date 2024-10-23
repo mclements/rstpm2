@@ -19,7 +19,7 @@
                "hdiff","loghazard","link","meansurv","meansurvdiff","meanhr",
                "odds","or","margsurv","marghaz","marghr","meanhaz","af",
                "fail","margfail","meanmargsurv","uncured","rmst","probcure",
-               "lpmatrix", "gradh", "gradH","rmstdiff"),
+               "lpmatrix", "gradh", "gradH","rmstdiff","lpmatrixD"),
                grid=FALSE,seqLength=300,
                type.relsurv=c("excess","total","other"), scale=365.24,
                rmap, ratetable=survival::survexp.us,
@@ -31,7 +31,7 @@
                "hdiff","loghazard","link","meansurv","meansurvdiff","meanhr",
                "odds","or","margsurv","marghaz","marghr","meanhaz","af",
                "fail","margfail","meanmargsurv","rmst","lpmatrix",
-               "gradh", "gradH","rmstdiff"),
+               "gradh", "gradH","rmstdiff","lpmatrixD"),
                grid=FALSE,seqLength=300,
                se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,
                keep.attributes=FALSE, use.gr=TRUE,level=0.95,
@@ -46,7 +46,7 @@
                regular set of event times (i.e. newdata would \emph{not}
                include the event times). }
   \item{type}{specify the type of prediction:
-    \itemize{
+    \describe{
       \item{"surv"}{survival probabilities}
       \item{"cumhaz"}{cumulative hazard}
       \item{"hazard"}{hazard}
@@ -74,6 +74,8 @@
       \item{"rmstdiff"}{restricted mean survival time difference}
       \item{"probcure"}{probability of cure}
       \item{"lpmatrix"}{design matrix}
+      \item{"lpmatrixD"}{design matrix for the derivative with respect
+  to time}
     }
   }
   \item{grid}{whether to merge newdata with a regular sequence of event

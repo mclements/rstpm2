@@ -1,23 +1,52 @@
 #ifndef C_OPTIM_H
 #define C_OPTIM_H
 
-#include <Rcpp.h>
+#include <RcppArmadillo.h>
 
-namespace rstpm2 {
-
+extern "C" {
+  // main/optim.c
   typedef double optimfn(int, double *, void *);
   typedef void optimgr(int, double *, double *, void *);
 
+  void vmmin(int n, double *b, double *Fmin,
+	     optimfn fn, optimgr gr, int maxit, int trace,
+	     int *mask, double abstol, double reltol, int nREPORT,
+	     void *ex, int *fncount, int *grcount, int *fail);
+  void nmmin(int n, double *Bvec, double *X, double *Fmin, optimfn fn,
+	     int *fail, double abstol, double intol, void *ex,
+	     double alpha, double bet, double gamm, int trace,
+	     int *fncount, int maxit);
+  
   /* type of pointer to the target and gradient functions for Nlm */
   typedef void (*fcn_p)(int, double *, double *, void *);
 
   /* type of pointer to the hessian functions for Nlm */
   typedef void (*d2fcn_p)(int, int, double *, double *, void *);
 
+  /* Also used in packages nlme, pcaPP */
+  void optif9(int nr, int n, double *x,
+	      fcn_p fcn, fcn_p d1fcn, d2fcn_p d2fcn,
+	      void *state, double *typsiz, double fscale, int method,
+	      int iexp, int *msg, int ndigit, int itnlim, int iagflg,
+	      int iahflg, double dlt, double gradtl, double stepmx,
+	      double steptl, double *xpls, double *fpls, double *gpls,
+	      int *itrmcd, double *a, double *wrk, int *itncnt);
+}
+
+namespace rstpm2 {
+
+  // forward declarations
+  void Rprint(Rcpp::NumericMatrix const & m);
+  void Rprint(Rcpp::NumericVector const & v);
+  void Rprint(arma::mat const & m);
+  void Rprint(arma::vec const & v);
+
   double min(double a, double b);
   double max(double a, double b);
   double bound(double x, double lower, double upper);
 
+  arma::mat rmult(arma::mat const &m, arma::vec const &v);
+  
   /**
      Adapt a function object (functor) for NelderMead and BFGS
   **/
@@ -36,14 +65,27 @@ namespace rstpm2 {
     Rcpp::NumericVector x(beta,beta+n);
     return model->objective(x);
   }
+  template<class T>
+    double arma_adapt_objective(int n, double * beta, void * par) {
+    T * model = (T *) par;
+    arma::vec x(&beta[0],n);
+    return model->objective(x);
+  }
   /**
-     Adapt a gradient function for BFGS
+     Adapt a gradient function for BFGS, BFGSx and ConstrBFGSx
   **/
   template<class T>
     void adapt_gradient(int n, double * beta, double * grad, void * par) {
     T * model = (T *) par;
     Rcpp::NumericVector x(beta,beta+n);
     Rcpp::NumericVector vgrad = model->gradient(x);
+    for (int i=0; i<n; ++i) grad[i] = vgrad[i];
+  }
+  template<class T>
+    void arma_adapt_gradient(int n, double * beta, double * grad, void * par) {
+    T * model = (T *) par;
+    arma::vec x(&beta[0],n);
+    arma::vec vgrad = model->gradient(x);
     for (int i=0; i<n; ++i) grad[i] = vgrad[i];
   }
 
@@ -66,7 +108,7 @@ namespace rstpm2 {
     Rcpp::NumericVector coef;
     Rcpp::NumericMatrix hessian;
   };
-
+  
   class BFGS {
   public:
     BFGS(int trace = 0, int maxit = 100, 
@@ -88,6 +130,86 @@ namespace rstpm2 {
     Rcpp::NumericMatrix hessian;
   };
 
+  // class AbstractModel {
+  // public:
+  //   virtual double objective(Rcpp::NumericVector coefficients) = 0; // abstract
+  //   virtual Rcpp::NumericVector gradient(Rcpp::NumericVector coefficients) = 0; // abstract
+  //   virtual Rcpp::NumericMatrix hessian();
+  //   Rcpp::NumericVector coef;
+  // };
+  
+  class BFGSx {
+  public:
+    using This = BFGSx;
+    BFGSx(int trace = 0, int maxit = 100, 
+	  double abstol = - INFINITY,
+	  double reltol = 1.0e-8, int report = 10, double epshess = 1.0e-8,
+	  bool hessianp = true)  : trace(trace), maxit(maxit), report(report),
+				   abstol(abstol), reltol(reltol),
+				   epshess(epshess), hessianp(hessianp) { }
+    virtual void optim(Rcpp::NumericVector init);
+    virtual void optim(arma::vec init);
+    virtual double objective(arma::vec coefficients) = 0; // abstract
+    virtual arma::vec gradient(arma::vec coefficients) = 0; // abstract
+    arma::mat calc_hessian() {
+      int n = coef.size();
+      arma::vec df1(n);
+      arma::vec df2(n);
+      arma::mat hess(n,n);
+      double tmp;
+      for(int i=0; i<n; ++i) {
+	tmp = coef[i];
+	coef[i] = tmp + epshess;
+	df1 = gradient(coef);
+	coef[i] = tmp - epshess;
+	df2 = gradient(coef);
+	for (int j=0; j<n; ++j)
+	  hess(i,j) = (df1[j] - df2[j]) / (2*epshess);
+	coef[i] = tmp;
+      }
+      // now symmetrize
+      for(int i=0; i<n; ++i) 
+	for(int j=i; j<n; ++j) 
+	  if (i != j)
+	    hess(i,j) = hess(j,i) = (hess(i,j) + hess(j,i)) / 2.0;
+      return hess;
+    }
+    int n, trace, maxit, report, fncount, grcount, fail;
+    double abstol, reltol, Fmin, epshess;
+    bool hessianp;
+    arma::vec coef;
+    arma::mat hessian;
+  };
+
+
+  class ConstrBFGSx : public BFGSx {
+  public:
+    virtual void constr_optim(arma::vec init,
+			      arma::mat ui,
+			      arma::vec ci,
+			      double mu = 1.0e-4,
+			      int outer_iterations = 100,
+			      double outer_eps = 1.0e-5);
+    virtual void constr_optim(Rcpp::NumericVector init,
+			      Rcpp::NumericMatrix ui,
+			      Rcpp::NumericVector ci,
+			      double mu = 1.0e-4,
+			      int outer_iterations = 100,
+			      double outer_eps = 1.0e-5);
+    arma::mat ui;
+    arma::vec ci;
+    arma::vec theta_old;
+    double mu;
+    double R(arma::vec theta);
+    arma::vec dR(arma::vec theta);
+    void optim_inner(arma::vec theta);
+    int tot_counts, outer_iterations, convergence;
+    double barrier_value;
+    std::string message;
+  };
+  double adapt_R(int n, double * beta, void * par);
+  void adapt_dR(int n, double * beta, double * grad, void * par);
+  
   class Nlm {
   public:
     Nlm(double fscale = 1.0,    // nlm()

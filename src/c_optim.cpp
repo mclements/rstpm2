@@ -1,9 +1,7 @@
-#include <Rcpp.h>
-#include <R_ext/Applic.h>
+#include "c_optim.h"
 #include <vector>
 #include <map>
 #include <float.h> /* DBL_EPSILON */
-#include "c_optim.h"
 
 // #include "uncmin.cpp"
 
@@ -14,20 +12,6 @@ namespace rstpm2 {
   double min(double a, double b) { return a < b ? a : b; }
   double max(double a, double b) { return a < b ? b : a; }
   double bound(double x, double lower, double upper) { return x < lower ? lower : (x > upper ? upper : x); }
-
-  // print utilities
-  void Rprint_(NumericMatrix m) {
-    for (int i=0; i<m.nrow(); ++i) {
-      for (int j=0; j<m.ncol(); ++j) 
-	Rprintf("%f ", m(i,j));
-      Rprintf("\n");
-    }
-  }
-  void Rprint_(NumericVector v) {
-    for (int i=0; i<v.size(); ++i) 
-      Rprintf("%f ", v(i));
-    Rprintf("\n");
-  }
 
   // void nmmin(int n, double *Bvec, double *X, double *Fmin, optimfn fminfn,
   // 	   int *fail, double abstol, double intol, void *ex,
@@ -471,30 +455,166 @@ double R_zeroin2(			/* An estimate of the root */
     *Maxit = -1;
     return b;
 }
-
-
-  // Complete Q matrix from a QR decomposition
-  NumericMatrix qr_q(const NumericMatrix& X, double tol) 
-  {
-    // Initialize member data and allocate heap memory
-    int n=X.rows(), p=X.cols(), rank=0;
-    NumericMatrix qr(X), y(n,n), q(n,n);
-    int* pivot=(int*)R_alloc(p,sizeof(int)); 
-    double* tau=(double*)R_alloc(p,sizeof(double)); 
-    double* work=(double*)R_alloc(p*2,sizeof(double));
-    for(int i=0;i<p;i++) 
-      pivot[i]=i+1; 
-    for(int i=0;i<n;i++) 
-      for(int j=0;j<n;j++) 
-	y(i,j) = i==j ? 1.0 : 0.0;
-    // LINPACK QR factorization via householder transformations
-    F77_CALL(dqrdc2)(&qr[0], &n, &n, &p, &tol, &rank, tau, pivot, work);
-    // Compute orthogonal factor Q
-    F77_CALL(dqrqy)(&qr[0], &n, &rank, tau, &y[0], &n, &q[0]);
-    return q;
+  
+void BFGSx::optim(Rcpp::NumericVector init) {
+  optim(as<arma::vec>(wrap(init)));
+}
+void BFGSx::optim(arma::vec init) {
+      n = init.size();
+      std::vector<int> mask(n,1);
+      vmmin(n,
+	    &init[0],
+	    &Fmin,
+	    &arma_adapt_objective<This>,
+	    &arma_adapt_gradient<This>,
+	    maxit,
+	    trace,
+	    &mask[0],
+	    abstol,
+	    reltol,
+	    report,
+	    (void *) this,
+	    &fncount,
+	    &grcount,
+	    &fail);
+      coef = init;
+      if (hessianp)
+	hessian = calc_hessian();
   }
-  
-  
+
+  double adapt_R(int n, double * beta, void * par) {
+    ConstrBFGSx * model = (ConstrBFGSx *) par;
+    arma::vec x(&beta[0],n);
+    return model->R(x);
+  }
+  void adapt_dR(int n, double * beta, double * grad, void * par) {
+    ConstrBFGSx * model = (ConstrBFGSx *) par;
+    arma::vec x(&beta[0],n);
+    arma::vec vgrad = model->dR(x);
+    for (int i=0; i<n; ++i) grad[i] = vgrad[i];
+  }
+
+void ConstrBFGSx::optim_inner(arma::vec init) {
+  arma::vec cinit = init;
+      n = init.size();
+      std::vector<int> mask(n,1);
+      if (trace > 0) {
+	Rprintf("optim_inner:");
+	Rprint(init);
+      }
+      vmmin(n,
+	    &cinit[0],
+	    &Fmin,
+	    &adapt_R,
+	    &adapt_dR,
+	    maxit,
+	    trace,
+	    &mask[0],
+	    abstol,
+	    reltol,
+	    report,
+	    (void *) this,
+	    &fncount,
+	    &grcount,
+	    &fail);
+      coef = cinit;
+  }
+
+double ConstrBFGSx::R(arma::vec theta) {
+    using namespace arma;
+    using namespace Rcpp;
+    vec ui_theta = ui*theta;
+    vec gi = ui_theta - ci;
+    if (min(gi)<0.0) return R_NaN;
+    vec gi_old = ui * theta_old - ci;
+    double bar = sum(gi_old % log(gi) - ui_theta);
+    if (Rcpp::traits::is_infinite<REALSXP>(bar))
+      bar = R_NegInf;
+    double out = objective(theta) - mu*bar;
+    // if (trace>0) {
+    //   Rprintf("theta: "); Rprint_(theta);
+    //   Rprintf("R: %f\n", out);
+    // }
+    return out;
+  }
+
+arma::vec ConstrBFGSx::dR(arma::vec theta) {
+    using namespace arma;
+    using namespace Rcpp;
+    vec ui_theta = ui*theta;
+    vec gi = ui_theta - ci;
+    vec gi_old = ui * theta_old - ci;
+    vec dbar = sum(rmult(ui, gi_old/gi) - ui, 0).t();
+    return gradient(theta) - mu*dbar;
+  }
+
+  void ConstrBFGSx::constr_optim(Rcpp::NumericVector theta,
+				 Rcpp::NumericMatrix ui,
+				 Rcpp::NumericVector ci,
+				 double mu,
+				 int outer_iterations,
+				 double outer_eps) {
+    constr_optim(as<arma::vec>(wrap(theta)),
+		 as<arma::mat>(wrap(ui)),
+		 as<arma::vec>(wrap(ci)),
+		 mu, outer_iterations, outer_eps);
+  }
+void ConstrBFGSx::constr_optim(arma::vec theta,
+			       arma::mat ui,
+			       arma::vec ci,
+			       double mu,
+			       int outer_iterations,
+			       double outer_eps) {
+    using namespace arma;
+    double obj_old;
+    int i;
+    this->ui = ui;
+    this->ci = ci;
+    this->mu = mu;
+    bool hessianp_old = this->hessianp;
+    this->hessianp = false;
+    if (min(ui * theta) <= 0.0) 
+      Rf_error("initial value is not in the interior of the feasible region");
+    double obj = objective(theta);
+    this->theta_old = theta;
+    double r = R(theta);
+    tot_counts = 0;
+    int s_mu = mu<0.0 ? -1 : 1;
+    for (i=0; i<outer_iterations; ++i) {
+      obj_old = obj;
+      double r_old = r;
+      this->theta_old = theta;
+      optim_inner(theta); // originally object a; we now update this->coef
+      r = R(this->coef);
+      if (!Rcpp::traits::is_infinite<REALSXP>(r) &&
+	  !Rcpp::traits::is_infinite<REALSXP>(r_old) &&
+	  std::abs(r - r_old) < (0.001 + std::abs(r))*outer_eps)
+	break;
+      theta = this->coef;
+      tot_counts += this->fncount;
+      obj = objective(theta);
+      if (s_mu*obj > s_mu*obj_old)
+	break;
+    }
+    if (i == outer_iterations-1) {
+      convergence = 7;
+      message = "Barrier algorithm ran out of iterations and did not converge";
+    }
+    if (mu > 0 && obj > obj_old) {
+      convergence = 11;
+      message = "Objective function increased at outer iteration " + std::to_string(i);
+    }
+    if (mu < 0 && obj < obj_old) {
+      convergence = 11;
+      message = "Objective function decreased at outer iteration " + std::to_string(i); 
+    }
+    outer_iterations = i;
+    barrier_value = R(coef);
+    Fmin = objective(coef);
+    barrier_value -= Fmin;
+    hessianp = hessianp_old; // reset it to the previous value
+  }
+
   // R CMD INSTALL ~/src/R/microsimulation
   // R -q -e "require(microsimulation); .Call('test_nmmin',1:2,PACKAGE='microsimulation')"
 

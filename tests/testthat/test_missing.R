@@ -307,3 +307,65 @@ if (!.CRAN && slow) {
     })
 }
 
+context("Missing data - aft")
+test_that("Missing event time - aft", {
+    brcancer2 <- rstpm2::brcancer
+    brcancer2$rectime[1] <- NA
+    expect_warning(fit1 <<- aft(Surv(rectime,censrec==1)~hormon,data=brcancer2),
+                   "Some event times are NA")
+    expect_eps(coef(fit1)[1],0.267945, 1e-5)
+    expect_length(predict(fit1), 685)
+    })
+
+test_that("Invalid event time - aft", {
+    brcancer2 <- rstpm2::brcancer
+    brcancer2$rectime[1] <- -1
+    expect_warning(fit2 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer2),
+                   "Some event times <= 0")
+    expect_equal(coef(fit1), coef(fit2))
+    expect_length(predict(fit2), 685)
+})
+
+test_that("Missing covariate - aft", {
+    brcancer2 <- rstpm2::brcancer
+    brcancer2$hormon[1] <- NA
+    fit2 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer2)
+    expect_equal(coef(fit1), coef(fit2))
+    expect_length(predict(fit2), 685)
+})
+
+test_that("Missing weight - aft", {
+    brcancer2 <- transform(rstpm2::brcancer, w=1)
+    brcancer2$w[1] <- NA
+    fit2 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w)
+    expect_equal(coef(fit1),coef(fit2))
+    expect_length(predict(fit2), 685)
+})
+
+test_that("Predictions with missing values - aft", {
+    brcancer2 <- transform(rstpm2::brcancer, w=1)
+    brcancer2$w[1] <- NA
+    fit2 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w)
+    ## test <- c(surv=0.7230207, fail=1-0.7230207, haz=0.000335262)
+    expect_eps(predict(fit2, newdata=data.frame(hormon=1, rectime=1000), type="surv"),
+               0.71176,
+               1e-4)
+    expect_eps(predict(fit2, newdata=data.frame(hormon=1, rectime=1000), type="hazard"),
+               0.0004301273,
+               1e-6)
+})
+
+test_that("Missing bhazard - aft", {
+    set.seed(12345)
+    x <- rnorm(1e3,0,0.2)
+    cause1 <- rexp(1e3,1e-3*exp(x))
+    other <- rexp(1e3,1e-4)
+    e <- cause1<other
+    y <- pmin(cause1,other)
+    d <- data.frame(e,y,bg=1e-6,x)
+    d$bg[1] <- NA
+    fit0 <- aft(Surv(y,e)~x,data=d)
+    fit1 <- aft(Surv(y,e)~x+bhazard(bg),data=d)
+    expect_true(all(coef(fit0) != coef(fit1)))
+    expect_eps(coef(fit1)[1], -0.9631885, 1e-5)
+})

@@ -108,13 +108,13 @@ vuniroot <-
                  "did not succeed extending the interval endpoints for f(lower) * f(upper) <= 0"
              else "f() values at end points not of opposite sign")
     if (check.conv) {
-        val <- tryCatch(.Call("vunirootRcpp", fun, lower, upper, f.lower, f.upper, maxiter, tol, PACKAGE="rstpm2"),
+        val <- tryCatch(vunirootRcpp(fun, lower, upper, f.lower, f.upper, maxiter, tol),
                         warning = function(w) w)
         if (inherits(val, "warning")) 
             stop("convergence problem in zero finding: ", conditionMessage(val))
     }
     else {
-        val <- .Call("vunirootRcpp", fun, lower, upper, f.lower, f.upper, as.integer(maxiter), tol, PACKAGE="rstpm2")
+        val <- vunirootRcpp(fun, lower, upper, f.lower, f.upper, as.integer(maxiter), tol)
     }
     iter <- as.integer(val[[2L]])
     if (any(iter < 0)) {
@@ -130,3 +130,69 @@ vuniroot <-
     list(root = val[[1L]], f.root = f(val[[1L]], ...), iter = iter,
          init.it = it, estim.prec = val[[3L]])
 }
+
+voptimize <- function (f, interval, ...,
+                       lower=pmin(interval[,1], interval[,2]),
+                       upper=pmax(interval[,1], interval[,2]),
+                       maximum = FALSE, tol = .Machine$double.eps^0.25) 
+{
+    if (!missing(interval) && ncol(interval) != 2L)
+        stop("'interval' must be a matrix with two columns")
+    if (all(!is.numeric(lower) | !is.numeric(upper) | lower >= upper))
+        stop("lower < upper  is not fulfilled")
+    if (maximum) {
+        val <- voptimizeRcpp(function(arg) -f(arg, ...), 
+                     lower, upper, tol)
+        list(maximum = val, objective = f(val, ...))
+    }
+    else {
+        val <- voptimizeRcpp(function(arg) f(arg, ...), 
+            lower, upper, tol)
+        list(minimum = val, objective = f(val, ...))
+    }
+}
+
+voptimise <- voptimize
+
+vintegrate = function(f, lower, upper, ..., subdivisions = 100L, rel.tol=.Machine$double.eps^0.25,
+                       abs.tol=rel.tol) {
+    f <- match.fun(f)
+    ff <- function(x) f(x, ...)
+    ny = max(length(lower), length(upper))
+    if (ny>1 && length(lower)==1) lower = rep(lower,ny)
+    if (ny>1 && length(upper)==1) upper = rep(upper,ny)
+    limit <- as.integer(subdivisions)
+    if (limit < 1L || (abs.tol <= 0 && rel.tol < max(50 * .Machine$double.eps, 
+                                                     5e-29))) 
+        stop("invalid parameter values")
+    if (any(is.na(lower) | is.na(upper)))
+        stop("a limit is NA or NaN")
+    if (!(all(is.finite(lower)) || all(!is.finite(lower))))
+        stop("lower bounds are a mix of finite and infinite values")
+    if (!(all(is.finite(upper)) || all(!is.finite(upper))))
+        stop("upper bounds are a mix of finite and infinite values")
+    if (all(is.finite(lower)) && all(is.finite(upper))) {
+        res = vdqagsRcpp(ff, lower, upper, rel.tol, abs.tol, limit, ny)
+        res$value = drop(res$value)
+        res$abs.err = drop(res$abs.err)
+        res$abserr = NULL
+    } else {
+        if (all(is.finite(lower))) {
+            inf <- 1L
+            bound <- lower
+        }
+        else if (all(is.finite(upper))) {
+            inf <- -1L
+            bound <- upper
+        }
+        else {
+            inf <- 2L
+            bound <- rep(0,ny) # ignored:)
+        }
+        res = vdqagiRcpp(ff, bound, inf, rel.tol, abs.tol, limit, ny)
+        res$value = drop(res$value)
+        res$abserr = drop(res$abserr)
+    }
+    res
+}
+

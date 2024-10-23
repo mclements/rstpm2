@@ -1,6 +1,6 @@
 ## Utilities
 ## copied from stats:::format.perc
-format.perc <- 
+formating.perc <- 
     function (probs, digits) 
         paste(format(100 * probs, trim = TRUE, scientific = FALSE, digits = digits), 
               "%")
@@ -241,7 +241,8 @@ lpmatrix.lm <-
   }
 ## fun: takes coef as its first argument
 ## requires: coef() and vcov() on the object
-numDeltaMethod <- function(object, fun, gd=NULL, ...) {
+numDeltaMethod <- function(object, fun, gd=NULL,
+                           conf.int=FALSE, level=0.95, ...) {
   coef <- coef(object)
   Sigma <- vcov(object)
   fit <- fun(coef,...)
@@ -254,6 +255,13 @@ numDeltaMethod <- function(object, fun, gd=NULL, ...) {
   df <- data.frame(fit = as.numeric(fit), se.fit = as.numeric(se.fit),
                    Estimate = as.numeric(fit), SE = as.numeric(se.fit))
   row.names(df) <- names(fit)
+  if (conf.int) {
+      a <- (1 - level)/2
+      a <- cbind(a, 1 - a)
+      fac <- qnorm(a)
+      df$conf.low <-  df$fit+fac[,1]*df$se.fit
+      df$conf.high <- df$fit+fac[,2]*df$se.fit
+  }
   structure(df, # vcov=Sigma,
             class=c("predictnl","data.frame"))
 }
@@ -264,6 +272,10 @@ predictnl <- function (object, ...)
 setGeneric("predictnl")
 "coef<-.default" <- function(x,value) {
     x$coefficients <- value
+    x
+}
+"coef<-.mle2" <- function(x,value) {
+    x@fullcoef <- value
     x
 }
 predictnl.default <- function(object,fun,newdata=NULL,gd=NULL,...)
@@ -296,8 +308,6 @@ setMethod("predictnl", "mle2", function(object,fun,newdata=NULL,gd=NULL,...)
       }
     numDeltaMethod(object,localf,newdata=newdata,gd=gd,...)
   })
-print.predictnl <- function(x, ...)
-    print(data.frame(fit=x$fit, se.fit=x$se.fit), ...)
 confint.predictnl <- function(object,parm,level=0.95,...) {
     cf <- object$fit
     pnames <- names(cf)
@@ -309,7 +319,7 @@ confint.predictnl <- function(object,parm,level=0.95,...) {
         parm <- pnames[parm]
     a <- (1 - level)/2
     a <- c(a, 1 - a)
-    pct <- format.perc(a, 3)
+    pct <- formating.perc(a, 3)
     fac <- qnorm(a)
     ci <- array(NA, dim = c(length(parm), 2L), dimnames = list(parm, 
         pct))
@@ -1596,8 +1606,8 @@ setMethod("predictnl", "stpm2",
     return(dm)
   })
 ##
-setMethod("predictnl", "aft",
-          function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
+
+predictnl.aft <- function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
   {
     link <- match.arg(link)
     linkf <- eval(parse(text=link))
@@ -1609,7 +1619,9 @@ setMethod("predictnl", "aft",
         linkf(fun(object,...))
       }
     numDeltaMethod(object,localf,newdata=newdata,gd=gd,...)
-  })
+  }
+
+setMethod("predictnl", "aft", predictnl.aft)
 
 residuals.stpm2.base <- function(object, type=c("li","gradli")) {
     type <- match.arg(type)
@@ -1634,7 +1646,7 @@ setMethod("residuals", "stpm2",
 
 predict.stpm2.base <- 
           function(object, newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH","rmstdiff"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH","rmstdiff","lpmatrixD"),
                    grid=FALSE, seqLength=300,
                    type.relsurv=c("excess","total","other"), ratetable = survival::survexp.us,
                    rmap, scale=365.24,
@@ -1666,7 +1678,7 @@ predict.stpm2.base <-
                            meansurvdiff = "I",
                            fail = "cloglog", uncured = "log", density = "log",
                            rmst = "I", probcure = "cloglog", lpmatrix="I", gradh="I",
-                           gradH="I", rmstdiff="I")
+                           gradH="I", rmstdiff="I", lpmatrixD="I")
         } else {
             link <- switch(type, surv = "cloglog", cumhaz = "log",
                            hazard = "log", hr = "log", sdiff = "I", hdiff = "I",
@@ -1676,7 +1688,7 @@ predict.stpm2.base <-
                            meansurvdiff = "I",
                            fail = "cloglog", uncured = "cloglog", density = "log",
                            rmst = "I", probcure = "cloglog", lpmatrix="I", gradh="I",
-                           gradH="I", rmstdiff="I")
+                           gradH="I", rmstdiff="I", lpmatrixD="I")
         }
     }
     invlinkf <- switch(link,I=I,log=exp,cloglog=cexpexp,logit=expit)
@@ -1982,6 +1994,9 @@ predict.stpm2.base <-
         }
         if (type=="lpmatrix") {
           return(X)
+        }
+        if (type=="lpmatrixD") {
+          return(XD)
         }
         if (type=="cumhaz") {
             ## if (object@delayed) {
@@ -2309,7 +2324,7 @@ predict.cumhaz <-
 
 setMethod("predict", "stpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH","rmstdiff"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","uncured","rmst","probcure","lpmatrix","gradh","gradH","rmstdiff","lpmatrixD"),
                    grid=FALSE,seqLength=300,
                    type.relsurv=c("excess","total","other"), scale=365.24, rmap, ratetable=survival::survexp.us,
                    se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95,n.gauss.quad=100,full=FALSE,...) {
@@ -2476,7 +2491,7 @@ eform <- function (object, ...)
   UseMethod("eform")
 setGeneric("eform")
 eform.stpm2 <- function (object, parm, level = 0.95, method = c("Profile","Delta"), 
-                    name = "exp(beta)") 
+                    name = "exp(beta)", ...) 
           {
               method <- match.arg(method)
               if (missing(parm)) 
@@ -2838,7 +2853,7 @@ setMethod("predictnl", "pstpm2",
 ##
 setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
-                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst","lpmatrix","gradh","gradH","rmstdiff"),
+                   type=c("surv","cumhaz","hazard","density","hr","sdiff","hdiff","loghazard","link","meansurv","meansurvdiff","meanhr","odds","or","margsurv","marghaz","marghr","meanhaz","af","fail","margfail","meanmargsurv","rmst","lpmatrix","gradh","gradH","rmstdiff","lpmatrixD"),
                    grid=FALSE,seqLength=300,
                    se.fit=FALSE,link=NULL,exposed=NULL,var=NULL,keep.attributes=FALSE,use.gr=TRUE,level=0.95, n.gauss.quad=100, full=FALSE, ...) {
               type <- match.arg(type)

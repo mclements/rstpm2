@@ -10,7 +10,7 @@ Experimental approach to modelling time-dependent effects in Cox regression.
 }
 \section{Objects from the Class}{
 Objects can be created by calls of the form \code{new("tvcCoxph", ...)}
-  or \code{cox.tvc(...)}. See the \code{"\linkS4class{mle2}"}
+  or \code{cox.tvc(...)}. See the \code{\link[bbmle]{mle2}}
   documentation.
 }
 \section{Slots}{
@@ -30,7 +30,7 @@ Objects can be created by calls of the form \code{new("tvcCoxph", ...)}
   }
 }
 \section{Extends}{
-Class \code{"\linkS4class{mle2}"}, directly.
+Class \code{\link[bbmle]{mle2}}, directly.
 }
 \section{Methods}{
   \describe{

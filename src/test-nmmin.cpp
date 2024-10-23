@@ -478,7 +478,7 @@ namespace rstpm2 {
   };
   class NelderMead2 : public NelderMead {
   public:
-    NumericMatrix calc_hessian(optimfn fn, void * ex, int debug = 0) {
+    NumericMatrix calc_hessian(optimfn fn, void * ex, int debug) {
       if (parscale.size()==0) REprintf("parscale is not defined for NelderMead2::calc_hessian.");
       if (debug>1) Rprintf("In NelderMead2->calc_hessian()...\n");
       int n = coef.size();
@@ -655,7 +655,7 @@ namespace rstpm2 {
     typedef Stpm2 This;
     Stpm2(SEXP sexp) : bfgs() {
       List list = as<List>(sexp);
-      std::string linkType = as<std::string>(list["link"]);
+      std::string linkType = as<std::string>(list("link"));
       if (linkType=="PH")
 	      link=new LogLogLink(sexp);
       else if (linkType=="PO")
@@ -670,39 +670,39 @@ namespace rstpm2 {
 	      REprintf("No matching link.type");
 	      return;
       }
-      bfgs.coef = init = as<NumericVector>(list["init"]);
-      X = as<mat>(list["X"]); 
-      XD = as<mat>(list["XD"]); 
-      bhazard = as<vec>(list["bhazard"]);
-      wt = as<vec>(list["wt"]);
-      event = as<vec>(list["event"]);
-      time = as<vec>(list["time"]);
-      offset = as<vec>(list["offset"]);
-      delayed = as<bool>(list["delayed"]);
-      interval = as<bool>(list["interval"]);
+      bfgs.coef = init = as<NumericVector>(list("init"));
+      X = as<mat>(list("X")); 
+      XD = as<mat>(list("XD")); 
+      bhazard = as<vec>(list("bhazard"));
+      wt = as<vec>(list("wt"));
+      event = as<vec>(list("event"));
+      time = as<vec>(list("time"));
+      offset = as<vec>(list("offset"));
+      delayed = as<bool>(list("delayed"));
+      interval = as<bool>(list("interval"));
       n = nbeta = init.size(); // number of parameters
       N = X.n_rows; // number of observations
-      X1 = as<mat>(list["X1"]);
-      X0 = as<mat>(list["X0"]);
+      X1 = as<mat>(list("X1"));
+      X0 = as<mat>(list("X0"));
       wt0.set_size(N); wt0.fill(0.0);
       if (delayed) {
-	wt0 = as<vec>(list["wt0"]);
+	wt0 = as<vec>(list("wt0"));
       }
       // if (interval) {
-      // 	X1 = as<mat>(list["X1"]);
+      // 	X1 = as<mat>(list("X1"));
       // }
-      map0 = as<vec>(list["map0"]); // length N map for X->X0
-      full_which0 = as<vec>(list["which0"]); // length N map for X0->X
-      ind0 = as<uvec>(list["ind0"]); // length N boolean for X0
-      ttype = as<vec>(list["ttype"]); 
-      kappa_init = kappa = as<double>(list["kappa"]);
-      maxkappa = as<double>(list["maxkappa"]);
-      optimiser = as<std::string>(list["optimiser"]);
-      bfgs.trace = as<int>(list["trace"]);
-      reltol = bfgs.reltol = as<double>(list["reltol"]);
-      robust_initial = as<bool>(list["robust_initial"]);
+      map0 = as<vec>(list("map0")); // length N map for X->X0
+      full_which0 = as<vec>(list("which0")); // length N map for X0->X
+      ind0 = as<uvec>(list("ind0")); // length N boolean for X0
+      ttype = as<vec>(list("ttype")); 
+      kappa_init = kappa = as<double>(list("kappa"));
+      maxkappa = as<double>(list("maxkappa"));
+      optimiser = as<std::string>(list("optimiser"));
+      bfgs.trace = as<int>(list("trace"));
+      reltol = bfgs.reltol = as<double>(list("reltol"));
+      robust_initial = as<bool>(list("robust_initial"));
       bfgs.hessianp = false;
-      bfgs.parscale = parscale = as<vec>(list["parscale"]);
+      bfgs.parscale = parscale = as<vec>(list("parscale"));
       which0 = removeNaN(full_which0);
     }
     // log-likelihood components and constraints
@@ -715,8 +715,9 @@ namespace rstpm2 {
       vec h = link->h(eta,etaD) + bhazard;
       vec H = link->H(eta);
       vec eps = h*0.0 + 1.0e-16; 
-      double constraint = kappa/2.0 * (sum(h % h % (h<0)) +
-				       sum(H % H % (H<0))); 
+      double constraint = kappa * (sum(h % h % (h<0)) +
+				   sum(H % H % (H<0)));
+      constraint += kappa*sum(etaD % etaD % (etaD<eps));
       h = max(h,eps);
       H = max(H,eps);
       vec li = wt % event % log(h) - wt % H;
@@ -861,10 +862,14 @@ namespace rstpm2 {
       vec eps = h*0.0 + 1.0e-16;
       mat gradH = link->gradH(eta,X);
       mat gradh = link->gradh(eta,etaD,X,XD);
-      mat Xconstraint = kappa * (rmult(gradh, h % (h<0)) +
-				 rmult(gradH, H % (H<0)));
-      // h = max(h,eps);
-      mat Xgrad = -rmult(gradH, wt) + rmult(gradh, event / h % wt);
+      mat Xconstraint = 2.0*kappa * (rmult(gradh, h % (h<eps)) +
+				     rmult(gradH, H % (H<eps)));
+      Xconstraint += 2.0*kappa*rmult(XD, etaD % (etaD<eps));
+      h = max(h,eps);
+      uvec hindex = (h<eps);
+      uvec Hindex = (H<eps);
+      uvec pindex = (etaD<eps);
+      mat Xgrad = -rmult(gradH, wt) + rmult(gradh, event / h % wt % (1-pindex));
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
     }
@@ -872,7 +877,7 @@ namespace rstpm2 {
       mat gradH0 = link->gradH(eta0, X0); 
       vec H0 = link->H(eta0); 
       vec eps = H0*0.0 + 1.0e-16;
-      mat Xconstraint = kappa * rmult(gradH0, H0 % (H0<0));
+      mat Xconstraint = 2.0*kappa*rmult(gradH0, H0 % (H0<0));
       mat Xgrad = rmult(gradH0, wt0);
       gradli_constraint out = {Xgrad, Xconstraint};
       return out;
@@ -939,13 +944,9 @@ namespace rstpm2 {
     vec gradient(vec beta) {
       gradli_constraint gc = gradli(X * beta, XD * beta, X0 * beta, X1 * beta,
 				    X, XD, X0, X1, beta);
-      rowvec dconstraint = sum(gc.constraint,0);
-      rowvec vgr = sum(gc.gradli,0);
-      vec gr(n);
-      for (size_t i = 0; i<beta.size(); ++i) {
-	gr[i] = vgr[i];// - dconstraint[i];
-      }
-      return -gr;
+      vec dconstraint = sum(gc.constraint,0).t();
+      vec gr = sum(gc.gradli,0).t();
+      return -gr+dconstraint;
     }
     bool feasible(vec beta) {
       vec eta = X * beta;
@@ -1229,7 +1230,7 @@ namespace rstpm2 {
 	sp[i] = exp(bound(logsp[i],lsp,usp));
       if (this->bfgs.trace > 0) {
 	for (size_t i = 0; i < sp.size(); ++i)
-	  Rprintf("sp[%i]=%f\t",i,sp[i]);
+	  Rprintf("sp[%i]=%f\t",(int)i,sp[i]);
       }
       this->optimWithConstraint(this->init);
       this->bfgs.hessian = this->bfgs.calc_hessian(&optimgradient<This>, (void *) this);

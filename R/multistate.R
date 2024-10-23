@@ -16,6 +16,7 @@ markov_msm <-
               debug = FALSE,
               ...)
 {
+    stopifnot(requireNamespace("deSolve", quietly=TRUE))
     call <- match.call()
     inherits <- function(x, ...)
         base::inherits(x, ...) ||
@@ -206,7 +207,7 @@ markov_msm <-
                              rep(0,3*nobs*nstates+3*nobs*nstates*ncoef+nobs*nstates*ntr))
             else
                 c(rep(init,nobs),rep(0,2*nobs*nstates+2*nobs*nstates*ncoef))
-    res <- ode(y = init, times = t, func = dp, method=method, atol=atol, rtol=rtol,
+    res <- deSolve::ode(y = init, times = t, func = dp, method=method, atol=atol, rtol=rtol,
                ...)
     P <- array(res[,1+1:(nstates*nobs)],c(nt,nstates,nobs))
     Pu <- array(res[,1+nobs*nstates+1:(nobs*nstates*ncoef)],c(nt,nstates,ncoef,nobs))
@@ -246,7 +247,7 @@ markov_msm <-
                    state.costs.sd=state.costs.sd,
                    transition.costs.sd=transition.costs.sd,
                    coefficients=coef(x),
-                   call=call),
+                   call=call, x=x),
               class="markov_msm")
 }
 
@@ -505,7 +506,7 @@ standardise.markov_msm <- function(x,
     dimnames(Pu) <- dimnames(Lu) <-
         list(time=x$time, state=state.names, coef=oldnames[[3]], obs=1)
     ## update x
-    x$newdata <- x$newdata[0,]
+    x$newdata <- x$newdata[0,,drop=FALSE]
     x$P <- P
     x$Pu <- Pu
     x$L <- L
@@ -515,9 +516,9 @@ standardise.markov_msm <- function(x,
     x
 }
 vcov.survPen <- function(object) object$Vp
-"coef<-.survPen" <- function(this,value) {
-    this$coefficients <- value
-    this
+"coef<-.survPen" <- function(x,value) {
+    x$coefficients <- value
+    x
 }
 survPenWrap <- function(object) {
     stopifnot(inherits(object, "survPen"))
@@ -668,7 +669,7 @@ predict.aftreg <- function (object, type = c("haz", "cumhaz", "density", "surv",
     }
     if (ncov) {
         x <- model.matrix(object, newframe)[,-1,drop=FALSE] # is the intercept always first?
-        x <- sweep(x, 2, object$means)
+        ## x <- sweep(x, 2, object$means) # no longer sweep:)
         param.scale <- if (object$param=="lifeAcc") -1 else 1
         lambda <- lambda *
             exp(param.scale*(x %mv% object$coefficients[1:ncov]))
@@ -1668,4 +1669,21 @@ as.data.frame.markov_sde <- function(x, row.names=NULL, optional=NULL, ci=TRUE,
     out$.id. <- NULL
     if(!is.null(row.names)) rownames(out) <- row.names
     out
+}
+
+## Parametric bootstrap
+pboot = function(object, m, parallel=FALSE, mc.cores=parallel::detectCores(), ...) {
+    ## do this once
+    newx = object$x
+    coefs <- lapply(object$x, function(xi) coef(xi)) # note this trick!
+    vcovs <- lapply(object$x, function(xi) vcov(xi)) # note this trick!
+    ## vcov = lapply(object$x, vcov) # fails:(
+    ## do the following m times
+    parallel::mclapply(1:m , function(i) {
+        ## update the coefs
+        for (j in 1:length(newx))
+            coef(newx[[j]]) = mvtnorm::rmvnorm(1,coefs[[j]],vcovs[[j]])
+        ## update the object
+        update(object,x=newx)
+    }, mc.cores=mc.cores)
 }

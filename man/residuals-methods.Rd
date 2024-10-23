@@ -20,7 +20,7 @@
 \arguments{
   \item{object}{an \code{stpm2} or \code{pstpm2} object}
   \item{type}{specify the type of residuals:
-    \itemize{
+    \describe{
       \item{"li"}{log-likelihood components (not strictly residuals)}
       \item{"gradli"}{gradient of the log-likelihood components (not
     strictly residuals)}

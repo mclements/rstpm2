@@ -23,3 +23,22 @@ test_that("pstpm2", {
     ## expect_eps(coef(fit)[2], -1.193484, 1e-5)
 })
 
+context("Delayed entry - aft")
+##
+test_that("All values zero or one", {
+    brcancer2 <- transform(rstpm2::brcancer,startTime=0)
+    fit0 <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer2)
+    fit1 <- aft(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)
+    expect_true(all(coef(fit0) == coef(fit1)))
+    brcancer2 <- transform(rstpm2::brcancer,startTime=1)
+    fit2 <- aft(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2)
+    diff <- abs(coef(fit2)-coef(fit1))
+    expect_true(min(diff)>1e-7)
+    expect_true(max(diff)<1e-5)
+    set.seed(12345)
+    brcancer3 <- transform(rstpm2::brcancer,startTime=rbinom(nrow(rstpm2::brcancer),1,0.5))
+    fit3 <- aft(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer3)
+    diff <- abs(coef(fit2)-coef(fit1))
+    expect_true(min(diff)>1e-7)
+    expect_true(max(diff)<1e-5)
+})

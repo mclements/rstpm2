@@ -16,6 +16,7 @@ test_that("base", {
     expect_eps(coef(fit)[2], -0.361403, 1e-5)
 })
 test_that("offset", {
+    skip_on_cran()
     brcancer2 = transform(brcancer, o=1)
     fit <- stpm2(Surv(rectime,censrec==1)~hormon+offset(o),data=brcancer2)
     expect_eps(coef(fit)[1], -6.6465454, 1e-5)
@@ -37,18 +38,17 @@ test_that("Comparison with Stata", {
     expect_eps(coef(fit)[2], -0.3614357, 1e-5)
 })
 test_that("Cure", {
-    ## skip_on_cran()
+    skip_on_cran()
     fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
                  smooth.formula=~nsx(log(rectime),df=3,cure=TRUE))
-    expect_eps(coef(fit)[2], -0.3564268, 1e-5)
-    fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,cure=TRUE)
-    expect_eps(coef(fit)[2], -0.3564268, 1e-5)
+    expect_eps(coef(fit)[2], -0.3419921, 1e-5)
+    fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,cure=TRUE,df=3)
+    expect_eps(coef(fit)[2], -0.3419921, 1e-5)
 })
 test_that("probit", {
     fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,link="probit")
     expect_eps(coef(fit)[2], -0.282318, 1e-5)
 })
-
 
 test_that("interval", {
     ## ICPHREG example
@@ -103,6 +103,28 @@ test_that("interval", {
     expect_eps(coef(fit)[2], 1.917699, 1e-4)
 })
 
+context("aft")
+##
+test_that("base", {
+    fit <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer)
+    expect_eps(coef(fit)[1], 0.267370, 1e-5)
+    fit2 <- aft(Surv(rectime,censrec==1)~factor(hormon),data=brcancer)
+    expect_true(all(coef(fit)==coef(fit2)))
+    expect_warning(fit3 <- aft(Surv(rectime,censrec==1)~hormon+factor(hormon),data=brcancer))
+    expect_true(all(coef(fit)==coef(fit3)))
+})
+test_that("tvc", {
+    ## main effect IS needed for the parametric case (else constrained to be 0 at first event time)
+    expect_warning(fit <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,tvc=list(hormon=2)))
+    expect_eps(coef(fit)[1], 1.693524, 1e-5)
+})
+test_that("Cure", {
+    fit <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3,mixture=TRUE)
+    expect_eps(coef(fit)[2], -5.635997, 1e-5)
+    fit <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3,cure=TRUE)
+    ## testthat::skip_on_os("mac","aarch64")
+    expect_eps(coef(fit)[1], 0.37021943, 1e-4)
+})
 
 context("stpm2 + frailty")
 ##

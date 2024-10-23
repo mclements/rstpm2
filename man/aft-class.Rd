@@ -3,6 +3,7 @@
 \docType{class}
 \alias{aft-class}
 \alias{plot,aft,missing-method}
+\alias{lines,aft-method}
 \alias{predict,aft-method}
 \alias{predictnl,aft-method}
 %\alias{summary,aft-method}
@@ -19,11 +20,12 @@ Objects can be created by calls of the form \code{new("aft", ...)} and
   }
 }
 \section{Extends}{
-Class \code{"\linkS4class{mle2}"}, directly.
+Class for \code{\link[bbmle]{mle2}}, directly.
 }
 \section{Methods}{
   \describe{
     \item{plot}{\code{signature(x = "aft", y = "missing")}: ... }
+    \item{lines}{\code{signature(x = "aft")}: ... }
     \item{predict}{\code{signature(object = "aft")}: ... }
     \item{predictnl}{\code{signature(object = "aft", ...)}: ... }
     %\item{summary}{\code{signature(object = "aft", ...)}: ... }

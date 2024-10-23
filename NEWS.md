@@ -1,5 +1,8 @@
 # rstpm2
 
+# Version 1.6.1
+    - Experimental: aft\_mixture and aft\_integrated regression models
+
 # Version 1.5.9
     - Bug fix: predict(..., type="meanhr") and type="meanhaz"
 

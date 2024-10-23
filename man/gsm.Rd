@@ -50,7 +50,7 @@ pstpm2(formula, data, weights=NULL, subset=NULL, coxph.strata=NULL, \dots)
   \item{formula}{
 a formula object, with the response on the left of a \code{~} operator, and
 the parametric terms on the right.  The response must be a survival object as
-returned by the \code{\link{Surv}} function. Specials include
+returned by the \code{\link[survival]{Surv}} function. Specials include
 \code{cluster} and \code{bhazard}. [required]
 }
   \item{data}{
@@ -192,7 +192,7 @@ hazards), g(S)=-log(S); for "AO" (generalised Aranda-Ordaz), g(S)=log((S^(-theta
 \item{penalised}{logical to show whether to use penalised models with
   \code{pstpm} (\code{penalised=TRUE}) or parametrics models with
   \code{stpm2} (\code{penalised=FALSE}).}
-\item{\dots}{ additional arguments to be passed to the \code{\link{mle2}}.}
+\item{\dots}{ additional arguments to be passed to the \code{\link[bbmle]{mle2}}.}
 }
 \details{
   
