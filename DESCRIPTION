@@ -17,7 +17,7 @@ Authors@R: c(person("Mark", "Clements", role = c("aut", "cre"),
 Version: 1.6.6
 Depends: R (>= 3.0.2), methods, survival, splines
 Imports: graphics, Rcpp (>= 0.10.2), stats, mgcv, bbmle (>= 1.0.20), fastGHQuad,
-  utils, parallel, mvtnorm
+  utils, parallel, mvtnorm, numDeriv
 Suggests: eha, testthat, ggplot2, lattice, readstata13, mstate, scales, survPen,
   flexsurv, timereg, deSolve
 LinkingTo: Rcpp,RcppArmadillo,BH

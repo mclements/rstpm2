@@ -81,5 +81,6 @@ importFrom(Rcpp,sourceCpp)
 ## importFrom(deSolve,ode)
 import(bbmle,methods,survival,splines)
 importFrom(utils,str,head,tail,modifyList)
+importFrom(numDeriv,jacobian)
 
 

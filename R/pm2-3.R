@@ -182,9 +182,13 @@ lhs <- function(formula)
 }
 
 ## numerically calculate the partial gradient \partial func_j \over \partial x_i
+## ("jacobian" may be a better name)
 ## (dim(grad(func,x)) == c(length(x),length(func(x)))
-grad <- function(func,x,...) # would shadow numDeriv::grad()
-  {
+grad <- function(func,x,...,method=c("fast","richardson")) # would shadow numDeriv::grad()
+{
+    method = match.arg(method)
+    if (method=="richardson")
+        return(t(numDeriv::jacobian(func, x, ...)))
     h <- .Machine$double.eps^(1/3)*ifelse(abs(x)>1,abs(x),1)
     temp <- x+h
     h.hi <- temp-x

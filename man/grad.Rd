@@ -9,7 +9,7 @@
   Numerical gradient for a function at a given value (internal).
 }
 \usage{
-grad(func, x, ...)
+grad(func, x, ..., method=c("fast","richardson"))
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -21,6 +21,10 @@ grad(func, x, ...)
 }
   \item{\dots}{
     other arguments to the function
+}
+  \item{method}{
+    string argument to determine whether to use the fast two sided
+    calculation or use a Richardson extrapolation.
 }
 }
 \details{
