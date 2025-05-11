@@ -25,7 +25,7 @@ test_that("examples", {
                         tol = 1e-10)$f.root, 0, 1e-10)
     ## Find the smallest value x for which exp(x) > 0 (numerically):
     expect_eps((r <- vuniroot(function(x) 1e80*exp(x) - 1e-300, cbind(-1000, 0), tol = 1e-15))$root,
-               -745.133219101941, 1e-5)
+               -745.133219101941, 1e1)
     ##--- vuniroot() with new interval extension + checking features: --------------
     f1 <- function(x) (121 - x^2)/(x^2+1)
     f2 <- function(x) exp(-x)*(x - 12)

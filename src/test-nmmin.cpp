@@ -93,14 +93,14 @@ namespace rstpm2 {
     vec out(x.size());
     double const *xi = x.begin();
     for(double &o : out)
-      o = R::pnorm5(*xi++, 0, 1, true, false);
+      o = R::pnorm(*xi++, 0, 1, true, false);
     return out;
   }
   vec pnorm01_log(vec const &x) {
     vec out(x.size());
     double const *xi = x.begin();
     for(double &o : out)
-      o = R::pnorm5(*xi++, 0, 1, true, true);
+      o = R::pnorm(*xi++, 0, 1, true, true);
     return out;
   }
   /* \frac \partial{\partial x} \log \Phi(x) = \frac{\phi(x)}{\Phi(x)} */
@@ -110,12 +110,12 @@ namespace rstpm2 {
     for(double &o : out){
       double const xv = *xi++; 
       if(xv > -10){
-        double const dv     = R::dnorm4(xv, 0, 1    , 0L), 
-                     pv     = R::pnorm5(xv, 0, 1, 1L, 0L);
+        double const dv     = R::dnorm(xv, 0, 1    , 0L), 
+                     pv     = R::pnorm(xv, 0, 1, 1L, 0L);
         o = dv / pv;
       } else {
-        double const log_dv = R::dnorm4(xv, 0, 1    , 1L), 
-                     log_pv = R::pnorm5(xv, 0, 1, 1L, 1L);
+        double const log_dv = R::dnorm(xv, 0, 1    , 1L), 
+                     log_pv = R::pnorm(xv, 0, 1, 1L, 1L);
         o = std::exp(log_dv - log_pv);
       }
     }
@@ -125,14 +125,14 @@ namespace rstpm2 {
     vec out(x.size());
     double const *xi = x.begin();
     for(double &o : out)
-      o = R::qnorm5(*xi++, 0, 1, true, false);
+      o = R::qnorm(*xi++, 0, 1, true, false);
     return out;
   }
   vec dnorm01(vec const &x) {
     vec out(x.size());
     double const *xi = x.begin();
     for(double &o : out)
-      o = R::dnorm4(*xi++, 0, 1, false);
+      o = R::dnorm(*xi++, 0, 1, false);
     return out;
   }
   // we could use templates for the following...
@@ -420,7 +420,7 @@ namespace rstpm2 {
       Rprintf("beta="); Rprint(coef);
       Rprintf("objective=%.10g\n",value);
     };
-    // R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
+    R_CheckUserInterrupt();  /* be polite -- did the user hit ctrl-C? */
     return value;
   }
   template<class T>
@@ -478,9 +478,8 @@ namespace rstpm2 {
   };
   class NelderMead2 : public NelderMead {
   public:
-    NumericMatrix calc_hessian(optimfn fn, void * ex, int debug) {
+    NumericMatrix calc_hessian(optimfn fn, void * ex) {
       if (parscale.size()==0) REprintf("parscale is not defined for NelderMead2::calc_hessian.");
-      if (debug>1) Rprintf("In NelderMead2->calc_hessian()...\n");
       int n = coef.size();
       NumericMatrix hess(n,n);
       double tmpi,tmpj,f1,f0,fm1,hi,hj,fij,fimj,fmij,fmimj;
@@ -517,14 +516,13 @@ namespace rstpm2 {
 	  }
 	}
       }
-      if (debug>1) Rprint(hess);
       return hess;
     }
     vec parscale;
   };
   class Nlm2 : public Nlm {
   public:
-    NumericMatrix calc_hessian(fcn_p fn, void * ex, int debug = 0) {
+    NumericMatrix calc_hessian(fcn_p fn, void * ex) {
       if (parscale.size()==0) REprintf("parscale is not defined for Nlm2::calc_hessian.");
       int n = coef.size();
       NumericMatrix hess(n,n);
@@ -611,7 +609,7 @@ namespace rstpm2 {
 	if (!satisfied) this->kappa *= 2.0;				\
       } while ((!satisfied) && this->kappa < this->maxkappa);		\
       if (this->bfgs.trace > 1) Rprintf("Calculating hessian...\n");	\
-      nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this, this->bfgs.trace); \
+      nm.hessian = nm.calc_hessian(&optimfunction<This>, (void *) this); \
       this->bfgs.coef = nm.coef;					\
       this->bfgs.hessian = nm.hessian;					\
     }									\
@@ -777,9 +775,9 @@ namespace rstpm2 {
 	if (delayed && !eta0.empty()) {
 	  li_constraint s0 = li_left_truncated(eta0+offset(which0));
 	  s.constraint += s0.constraint;
-	  if (bfgs.trace > 0) {
-	    Rprint(which0);
-	  }
+	  // if (bfgs.trace > 0) {
+	  //   Rprint(which0);
+	  // }
 	  s.li(which0) += s0.li;
 	}
 	return s;

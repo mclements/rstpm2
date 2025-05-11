@@ -18,6 +18,12 @@
 ##   require(bbmle)
 ## }
 
+## nsx for cure
+library(rstpm2)
+FUyear = seq(0,20,len=301)[-1]
+n1 = nsx(log(FUyear), Boundary.knots = log(c(5,15)), knots=log(c(10,14)), cure=TRUE)
+matplot(FUyear,n1,type="l")
+
 ## bug in tinyplot
 library(tinyplot)
 x=y=0:1

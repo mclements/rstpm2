@@ -566,7 +566,7 @@ void ConstrBFGSx::constr_optim(arma::vec theta,
 			       int outer_iterations,
 			       double outer_eps) {
     using namespace arma;
-    double obj_old;
+    double obj_old = 0.0;
     int i;
     this->ui = ui;
     this->ci = ci;
