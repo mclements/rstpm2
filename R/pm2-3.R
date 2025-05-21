@@ -1522,9 +1522,28 @@ pstpm2 <- function(formula, data, weights=NULL, subset=NULL, coxph.strata=NULL, 
 }
 
 setMethod("update", "stpm2", function(object, ...) {
-    object@call = object@Call
-    update.default(object, ...)
+    .local <- function (object, formula., evaluate = TRUE, ...) 
+    {
+        call <- object@Call
+        extras <- match.call(expand.dots = FALSE)$...
+        if (!missing(formula.)) 
+            call$formula <- update.formula(call$formula, 
+                formula.)
+        if (length(extras)) {
+            existing <- !is.na(match(names(extras), names(call)))
+            for (a in names(extras)[existing]) call[[a]] <- extras[[a]]
+            if (any(!existing)) {
+                call <- c(as.list(call), extras[!existing])
+                call <- as.call(call)
+            }
+        }
+        if (evaluate) 
+            eval(call, parent.frame())
+        else call
+    }
+    .local(object, ...)
 })
+
 setMethod("show", "stpm2",
           function(object) {
               object@call.orig <- object@Call
@@ -1609,7 +1628,6 @@ setMethod("predictnl", "stpm2",
     ## return(out)
     return(dm)
   })
-##
 
 predictnl.aft <- function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
   {
