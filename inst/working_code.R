@@ -18,6 +18,11 @@
 ##   require(bbmle)
 ## }
 
+## bug report from Alex
+library(rstpm2)
+fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3)
+update(fit, formula. = . ~ . + x2)
+
 ## nsx for cure
 library(rstpm2)
 FUyear = seq(0,20,len=301)[-1]
