@@ -18,6 +18,19 @@
 ##   require(bbmle)
 ## }
 
+## bug report
+library(rstpm2)
+fit <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3) # ok
+fit <- aft(Surv(rectime,censrec==1)~1,data=brcancer,df=3) # now ok
+
+## Issue with S3/S4 conflicts
+library(rstpm2)
+fit <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3) # ok
+inherits(fit, "mle2")
+class(fit)
+methods("predictnl")
+plot(fit, type="surv", newdata=data.frame(hormon=1))
+
 ## bug report from Alex
 library(rstpm2)
 fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3)

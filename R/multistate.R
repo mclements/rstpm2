@@ -284,11 +284,12 @@ bdiag <- function(...,initial=0) {
 ## bdiag(list(1:2),list(3:4+0),initial=list())
 
 hazFun <- function(f, tmvar="t", ...) {
-    if(all(c("newdata","t") %in% names(formals(f))))
+    nms <- formalArgs(f)
+    if(all(c("newdata","t") %in% nms))
         newf <- function(newdata) f(t=newdata[[tmvar]],newdata=newdata,...)
-    else if("t" %in% names(formals(f)))
+    else if("t" %in% nms)
         newf <- function(newdata) f(t=newdata[[tmvar]], ...)
-    else if("newdata" %in% names(formals(f)))
+    else if("newdata" %in% nms)
         newf <- function(newdata) f(newdata=newdata, ...)
     else 
         newf <- function(newdata) f(...)

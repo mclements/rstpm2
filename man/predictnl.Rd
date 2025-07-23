@@ -2,6 +2,10 @@
 \alias{predictnl}
 \alias{predictnl.default}
 \alias{predictnl.lm}
+\alias{predictnl.mle2}
+\alias{predictnl.aft}
+\alias{predictnl.stpm2}
+\alias{predictnl.pstpm2}
 \alias{predict.formula}
 \alias{confint.predictnl}
 %- Also NEED an '\alias' for EACH other topic documented here.
@@ -20,6 +24,13 @@ predictions from GLMs).
 \usage{
 \method{predictnl}{default}(object, fun, newdata=NULL, gd=NULL, ...)
 \method{predictnl}{lm}(object, fun, newdata=NULL, ...)
+\method{predictnl}{mle2}(object, fun, newdata=NULL, gd=NULL, ...)
+\method{predictnl}{aft}(object, fun, newdata=NULL, link = c("I", "log",
+                 "cloglog", "logit"), gd=NULL, ...)
+\method{predictnl}{stpm2}(object, fun, newdata=NULL, link = c("I", "log",
+                 "cloglog", "logit"), gd=NULL, ...)
+\method{predictnl}{pstpm2}(object, fun, newdata=NULL, link = c("I", "log",
+                 "cloglog", "logit"), gd=NULL, ...)
 \method{predict}{formula}(object,data,newdata,na.action,type="model.matrix",...)
 \method{confint}{predictnl}(object, parm, level=0.95, ...)
 }
@@ -36,6 +47,10 @@ often useful to include \code{newdata} as an argument to the function.
 }
   \item{newdata}{
 An optional argument that defines newdata to be passed to \code{fun}.
+}
+  \item{link}{
+    A character string to represent the link on which to calculate the
+    variance and confidence intervals.
 }
   \item{gd}{
 An optional matrix of gradients. If this is not specified, then the
