@@ -63,7 +63,6 @@ S3method(diff, markov_msm)
 ## S3method(coef, stratifiedModel)
 ## S3method(vcov, stratifiedModel)
 
-
 ## All methods for imported generics:
 exportMethods(plot,predict,predictnl,coef,confint,summary,update,anova,vcov,formula,
               BIC,AIC,AICc,qAICc,simulate,residuals,lines,eform)
@@ -74,13 +73,13 @@ importFrom(stats, quantile, lm, as.formula, coef, makepredictcall, na.fail, pred
            model.matrix, model.weights, na.pass, optimHess, pweibull, 
            terms, terms.formula, .checkMFClasses, .getXlevels, pchisq, printCoefmat,
            anova, var, residuals, confint, qnorm, complete.cases, reformulate,
-           simulate,splinefun, update.default,runif,
+           simulate,splinefun, update.formula, runif,
            aggregate, dgamma, dlogis, dnorm, dweibull, integrate)
 importFrom(mgcv,gam,s)
 importFrom(Rcpp,sourceCpp)
 ## importFrom(deSolve,ode)
+importClassesFrom(bbmle,mle2)
 import(bbmle,methods,survival,splines)
-importFrom(utils,str,head,tail,modifyList)
+importFrom(utils,str,head,tail,modifyList,recover)
 importFrom(numDeriv,jacobian)
-
-
+importFrom(bbmle, update)

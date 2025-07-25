@@ -274,7 +274,7 @@ numDeltaMethod <- function(object, fun, gd=NULL,
     UseMethod("coef<-")
 predictnl <- function (object, ...) 
   UseMethod("predictnl")
-setGeneric("predictnl")
+setGeneric("predictnl", function(object, ...) standardGeneric("predictnl"))
 "coef<-.default" <- function(x,value) {
     x$coefficients <- value
     x
@@ -1524,8 +1524,9 @@ pstpm2 <- function(formula, data, weights=NULL, subset=NULL, coxph.strata=NULL, 
     out
 }
 
-setMethod("update", "stpm2", function(object, ...) {
-    .local <- function (object, formula., evaluate = TRUE, ...) 
+## setGeneric("update", function(object, ...) standardGeneric("update"))
+setMethod("update", signature(object="stpm2"), 
+    function (object, formula., evaluate = TRUE, ...) 
     {
         call <- object@Call
         extras <- match.call(expand.dots = FALSE)$...
@@ -1543,9 +1544,8 @@ setMethod("update", "stpm2", function(object, ...) {
         if (evaluate) 
             eval(call, parent.frame())
         else call
-    }
-    .local(object, ...)
-})
+    })
+
 
 setMethod("show", "stpm2",
           function(object) {
@@ -2909,6 +2909,27 @@ lines.pstpm2 <- function(x,newdata=NULL,type="surv",
                               line.col=col, ci.col=ci.col, lty=lty, add=TRUE,
                               ci=ci, rug=rug, var=var, exposed=exposed, times=times, ...)
 setMethod("lines", signature(x="pstpm2"), lines.pstpm2)
+
+setMethod("update", signature(object="pstpm2"),
+    function (object, formula., evaluate = TRUE, ...) 
+    {
+        call <- object@Call
+        extras <- match.call(expand.dots = FALSE)$...
+        if (!missing(formula.)) 
+            call$formula <- update.formula(call$formula, 
+                formula.)
+        if (length(extras)) {
+            existing <- !is.na(match(names(extras), names(call)))
+            for (a in names(extras)[existing]) call[[a]] <- extras[[a]]
+            if (any(!existing)) {
+                call <- c(as.list(call), extras[!existing])
+                call <- as.call(call)
+            }
+        }
+        if (evaluate) 
+            eval(call, parent.frame())
+        else call
+    })
 
 ## sandwich variance estimator (from the sandwich package)
 

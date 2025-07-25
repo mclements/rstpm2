@@ -5,12 +5,13 @@
 \alias{plot,pstpm2,missing-method}
 \alias{lines,pstpm2-method}
 %\alias{predict,pstpm2-method}
-\alias{predictnl,pstpm2-method}
+%\alias{predictnl,pstpm2-method}
 \alias{AIC,pstpm2-method}
 \alias{AICc,pstpm2-method}
 \alias{BIC,pstpm2-method}
 \alias{anova,pstpm2-method}
 \alias{qAICc,pstpm2-method}
+\alias{update,pstpm2-method}
 \alias{summary,pstpm2-method}
 \alias{eform,pstpm2-method}
 
@@ -76,8 +77,9 @@ Class for \code{\link[bbmle]{mle2}}, directly.
     \item{qAICc}{\code{signature(object = "pstpm2",..., nobs = NULL, dispersion = 1, k = 2)}: ... }
     \item{qAIC}{\code{signature(object = "pstpm2",..., dispersion = 1, k = 2)}: ... }
     \item{summary}{\code{signature(object = "pstpm2",...)}: ... }
+    \item{update}{\code{signature(object = "pstpm2",...)}: ... }
     \item{eform}{\code{signature(object = "pstpm2",...)}: ... }
-    \item{predictnl}{\code{signature(object = "pstpm2",...)}: ... }
+    %\item{predictnl}{\code{signature(object = "pstpm2",...)}: ... }
 	 }
 }
 %% \references{ ~put references to the literature/web site here ~ }

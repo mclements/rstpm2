@@ -397,14 +397,14 @@ The specific counterfactuals are that all patients have a tumour size that is ei
 
 \begin{figure}[!ht]
   \centering
-  \includegraphics{multistate-fig-1.pdf}
+  \includegraphics{multistate_fig-1.pdf}
   \caption{Differences in standardised state occupation probabilities by state and by contrasts for counterfactual tumour size, for female breast cancer patients aged 50--59 years and diagnosed 1978--1993, Rotterdam} 
   \label{fig:1}
 \end{figure}
 
 \begin{figure}[!ht]
   \centering
-  \includegraphics{multistate-fig-2.pdf}
+  \includegraphics{multistate_fig-2.pdf}
   \caption{Differences in standardised length of stay by state and by contrasts for counterfactual tumour size, for female breast cancer patients aged 50--59 years and diagnosed 1978--1993, Rotterdam}
   \label{fig:2}
 \end{figure}

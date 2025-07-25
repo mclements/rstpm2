@@ -23,6 +23,8 @@ library(rstpm2)
 fit <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3) # ok
 fit <- aft(Surv(rectime,censrec==1)~1,data=brcancer,df=3) # now ok
 
+fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3) # ok
+
 ## Issue with S3/S4 conflicts
 library(rstpm2)
 fit <- aft(Surv(rectime,censrec==1)~hormon,data=brcancer,df=3) # ok

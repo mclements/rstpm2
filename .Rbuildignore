@@ -19,3 +19,4 @@ R/aft_integrated.R
 ^[.]github$
 inst/.*\.h\.gch
 \.build\.timestamp
+vignettes/Makefile

@@ -5,7 +5,7 @@
 \alias{plot,aft,missing-method}
 \alias{lines,aft-method}
 \alias{predict,aft-method}
-\alias{predictnl,aft-method}
+%\alias{predictnl,aft-method}
 %\alias{summary,aft-method}
 
 \title{Class "stpm2" ~~~ }
@@ -27,7 +27,7 @@ Class for \code{\link[bbmle]{mle2}}, directly.
     \item{plot}{\code{signature(x = "aft", y = "missing")}: ... }
     \item{lines}{\code{signature(x = "aft")}: ... }
     \item{predict}{\code{signature(object = "aft")}: ... }
-    \item{predictnl}{\code{signature(object = "aft")}: ... }
+    %\item{predictnl}{\code{signature(object = "aft")}: ... }
     %\item{summary}{\code{signature(object = "aft", ...)}: ... }
 	 }
 }

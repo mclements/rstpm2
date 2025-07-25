@@ -4,8 +4,14 @@
 \alias{stpm2-class}
 \alias{plot,stpm2,missing-method}
 \alias{lines,stpm2-method}
-\alias{predict,stpm2-method}
-\alias{predictnl,stpm2-method}
+%\alias{predict,stpm2-method}
+%\alias{predictnl,stpm2-method}
+\alias{AIC,stpm2-method}
+\alias{AICc,stpm2-method}
+\alias{BIC,stpm2-method}
+\alias{anova,stpm2-method}
+\alias{qAICc,stpm2-method}
+\alias{update,stpm2-method}
 \alias{summary,stpm2-method}
 \alias{eform,stpm2-method}
 
@@ -57,11 +63,21 @@ Class \code{\link[bbmle]{mle2}}, directly.
 }
 \section{Methods}{
   \describe{
-    \item{plot}{\code{signature(x = "stpm2", y = "missing")}: ... }
-    \item{lines}{\code{signature(x = "stpm2", ...)}: ... }
+    \item{plot}{\code{signature(x = "stpm2", y = "missing")}: base
+      graphics plot }
+    \item{lines}{\code{signature(x = "stpm2", ...)}: add lines to a base
+    graphics plot }
     %\item{predict}{\code{signature(object = "stpm2")}: ... }
     %\item{predictnl}{\code{signature(object = "stpm2", ...)}: ... }
-    \item{summary}{\code{signature(object = "stpm2", ...)}: ... }
+    \item{anova}{\code{signature(object = "stpm2",...)}: ... }
+    \item{AIC}{\code{signature(object = "stpm2",...,k=2)}: ... }
+    \item{AICc}{\code{signature(object = "stpm2",...,nobs=NULL, k=2)}: ... }
+    \item{BIC}{\code{signature(object = "stpm2",..., nobs = NULL)}: ... }
+    \item{qAICc}{\code{signature(object = "stpm2",..., nobs = NULL, dispersion = 1, k = 2)}: ... }
+    \item{qAIC}{\code{signature(object = "stpm2",..., dispersion = 1, k = 2)}: ... }
+    \item{summary}{\code{signature(object = "stpm2", ...)}: summarise
+      the object}
+    \item{update}{\code{signature(object = "stpm2", ...)}: update fit }
     \item{eform}{\code{signature(object = "stpm2", ...)}: ... }
 	 }
 }
