@@ -9,7 +9,4 @@ all:
 	latexmk -pdf SimpleGuide
 
 clean:
-	rm -f Introduction-*.pdf
-	rm -f predictnl-*.pdf
-	rm -f SimpleGuide-*.pdf
-	rm -f *.aux *.fdb* *.log *.out *.Rnw.tex *.tex *.bbl *.blg *.dvi *.fls
+	rm -f *.aux *.fdb* *.log *.out *.Rnw.tex *.tex *.bbl *.blg *.dvi *.fls Introduction-*.pdf multistate-*.pdf SimpleGuide-*.pdf predictnl-*.pdf
