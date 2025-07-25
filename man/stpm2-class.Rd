@@ -4,7 +4,7 @@
 \alias{stpm2-class}
 \alias{plot,stpm2,missing-method}
 \alias{lines,stpm2-method}
-%\alias{predict,stpm2-method}
+\alias{predict,stpm2-method}
 \alias{predictnl,stpm2-method}
 \alias{summary,stpm2-method}
 \alias{eform,stpm2-method}
@@ -60,7 +60,7 @@ Class \code{\link[bbmle]{mle2}}, directly.
     \item{plot}{\code{signature(x = "stpm2", y = "missing")}: ... }
     \item{lines}{\code{signature(x = "stpm2", ...)}: ... }
     %\item{predict}{\code{signature(object = "stpm2")}: ... }
-    \item{predictnl}{\code{signature(object = "stpm2", ...)}: ... }
+    %\item{predictnl}{\code{signature(object = "stpm2", ...)}: ... }
     \item{summary}{\code{signature(object = "stpm2", ...)}: ... }
     \item{eform}{\code{signature(object = "stpm2", ...)}: ... }
 	 }

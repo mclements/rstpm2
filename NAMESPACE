@@ -22,10 +22,6 @@ S3method(predict, nsxD)
 S3method(predict, formula)
 S3method(predictnl, default)
 S3method(predictnl, lm)
-S3method(predictnl, mle2)
-S3method(predictnl, aft)
-S3method(predictnl, stpm2)
-S3method(predictnl, pstpm2)
 S3method(confint, predictnl)
 
 S3method(lines, stpm2)
@@ -69,7 +65,7 @@ S3method(diff, markov_msm)
 
 
 ## All methods for imported generics:
-exportMethods(plot,predict,coef,confint,summary,update,anova,vcov,formula,
+exportMethods(plot,predict,predictnl,coef,confint,summary,update,anova,vcov,formula,
               BIC,AIC,AICc,qAICc,simulate,residuals,lines,eform)
 
 importFrom(graphics,plot,lines,matplot,par,polygon,abline,matlines,box)

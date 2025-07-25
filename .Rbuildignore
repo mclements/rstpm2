@@ -18,3 +18,4 @@ R/aft_mixture.R
 R/aft_integrated.R
 ^[.]github$
 inst/.*\.h\.gch
+\.build\.timestamp

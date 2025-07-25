@@ -1,0 +1,543 @@
+%\VignetteIndexEntry{\texttt{rstpm2}: a simple guide}
+%\VignetteDepends{rstpm2}
+%\VignetteKeyword{survival, spline}
+%\VignettePackage{rstpm2}
+%!\SweaveUTF8
+
+\documentclass[nojss]{jss}
+
+\usepackage{amsmath,amsfonts,enumitem,fancyvrb,hyperref}
+\usepackage[utf8]{inputenc}
+\VerbatimFootnotes
+\usepackage[margin=2.6cm]{geometry} % wide margins
+\usepackage{wasysym}
+\usepackage{tablefootnote}
+\usepackage{bm}
+
+\title{\pkg{rstpm2}: a simple guide}
+
+\author{Mark~Clements\\Karolinska Institutet}
+
+\Plainauthor{Mark~Clements}
+
+\Plaintitle{\pkg{rstpm2}: a simple guide}
+
+\Abstract{
+  
+  This vignette provides a simple guide to flexible parametric models provided by \pkg{rstpm2}.
+
+}
+
+\Keywords{survival, splines}
+
+\Plainkeywords{survival, splines}
+
+\Address{Mark~Clements\\
+  Department of Medical Epidemiology and Biostatistics\\
+  Karolinska Institutet\\
+  Email: \email{mark.clements@ki.se}
+  }
+
+\begin{document}
+
+\section{Introduction}
+
+The \pkg{rstpm2} package supports \emph{flexible parametric survival models} to model \emph{time-to-event} data. These models are fully parametric for the survival function. These models are particularly useful for:
+\begin{itemize}
+\item Estimating predictions for hazards, hazard differences, hazard ratios, survival, survival differences and survival ratios, restricted mean survival
+\item Estimating marginal predictions, including standardised survival and standardised survival differences
+\item Modelling time-varying effects, including time-varying hazards ratios. 
+\end{itemize}
+
+This guide is intended to provide an accessible guide to some of the models and predictions provided by flexible parametric survival models. This guide can then be followed by the other vignette, which provides a more complete mathematical presentation.
+
+For this guide, we describe the most common flexible parametric survival model, which is a \emph{proportional hazards} model. Let the survival function $S(t|\bm{x})=\text{Pr}(T>t|\bm{x})$ for random variable $T$ at time $t$ and covariates $\bm{x}=(x_j)$ be modelled by
+\begin{align*}
+  S(t|\bm{x}) &= \exp\left(-\exp\left(s(\log(t);\bm\gamma)+\sum_j \beta_j x_j\right)\right)
+\end{align*}
+for some parametric smooth function $s(u;\bm\gamma)$, for parameters $\bm\gamma$ and $\bm\beta$, and for $j$ being an index over the covariates. For this model, we use a smooth function to model the baseline log cumulative hazard function and include a linear predictor to model the covariates. To see that this is a proportional hazards model, we can see that the cumulative hazard and hazard functions are, respectively,
+\begin{align*}
+  H(t|\bm{x}) &= -\log(S(t|\bm{x})) = \exp\left(s(\log(t);\bm\gamma)+\sum_j \beta_j x_j\right) \\
+  h(t|\bm{x}) &= \frac{\text{d}}{\text{d}t} H(t|\bm{x}) = \exp\left(s(\log(t);\bm\gamma)+\sum_j \beta_j x_j\right)\times\frac{\text{d}\,s(\log(t);\bm\gamma)}{\text{d}t}
+\end{align*}
+Now, for two sets of covariates $\bm{x}_1=(x_{1j})$ and $\bm{x}_2=(x_{2j})$, we have the hazard ratio
+\begin{align*}
+  \frac{h(t|\bm{x}_2)}{h(t|\bm{x}_1)} &= \frac{\exp(s(\log(t);\bm\gamma)+\sum_j \beta_j x_{2j})\times\frac{\text{d}s(\log(t);\bm\gamma)}{\text{d}t}}{\exp(s(\log(t);\bm\gamma)+\sum_j \beta_j x_{1j})\times\frac{\text{d}s(\log(t);\bm\gamma)}{\text{d}t}} \\
+                                      &= \exp\left(\sum_j\beta_j(x_{2j}-x_{1j})\right)
+\end{align*}
+If the covariates only vary by one for the $j$th covariate, such that $x_{2j}=x_{1j}+1$ and $x_{2j'}=x_{1j'}$ for $j'\neq j$, then the hazard ratio is equal to $\exp(\beta_j)$ for all $t$ and for all values of the other covariates.
+
+We can motivate this model as an extension of exponential (or Poisson) regression. If we assume that the rates are constant over time and proportional with respect to covariates, then we have an exponential distribution with a hazard $h(t|\bm{x})=\exp(\gamma_0+\sum_j \beta_j x_j)$ for log baseline hazard $\gamma_0$, with a survival function $S(t|\bm{x})=\exp(-\exp(\gamma_0+\log(t)+\sum_j \beta_j x_j))$. The flexible parametric survival models generalise the function $\gamma_0+\log(t)$ to some smooth function $s(\log(t);\bm\gamma)$. 
+
+The default smoother provided by \code{rstpm2::stpm2} is a natural spline, such that
+\begin{align*}
+  s(\log(t);\bm\gamma) &= \sum_{k=1}^K B_k(\log(t)) \gamma_k
+\end{align*}
+where $B_k(\log(t))$ is a natural spline basis with $K$ degrees of freedom. Natural splines have the property that the function is cubic between internal \emph{knots} (fixed points that default to quantiles of the event times) and linear outside of the knot boundaries, with continuous derivatives at the knots. Heuristically, splines provide a flexible functional form that looks ``nice''. The basis can be defined in several ways (e.g. using a truncated power basis as used in Stata), while we use the approach used by the \code{splines::ns} function, which uses a matrix projection of the second derivatives at the knot boundaries. 
+
+We fit this model using \emph{maximum likelihood estimation} for right censored and left truncated data. Variance estimation assumes that the parameters are asymptotically normal, with variable for predictions calculated using the \emph{multivariate delta method}.
+
+% The default smoother for time using natural splines for log(time), which is the flexible parametric survival model developed by Royston and Parmar (2003) and implemented by the Stata command \verb+stpm2+~\footnote{As a technical aside, the Stata implementation uses natural splines using a truncated power basis with orthogonalisation, while the \verb+ns()+ function in \verb+R+ uses a matrix projection of B-splines. Note that we have implemented an extended \verb+nsx()+ function for natural splines that includes cure splines, centering, and a compatibility argument to use Stata \verb+stpm2+'s unusual specification of quantiles.}
+
+
+\section{An example}
+
+<<echo=FALSE,results=hide>>=
+options(width=80,useFancyQuotes="UTF-8")
+@ 
+
+We begin with some simple proportional hazard models using the
+\code{brcancer} dataset. We first fit a Cox regression with a single indicator for whether an a breast cancer patient was randomised to hormonal treatment. From the output, we see that hormonal treatment is associated with improved survival (HR=0.69, 95\% CI: 0.54, 0.89). 
+
+<<>>=
+library(survival)
+library(rstpm2)
+brcancer <- transform(brcancer, recyear=rectime / 365.24)
+fit.cox <- coxph(Surv(recyear,censrec==1)~hormon, data=brcancer)
+summary(fit.cox)
+@ 
+
+We can fit a flexible parametric survival model with \code{rstpm2::stpm2} using very similar syntax, with an additional argument \code{df=4} to specify four degrees of freedom for the
+baseline smoother (typical values for the degrees of freedom are 2--6). From the output, the
+model parameters include an intercept term, time-invariant log-hazard
+ratios, and parameters for the baseline smoother. The hazard ratio for hormonal treatment is 0.69 (95\% CI: 0.56, 0.84), which is a similar point estimate and a more narrow confidence interval than Cox regression.
+
+<<>>=
+fit <- stpm2(Surv(recyear,censrec==1)~hormon, data=brcancer, df=4)
+summary(fit)
+eform(fit)[2,]
+@ 
+
+The flexible parametric survival models can be used to estimate a variety of parameters. For
+example, we can easily estimate survival and compare with predictions with the non-parametric 
+Kaplan-Meier curves. From the output, we note that\ldots
+
+<<fig=TRUE,height=5,width=8>>=
+plot(fit, newdata=data.frame(hormon=0), xlab="Time since diagnosis (years)")
+lines(fit, newdata=data.frame(hormon=1), lty=2)
+lines(survfit(Surv(recyear,censrec==1)~hormon, data=brcancer), col="blue", lty=1:2)
+legend("topright", c("PH hormon=0","PH hormon=1","KM hormon=0","KM hormon=1"), 
+       lty=1:2, col=c("black","black","blue","blue"))
+@ 
+
+We can also plot the hazards using \pkg{ggplot2}. This requires that we predict using \code{grid=TRUE} to get a time grid, with \code{full=TRUE} to include the covariates from \code{newdata}, and with \code{se.fit=TRUE} to get the confidence intervals.
+
+<<fig=TRUE,height=4,width=6,center=TRUE>>=
+library(ggplot2)
+predHormon <- predict(fit, newdata=data.frame(hormon=0:1), 
+                      type="hazard", grid=TRUE, full=TRUE, se.fit=TRUE)
+predHormon <- transform(predHormon,Hormone=factor(hormon,labels=c("No","Yes")))
+ggplot(predHormon, 
+       aes(x=recyear,y=Estimate,ymin=lower,ymax=upper,fill=Hormone)) +
+    facet_grid(~Hormone) + 
+    xlab("Time since diagnosis (years)") + 
+    ylab("Hazard") + 
+    geom_ribbon() + 
+    geom_line()
+@ 
+
+<<fig=TRUE,height=4,width=6>>=
+ggplot(predHormon, 
+       aes(x=recyear,y=Estimate,ymin=lower,ymax=upper,fill=Hormone)) +
+    xlab("Time since diagnosis (years)") + 
+    ylab("Hazard") + 
+    geom_ribbon(alpha=0.6) +
+    geom_line()
+@ 
+
+Usefully, we can also estimate survival differences and hazard
+differences. We define the survival differences using a reference
+covariate pattern using the newdata argument, and then define an
+exposed function which takes the newdata and transforms for the
+'exposed' covariate pattern. As an example:
+<<fig=TRUE,height=5,width=6>>=
+par(mfrow=1:2)
+plot(fit,newdata=data.frame(hormon=0), type="hdiff",
+     exposed=function(data) transform(data, hormon=1),
+     xlab="Time since diagnosis (years)")
+plot(fit,newdata=data.frame(hormon=0), type="sdiff",
+     var="hormon",
+     xlab="Time since diagnosis (years)")
+mtext("Effect of hormonal treatment", outer = TRUE, line=-3, cex=1.5, font=2)
+@ 
+
+
+% \section{Syntax}
+
+% The main functions for fitting the models are \verb+stpm2+ for parametric models, possibly with clustered data, and \verb+pstpm2+ for penalised models, possibly with clustered data. A subset of the syntax for \verb+stpm2+ is:
+
+% \begin{Verbatim}
+% stpm2(formula, data, smooth.formula = NULL, 
+%       df = 3, tvc = NULL, 
+%       link.type=c("PH","PO","probit","AH","AO"), theta.AO=0,
+%       bhazard = NULL, 
+%       robust = FALSE, cluster = NULL, frailty = !is.null(cluster) & !robust,
+%       RandDist=c("Gamma","LogN"), 
+%       ...)
+% \end{Verbatim}
+
+% The \verb+formula+ has a \verb+Surv+ object on the left-hand-side and a linear predictor on the right-hand-side that does \emph{not} include time (for \verb+pstpm2+, it also does not include penalised functions). The time effects can be specified in several ways: the most general is using \verb+smooth.formula+, where the right-hand-side of the formula specifies functions for time that are smooth with respect to time. This specification can include interactions between time and covariates. As an example, \verb!smooth.formula=~nsx(log(time),df=3)+x:nsx(log(time),df=2)! specifies a baseline natural spline smoother of the log of the variable \verb+time+ used in the \verb+Surv+ object with three degrees of freedom, with an interaction between a covariate \verb+x+ and a natural spline smoother of log(\verb+time+) with two degrees of freedom. Other specifications of time effects have equivalent formulations: for example, \verb+df=3+ is equivalent to \verb!smooth.formula=~nsx(log(time),df=3)! for the variable \verb+time+. Similarly, \verb+tvc=list(x=2)+ is equivalent to \verb!smooth.formula=~x:nsx(log(time),df=2)!. Moreover, for a log-linear interaction between a covariate and time, use \verb!smooth.formula=~x:log(time)!
+
+% A current limitation of the implementation is that the dataset \verb+data+ needs to be specified.
+
+% Type of link is specified with the \verb+link.type+ argument; this defaults to a log$-$log link for proportional hazards (see Table~\ref{tab:links}). For the Aranda-Ordaz link, the fixed value of the scale term $\psi$ is specified using the \verb+theta.AO+ argument.  For relative survival, a vector for the baseline hazard can be specified using the \verb+bhazard+ argument. A vector for the clusters can be specified with the \verb+cluster+ argument. The calculation of robust standard errors can be specified with the \verb+robust=TRUE+ argument; if \verb+robust+ is false, then the model assumes a frailty or random effects model, with either a default Gamma frailty (\verb+RandDist="Gamma"+) or a normal random effect (\verb+RandDist="LogN"+, using notation from the \verb+frailtypack+ package).
+
+% The default specification for the additive hazards (\verb+link.type=="AH"+) models follows that for the \verb+ahaz+ package on CRAN: for a model specified as 
+
+% \verb+stpm2(Surv(time,event)~x, data=data, link.type="AH")+
+
+% we assume natural splines for the baseline time effect and a constant hazard for a unit change in the covariate \verb+x+; an equivalent specification is 
+
+% \verb!stpm2(Surv(time,event)~1, data=data, link.type="AH", smooth.formula=~nsx(time,df=3)+x:time)!
+
+% where there is default smoother for time and an interaction between linear x and linear time. The regression coefficient for \verb+x:time+ can be interpreted as the additive rate for a unit change in \verb+x+.
+
+% The syntax for the fitting the penalised models with \verb+pstpm2+ is very similar. A subset of the arguments are:
+% \begin{Verbatim}
+% pstpm2(formula, data, smooth.formula = NULL, 
+%        tvc = NULL, 
+%        bhazard = NULL, 
+%        sp=NULL, 
+%        criterion=c("GCV","BIC"), 
+%        link.type=c("PH","PO","probit","AH","AO"), theta.AO=0,
+%        robust=FALSE,
+%        frailty=!is.null(cluster) & !robust, cluster = NULL, RandDist=c("Gamma","LogN"),
+%        ...)
+% \end{Verbatim}
+
+% The penalised smoothers are specified using the \verb+s()+ function from the \verb+mgcv+ package within the \verb+smooth.formula+ argument; by default, not specifying \verb+smooth.formula+ will lead to
+
+% \verb!smooth.formula=~s(log(time))!
+
+% Interactions with time (both penalised and unpenalised) and penalised covariate effects should be specified using \verb+smooth.formula+. Note that the \verb+df+ argument is not included. By default, the smoothing parameter(s) are using the \verb+criterion+ argument; the smoothing parameters can also be fixed using the \verb+sp+ argument. The specifications for relative survival, link type, and clustered data follow that for the \verb+stpm2+ function.
+
+% \subsection{Post-estimation}
+
+% One of the strengths of these models is varied post-estimation. Most of the estimators are described in Tables~\ref{tab:condpostest} and \ref{tab:margpostest}. These estimators are typically calculated from the \verb+predict+ function or from \verb+plot+ function calls. All of these calls require that the \verb+newdata+ argument is specified (in contrast to prediction in the \verb+survival+ package, which defaults to the average of each covariate). 
+
+% For contrasts (e.g. survival differences, hazard ratios), the \verb+newdata+ argument is the ``unexposed'' group, while the exposed group is defined by either: (i) a unit change in a variable in \verb+newdata+ as defined by the \verb+var+ argument (e.g. \verb+var="x"+ for variable \verb+x+); or (ii) an \verb+exposed+ function that takes a data-frame and returns the ``exposed'' group (e.g. \verb+exposed=function(data) transform(data, x=1)+). The latter mechanism is quite general and allows for standardised survival, standardised hazards, and attributable fractions under possibly counterfactual exposures.
+
+% \begin{table}[!ht]
+%   \centering
+% \begin{minipage}{\linewidth}
+%   \begin{tabular}[!ht]{lll}
+%     Description & Formulation\footnote{Notation: $x^*$ is a covariate pattern for the ``exposed'' group; $X^*$ is a set of possibly counterfactual covariates; $E_X(g(X))$ is the expectation or average of $g(X)$ across the set $X$; $X_0^*$ and $X_1^*$ are sets of possibly counterfactual covariates for the ``unexposed'' and ``exposed'' sets, respectively.} & \verb+type+ \\ \hline
+%     Conditional link & $\eta(t,x;\hat\theta)$ & \verb+"link"+ \\
+%     Conditional survival & $S(t|x;\hat\theta) = G(\eta(t,x;\hat\theta))$ & \verb+"surv"+ \\
+%     Conditional odds & $\text{Odds}(t|x;\hat\theta)=S(t|x;\hat\theta)/(1-S(t|x;\hat\theta))$ & \verb+"odds"+ \\
+%     Conditional failure & $1-S(t|x;\hat\theta)$ & \verb+"fail"+ \\
+%     Conditional cumulative hazard & $H(t|x;\hat\theta) = -\log G(\eta(t,x;\hat\theta))$ & \verb+"cumhaz"+ \\
+%     Conditional density & $f(t|x;\hat\theta) = G'(\eta(t,x;\hat\theta))\frac{\partial \eta(t,x;\hat\theta)}{\partial t}$ & \verb+"density"+ \\
+%     Conditional hazard & $h(t|x;\hat\theta) = \frac{G'(\eta(t,x;\hat\theta))}{G(\eta(t,x;\hat\theta))}\frac{\partial \eta(t,x;\hat\theta)}{\partial t}$ & \verb+"hazard"+ \\
+%     Conditional log hazard & $\log h(t|x;\hat\theta)$ & \verb+"loghazard"+ \\
+%     Conditional survival differences & $S(t|x^*;\hat\theta)-S(t|x;\hat\theta)$ & \verb+"survdiff"+ \\
+%     Conditional hazard differences & $h(t|x^*;\hat\theta)-h(t|x;\hat\theta)$ & \verb+"hazdiff"+ \\
+%     Conditional hazard ratios & $h(t|x^*;\hat\theta)/h(t|x;\hat\theta)$ & \verb+"hr"+ \\
+%     Conditional odds ratios & $\text{Odds}(t|x^*;\hat\theta)/\text{Odds}(t|x;\hat\theta)$ & \verb+"or"+ \\
+%     Restricted mean survival time & $\int_0^tS(u|x;\hat\theta)du$ & \verb+"rmst"+ \\
+%     Standardised survival & $E_{X^*}S(t|X^*;\hat\theta)$ & \verb+"meansurv"+ \\
+%     Standardised survival differences & $E_{X_1^*}S(t|X_1^*;\hat\theta)-E_{X_0^*}S(t|X_0^*;\hat\theta)$ & \verb+"meansurvdiff"+ \\
+%     Standardised hazard & $h_{X^*}(t|X^*;\hat\theta) = \frac{E_{X^*}(S(t|X^*;\hat\theta)h(t|X^*;\hat\theta))}{E_{X^*}(S(t|X^*;\hat\theta))}$ & \verb+"meanhaz"+ \\
+%     Standardised hazard ratio & $h_{X_1^*}(t|X_1^*;\hat\theta)/h_{X_0^*}(t|X_0^*\hat\theta)$ & \verb+"meanhazdiff"+ \\
+%     Attributable fraction & $\frac{E_{X^*}S(t|X^*;\hat\theta)--E_{X}S(t|X;\hat\theta)}{1-E_{X}S(t|X;\hat\theta)}$ & \verb+"af"+ \\
+%   \end{tabular}
+% \end{minipage}
+% \caption{Types of conditional post-estimators}
+%   \label{tab:condpostest}
+% \end{table}
+
+
+% \begin{table}[!ht]
+%   \centering
+% \begin{minipage}{\linewidth}
+%   \begin{tabular}[!ht]{lll}
+%     Description & Formulation\footnote{Notation: $Z$ is a random effect or frailty; $x^*$ is a covariate pattern for the ``exposed'' group; $X^*$ is a set of possibly counterfactual covariates; $E_X(g(X))$ is the expectation or average of $g(X)$ across the set $X$; $X_0^*$ and $X_1^*$ are sets of possibly counterfactual covariates for the ``unexposed'' and ``exposed'' sets, respectively.} & \verb+type+ \\ \hline
+%     Marginal survival & $S_M(t|x;\hat\theta) = E_ZG(\eta(t,x,Z;\hat\theta))$ & \verb+"margsurv"+ \\
+%     Marginal hazard & $h_M(t|x;\hat\theta) = E_Z(h(t,x,Z;\hat\theta))$ & \verb+"marghaz"+ \\
+%     Marginal survival differences & $S_M(t|x^*;\hat\theta)-S_M(t|x;\hat\theta)$ & \verb+"margsurvdiff"+ \\
+%     Marginal hazard ratios & $h_M(t|x^*;\hat\theta)/h_M(t|x;\hat\theta)$ & \verb+"marghr"+ \\
+%     Standardised marginal survival & $E_ZE_{X^*}S(t|X^*,Z;\hat\theta)$ & \verb+"meanmargsurv"+ \\
+%     Standardised marginal survival differences & $E_ZE_{X^*}S(t|X^*,Z;\hat\theta)-E_ZE_{X}S(t|X,Z;\hat\theta)$ & \verb+"meansurvdiff"+ \\
+%     Attributable fraction & $\frac{E_ZE_{X^*}S(t|X^*,Z;\hat\theta)-E_ZE_{X}S(t|X,Z;\hat\theta)}{1-E_ZE_{X}S(t|X,Z;\hat\theta)}$ & \verb+"af"+ \\
+%   \end{tabular}
+% \end{minipage}
+% \caption{Types of post-estimators for clustered data}
+%   \label{tab:margpostest}
+% \end{table}
+
+% Standard errors for the post-estimators are calculated on a possibly transformed scale using the delta method. For the delta method, the partial derivatives of the post-estimators are calculated either directly or using finite differences.
+
+% \begin{table}
+%   \centering
+%   \begin{minipage}{\textwidth}
+%     \begin{tabular}{lp{1.5cm}p{1.5cm}p{1.5cm}p{1.5cm}p{1.5cm}p{1.5cm}}
+%   Functionality & Uncorre-lated param. & Uncorre-lated penal. & Param. gamma frailty & Penal. gamma frailty & Param. normal random effects & Penal. normal random effects  \\ \hline
+%   Multiple links & \XBox& \XBox& \XBox& \XBox& \XBox& \XBox \\
+%   Right censoring & \XBox& \XBox& \XBox& \XBox& \XBox& \XBox \\
+%   Left truncation & \XBox& \XBox& \XBox\footnote{Gradients not currently implemented.}& \XBox$^a$& \XBox$^a$& \XBox$^a$ \\
+%   Interval censoring & \XBox& \XBox& \Square& \Square& \XBox& \XBox \\
+%   Time-varying effects & \XBox& \XBox& \XBox& \XBox& \XBox& \XBox \\
+%   Excess hazards & \XBox& \XBox& \XBox& \XBox& \XBox& \XBox \\
+%   Conditional estimators\footnote{Estimators including survival, survival differences, hazards, hazard ratios, hazard differences, density, odds and odds ratios.} &\XBox &\XBox & \XBox& \XBox& \XBox& \XBox \\
+%   Conditional standardisation\footnote{Standardised estimators include mean survival, mean survival differences, mean hazards and attributable fractions.} &\XBox &\XBox & \XBox& \XBox& \XBox& \XBox \\
+%   Frailty/random effects variance & & & \XBox& \XBox& \XBox& \XBox \\
+%   Marginal estimators\footnote{Marginal estimators include survival, survival differences, hazards, hazard ratios and hazard differences.} & & & \XBox& \XBox& \XBox& \XBox \\
+%   Marginal standardisation\footnote{Marginal standardised estimators include mean survival, mean survival differences and attributable fractions.} & & & \XBox& \XBox& \Square& \Square \\
+%   Random intercept & & &\XBox &\XBox & \XBox& \XBox \\
+%   Random slope & & & & & \XBox& \XBox \\
+%   Multiple random effects & & & & & \Square& \Square \\
+%     \end{tabular}
+%   \end{minipage}
+%   \caption{Functionality for the different generalised survival models}
+% \end{table}
+
+
+% \section{Examples: Independent survival analysis}
+
+% We begin with some simple proportional hazard models using the
+% brcancer dataset. We can fit the models using very similar syntax to
+% coxph, except that we need to specify the degrees of freedom for the
+% baseline smoother. Typical values for df are 3-6. For this model the
+% model parameters include an intercept term, time-invariant log-hazard
+% ratios, and parameters for the baseline smoother. The default for the
+% baseline smoother is to use the nsx function, which is a limited
+% extension to the splines::ns function, with log of the time effect.
+
+% <<>>=
+% brcancer <- transform(brcancer, recyear=rectime / 365.24)
+% fit <- stpm2(Surv(recyear,censrec==1)~hormon, data=brcancer, df=4)
+% summary(fit)
+% ## utility 
+% eform.coxph <- function(object) exp(cbind(coef(object),confint(object)))
+% fit.cox <- coxph(Surv(recyear,censrec==1)~hormon, data=brcancer)
+% rbind(cox=eform(fit.cox),
+%       eform(fit)[2,,drop=FALSE])
+% @ 
+
+% We see that the hazard ratios are very similar to the coxph model. The
+% model fit can also be used to estimate a variety of parameters. For
+% example, we can easily estimate survival and compare with the
+% Kaplan-Meier curves:
+
+% <<fig=TRUE,height=5,width=6>>=
+% plot(fit, newdata=data.frame(hormon=0), xlab="Time since diagnosis (years)")
+% lines(fit, newdata=data.frame(hormon=1), lty=2)
+% lines(survfit(Surv(recyear,censrec==1)~hormon, data=brcancer), col="blue", lty=1:2)
+% legend("topright", c("PH hormon=0","PH hormon=1","KM hormon=0","KM hormon=1"), 
+%        lty=1:2, col=c("black","black","blue","blue"))
+% @ 
+% We can also calculate the hazards.
+% <<fig=TRUE,height=5,width=6>>=
+% plot(fit,newdata=data.frame(hormon=1), type="hazard",
+%      xlab="Time since diagnosis (years)", ylim=c(0,0.3))
+% lines(fit, newdata=data.frame(hormon=0), col=2, lty=2, type="hazard")
+% legend("topright", c("hormon=1","hormon=0"),lty=1:2,col=1:2,bty="n")
+% @ 
+% Usefully, we can also estimate survival differences and hazard
+% differences. We define the survival differences using a reference
+% covariate pattern using the newdata argument, and then define an
+% exposed function which takes the newdata and transforms for the
+% 'exposed' covariate pattern. As an example:
+% <<fig=TRUE,height=5,width=6>>=
+% plot(fit,newdata=data.frame(hormon=0), type="hdiff",
+%      exposed=function(data) transform(data, hormon=1),
+%      main="hormon=1 compared with hormon=0",
+%      xlab="Time since diagnosis (years)")
+% @ 
+% <<fig=TRUE,height=5,width=6>>=
+% plot(fit,newdata=data.frame(hormon=0), type="sdiff",
+%      exposed=function(data) transform(data, hormon=1),
+%      main="hormon=1 compared with hormon=0",
+%      xlab="Time since diagnosis (years)")
+% @ 
+
+% \section{Additive hazards}
+
+% The additive hazards models takes the general form $H(t|x;\,\theta) = \eta(t,x;\,\theta)$. As a recent change, the default model specification for \verb!formula=Surv(t,e)~x! without specifying \verb+smooth.formula+ is to use $H(t|x;\,\theta) = B(t)\theta_B+ t(x^T\theta_x)$, where $B(t)$ is a natural spline design matrix with parameters $\theta_B$, and with $\theta_x$ as the parameters for $x$; the hazard is then $h(t|x;\,\theta) = B'(t)\theta_B+ x^T\theta_x$. 
+
+% The additive hazards have the attractive property that the effects are collapsible: adjusting for an uncorrelated covariate will not change the estimated conditional effect. These models have received some uptake within the causal inference field. This implementation is flexible, where the baseline (cumulative) hazard can be modelled using splines and we can model for both constant hazards and smooth effects over time. One possible issue with their interpretation is whether the rates will be approximately additive for different effects. One approach to conceptualise these models is to consider the effects as being competing risks and where we are adding competing risks together.
+
+% For our example using the breast cancer dataset with the randomised assignment to hormonal therapy, we find that hazard for those on hormonal therapy was -0.047 per year (95\% confidence interval: -0.066, -0.024) compared with those not on hormonal therapy. 
+
+% <<fig=TRUE,height=5,width=6>>=
+% brcancer <- transform(brcancer, recyear=rectime / 365.24)
+% fit <- stpm2(Surv(recyear,censrec==1)~hormon, data=brcancer, link.type="AH")
+% summary(fit)
+% confint(fit)
+% plot(fit, newdata=data.frame(hormon=0), xlab="Time on study (years)")
+% lines(fit, newdata=data.frame(hormon=1), lty=2)
+% lines(survfit(Surv(recyear,censrec==1)~hormon, data=brcancer), col="blue", lty=1:2)
+% legend("topright", c("AH hormon=0","AH hormon=1","KM hormon=0","KM hormon=1"), 
+%        lty=1:2, col=c("black","black","blue","blue"))
+% @ 
+
+% This can be modelled more flexibly using the \verb+smooth.formula+ argument. For example, we could model for \verb+sqrt(recyear)+  and include a natural spline smoother for the effect of \verb+hormon+:
+% <<fig=TRUE,height=5,width=6>>=
+% fit <- stpm2(Surv(recyear,censrec==1)~1, data=brcancer, link.type="AH",
+%              smooth.formula=~ns(sqrt(recyear),df=3)+hormon:ns(recyear,df=3))
+% summary(fit)
+% plot(fit, newdata=data.frame(hormon=0), xlab="Time on study (years)")
+% suppressWarnings(lines(fit, newdata=data.frame(hormon=1), lty=2))
+% lines(survfit(Surv(recyear,censrec==1)~hormon, data=brcancer), col="blue", lty=1:2)
+% legend("topright", c("AH hormon=0","AH hormon=1","KM hormon=0","KM hormon=1"), 
+%        lty=1:2, col=c("black","black","blue","blue"))
+% @ 
+% The square root transform seems to considerably improve the fit at earlier times. 
+
+% \section{Mean survival}
+
+% This has a useful interpretation for causal inference.
+
+% $E_Z(S(t|Z,X=1))-E_Z(S(t|Z,X=0))$
+
+% \begin{verbatim}
+% fit <- stpm2(...)
+% predict(fit,type="meansurv",newdata=data)
+% \end{verbatim}
+
+% \section{Cure models}
+
+% For cure, we use the melanoma dataset used by Andersson and colleagues
+% for cure models with Stata's stpm2 (see
+% \url{http://www.pauldickman.com/survival/}).
+
+% Initially, we merge the patient data with the all cause mortality rates.
+
+% <<echo=FALSE,results=hide>>=
+
+% options(width=80,useFancyQuotes="UTF-8")
+% library(rstpm2)
+
+% @ 
+% <<>>=
+
+% popmort2 <- transform(rstpm2::popmort,exitage=age,exityear=year,age=NULL,year=NULL)
+% colon2 <- within(rstpm2::colon, {
+%   status <- ifelse(surv_mm>120.5,1,status)
+%   tm <- pmin(surv_mm,120.5)/12
+%   exit <- dx+tm*365.25
+%   sex <- as.numeric(sex)
+%   exitage <- pmin(floor(age+tm),99)
+%   exityear <- floor(yydx+tm)
+%   ##year8594 <- (year8594=="Diagnosed 85-94")
+% })
+% colon2 <- merge(colon2,popmort2)
+
+% @ 
+% For comparisons, we fit the relative survival model without and with cure. 
+% %% <<results=hide>>=
+% <<>>=
+
+% fit0 <- stpm2(Surv(tm,status %in% 2:3)~I(year8594=="Diagnosed 85-94"),
+%               data=colon2,
+%               bhazard=colon2$rate, df=5)
+
+% @ 
+% <<>>=
+
+% summary(fit <- stpm2(Surv(tm,status %in% 2:3)~I(year8594=="Diagnosed 85-94"),
+%                      data=colon2,
+%                      bhazard=colon2$rate,
+%                      df=5,cure=TRUE))
+% predict(fit,head(colon2),se.fit=TRUE)
+
+% @ 
+% The estimate for the year parameter from the model without cure is within three significant
+% figures with that in Stata. For the predictions, the Stata model gives:
+% \begin{verbatim}
+%      +---------------------------------+
+%      |      surv   surv_lci   surv_uci |
+%      |---------------------------------|
+%   1. | .86108264   .8542898   .8675839 |
+%   2. | .79346526   .7850106   .8016309 |
+%   3. | .69674037   .6863196   .7068927 |
+%   4. | .86108264   .8542898   .8675839 |
+%   5. | .82212425   .8143227   .8296332 |
+%      |---------------------------------|
+%   6. | .86108264   .8542898   .8675839 |
+%      +---------------------------------+
+% \end{verbatim}
+% We can estimate the proportion of failures prior to the last event time:
+% <<>>=
+
+% newdata.eof <- data.frame(year8594 = unique(colon2$year8594),
+%                           tm=10)
+% predict(fit0, newdata.eof, type="fail", se.fit=TRUE)
+% predict(fit, newdata.eof, type="fail", se.fit=TRUE)
+% predict(fit, newdata.eof, type="haz", se.fit=TRUE)
+
+% @ 
+% We can plot the predicted survival estimates:
+% \begin{center}
+% <<fig=TRUE,height=5,width=6>>=
+
+% tms=seq(0,10,length=301)[-1]
+% plot(fit0,newdata=data.frame(year8594 = "Diagnosed 85-94", tm=tms), ylim=0:1,
+%      xlab="Time since diagnosis (years)", ylab="Relative survival")
+% plot(fit0,newdata=data.frame(year8594 = "Diagnosed 75-84",tm=tms),
+%      add=TRUE,line.col="red",rug=FALSE)
+% ## warnings: Predicted hazards less than zero for cure
+% plot(fit,newdata=data.frame(year8594 = "Diagnosed 85-94",tm=tms),
+%      add=TRUE,ci=FALSE,lty=2,rug=FALSE)
+% plot(fit,newdata=data.frame(year8594="Diagnosed 75-84",tm=tms),
+%      add=TRUE,rug=FALSE,line.col="red",ci=FALSE,lty=2)
+% legend("topright",c("85-94 without cure","75-84 without cure",
+%                     "85-94 with cure","75-84 with cure"),
+%        col=c(1,2,1,2), lty=c(1,1,2,2), bty="n")
+
+% @
+% \end{center}
+
+% And the hazard curves:
+
+% \begin{center}
+% <<fig=TRUE,height=5,width=6>>=
+
+% plot(fit0,newdata=data.frame(year8594 = "Diagnosed 85-94", tm=tms), 
+%      ylim=c(0,0.5), type="hazard",
+%      xlab="Time since diagnosis (years)",ylab="Excess hazard")
+% plot(fit0,newdata=data.frame(year8594 = "Diagnosed 75-84", tm=tms),
+%      type="hazard",
+%      add=TRUE,line.col="red",rug=FALSE)
+% plot(fit,newdata=data.frame(year8594 = "Diagnosed 85-94", tm=tms),
+%      type="hazard",
+%      add=TRUE,ci=FALSE,lty=2,rug=FALSE)
+% plot(fit,newdata=data.frame(year8594="Diagnosed 75-84", tm=tms),
+%      type="hazard",
+%      add=TRUE,rug=FALSE,line.col="red",ci=FALSE,lty=2)
+% legend("topright",c("85-94 without cure","75-84 without cure",
+%                     "85-94 with cure","75-84 with cure"),
+%        col=c(1,2,1,2), lty=c(1,1,2,2), bty="n")
+
+% @
+% \end{center}
+
+% The current implementation does not provide a test for differences in cure. We can code this using the \code{predictnl} function:
+
+% <<>>=
+
+% newdata.eof <- data.frame(year8594 = unique(colon2$year8594),
+%                           tm=10)
+% test <- predictnl(fit, function(object,newdata=NULL) {
+%     lp1 <- predict(object, newdata.eof[1,], type="link")
+%     lp2 <- predict(object, newdata.eof[2,], type="link")
+%     lp1-lp2
+% })
+% with(test, c(fit=fit,
+%              se.fit=se.fit,
+%              statistic=fit/se.fit,
+%              p=2*pnorm(abs(fit/se.fit), lower.tail=FALSE)))
+
+% @ 
+
+% \section{Potential limitations and next steps}
+
+% \begin{itemize}
+% \item TODO: investigate whether we can calculate $X_D(t,x)$ more accurately using the \verb+numDeriv+ package.
+%   \item TODO: Extend the generalised survival models to use multiple random effects.
+%   \item TODO: Extend the generalised survival models to use automatic differentiation.
+% \end{itemize}
+
+
+ \end{document}
+

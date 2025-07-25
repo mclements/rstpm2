@@ -118,7 +118,7 @@ where $S(t|x_1,x_2)$ is the survival function.
 
 As an empirical example, we can use the \code{brcancer} dataset with the randomised hormonal therapy (variable \code{hormon}, encoded 0 and 1) and stage (1 vs 2--3; variable \code{x4.23} encoded \code{TRUE} and \code{FALSE}). The research question is whether there is a more than additive interaction between therapy and stage.
 <<fig=TRUE>>=
-brcancer2 <- transform(brcancer, x4.23=x4 %in% 2:3)
+brcancer2 <- transform(brcancer, x4.23=ifelse(x4 %in% 2:3,1,0))
 fit1 <- stpm2(Surv(rectime,censrec==1)~hormon*x4.23,data=brcancer2,df=3)
 newd <- data.frame(hormon=0,x4.23=FALSE)
 RERI <- function(object, newdata,

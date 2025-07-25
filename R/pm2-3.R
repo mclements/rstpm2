@@ -119,7 +119,8 @@ function (object, newx, ...)
 Shat <- function(obj)
   {
     ## predicted survival for individuals (adjusted for covariates)
-    newobj = survfit(obj,se.fit=FALSE)
+    ## Be wary: suppressWarnings() because survfit.coxph does not like interactions
+    newobj = suppressWarnings(survfit(obj,se.fit=FALSE))
     surv = newobj$surv
     rr = try(predict(obj,type="risk"),silent=TRUE)
     if (inherits(rr,"try-error"))
@@ -273,6 +274,7 @@ numDeltaMethod <- function(object, fun, gd=NULL,
     UseMethod("coef<-")
 predictnl <- function (object, ...) 
   UseMethod("predictnl")
+setGeneric("predictnl")
 "coef<-.default" <- function(x,value) {
     x$coefficients <- value
     x
@@ -301,7 +303,7 @@ predictnl.default <- function(object,fun,newdata=NULL,gd=NULL,...)
           numDeltaMethod(object, local2, gd=gd, ...)
       }
   }
-predictnl.mle2 <- function(object,fun,newdata=NULL,gd=NULL,...)
+setMethod("predictnl", "mle2", function(object,fun,newdata=NULL,gd=NULL,...)
   {
     if (is.null(newdata) && !is.null(object@data))
       newdata <- object@data
@@ -311,7 +313,7 @@ predictnl.mle2 <- function(object,fun,newdata=NULL,gd=NULL,...)
         fun(object,...)
       }
     numDeltaMethod(object,localf,newdata=newdata,gd=gd,...)
-  }
+  })
 confint.predictnl <- function(object,parm,level=0.95,...) {
     cf <- object$fit
     pnames <- names(cf)
@@ -1605,7 +1607,7 @@ setMethod("show", "summary.stpm2",
                   }
               }
           })
-predictnl.stpm2 <-
+setMethod("predictnl", "stpm2",
           function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
   {
     link <- match.arg(link)
@@ -1628,7 +1630,7 @@ predictnl.stpm2 <-
     ##   out <- data.frame(Estimate=out$Estimate,lower=out$upper,upper=out$lower)
     ## return(out)
     return(dm)
-  }
+  })
 
 predictnl.aft <- function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
   {
@@ -1643,6 +1645,8 @@ predictnl.aft <- function(object,fun,newdata=NULL,link=c("I","log","cloglog","lo
       }
     numDeltaMethod(object,localf,newdata=newdata,gd=gd,...)
   }
+
+setMethod("predictnl", "aft", predictnl.aft)
 
 residuals.stpm2.base <- function(object, type=c("li","gradli")) {
     type <- match.arg(type)
@@ -2854,7 +2858,7 @@ setMethod("anova", signature(object="pstpm2"),
         ltab
     })
 
-predictnl.pstpm2 <-
+setMethod("predictnl", "pstpm2",
           function(object,fun,newdata=NULL,link=c("I","log","cloglog","logit"), gd=NULL, ...)
   {
     ## should gd be passed as argument to numDeltaMethod?
@@ -2868,7 +2872,7 @@ predictnl.pstpm2 <-
         linkf(fun(object,...))
       }
     numDeltaMethod(object,localf,newdata=newdata,gd=gd,...)
-  }
+  })
 ##
 setMethod("predict", "pstpm2",
           function(object,newdata=NULL,
