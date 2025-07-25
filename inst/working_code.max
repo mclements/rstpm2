@@ -1,0 +1,74 @@
+assume(x>0)$
+gamma : integrate((1-v(tau))*mu(tau)*delta(x,tau)*exp(-integrate(beta(u,tau)-alpha(u),u,tau,x)), tau, 0, x);
+diff(gamma,x);
+
+nu : integrate((1-v(tau))*mu(tau)*exp(-integrate(beta(u,tau)-alpha(u),u,tau,x)), tau, 0, x);
+diff(nu,x);
+
+diff(nu,x) - (nu*alpha(x) + mu(x)*(1-v(x)));d
+iff(nu,x) - (nu*alpha(x) + mu(x)*(1-v(x))), expand, ratsimp;
+diff(nu,x) - (nu*alpha(x) + mu(x)*(1-v(x))), ratsimp;
+
+subst(x=x+Delta, nu) - nu;
+
+/* what about doing this using Kolmogorov's forward integro-differential equation? */
+
+assume(x>0)$
+assume(tau>0)$
+healthy : exp(-integrate(mu(u)+alpha(u),u,0,x));
+illness : integrate(exp(-integrate(mu(u)+alpha(u),u,0,tau))*mu(tau)*exp(-integrate(phi(u,tau),u,tau,x)), tau, 0, x);
+prev : illness/(illness + healthy);
+prevOdds : illness/healthy;
+mortality : integrate(exp(-integrate(mu(u)+alpha(u),u,0,tau))*mu(tau)*exp(-integrate(phi(u,tau),u,tau,x))*(phi(x,tau)-alpha(x)), tau, 0, x)/(healthy+illness);
+
+diff(log(-log(theta)), theta);
+
+
+
+
+diff(gamma,x);
+
+
+fpprec : 33;
+/*       1234567891123456789212345678931234567 */
+xi :  [0.995657163025808080735527280689003b0,
+       0.973906528517171720077964012084452b0,
+       0.930157491355708226001207180059508b0,
+       0.865063366688984510732096688423493b0,
+       0.780817726586416897063717578345042b0,
+       0.679409568299024406234327365114874b0,
+       0.562757134668604683339000099272694b0,
+       0.433395394129247190799265943165784b0,
+       0.294392862701460198131126603103866b0,
+       0.14887433898163121088482600112972b0,
+       0.0b0];
+xi : append(map(lambda([x], -x), xi), rest(reverse(xi)));
+w :  [0.066671344308688137593568809893332b0,
+      0.149451349150580593145776339657697b0,
+      0.219086362515982043995534934228163b0,
+      0.269266719309996355091226921569469b0,
+      0.295524224714752870173892994651338b0];
+w : map(lambda([x], x/2b0), append(w, reverse(w)));
+wk : [0.011694638867371874278064396062192b0,
+       0.03255816230796472747881897245939b0,
+       0.05475589657435199603138130024458b0,
+       0.07503967481091995276704314091619b0,
+       0.093125454583697605535065465083366b0,
+       0.109387158802297641899210590325805b0,
+       0.123491976262065851077958109831074b0,
+       0.134709217311473325928054001771707b0,
+       0.142775938577060080797094273138717b0,
+       0.147739104901338491374841515972068b0,
+       0.149445554002916905664936468389821b0];
+wk : map(lambda([x], x/2b0), append(wk, rest(reverse(wk))));
+
+wk;
+
+mintegrate(f, a, b) :=
+block([width, olda, oldb],
+  width: b - a,
+  olda : a,
+  oldb : b,
+  ff : lambda([x], f(olda+x*width)),
+  step : lambda([a,b,n,side],
+    fx : map(lambda([xii], ff(a+(b-a)*(xii+1)/2)), xi)));
