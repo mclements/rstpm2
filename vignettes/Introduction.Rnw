@@ -143,7 +143,12 @@ Interactions with time (both penalised and unpenalised) and penalised covariate 
 
 One of the strengths of these models is varied post-estimation. Most of the estimators are described in Tables~\ref{tab:condpostest} and \ref{tab:margpostest}. These estimators are typically calculated from the \verb+predict+ function or from \verb+plot+ function calls. All of these calls require that the \verb+newdata+ argument is specified (in contrast to prediction in the \verb+survival+ package, which defaults to the average of each covariate). 
 
-For contrasts (e.g. survival differences, hazard ratios), the \verb+newdata+ argument is the ``unexposed'' group, while the exposed group is defined by either: (i) a unit change in a variable in \verb+newdata+ as defined by the \verb+var+ argument (e.g. \verb+var="x"+ for variable \verb+x+); or (ii) an \verb+exposed+ function that takes a data-frame and returns the ``exposed'' group (e.g. \verb+exposed=function(data) transform(data, x=1)+). The latter mechanism is quite general and allows for standardised survival, standardised hazards, and attributable fractions under possibly counterfactual exposures.
+For contrasts (e.g. survival differences, hazard ratios), the \verb+newdata+ argument is the ``unexposed'' group, while the exposed group is defined by either: (i) a unit change in a variable in \verb+newdata+ as defined by the \verb+var+ argument (e.g. \verb+var="x"+ for variable \verb+x+); or (ii) an \verb+exposed+ function that takes a data-frame and returns the ``exposed'' group; for example
+
+\begin{verbatim}
+exposed=function(data) transform(data, x=1)
+\end{verbatim}
+The latter mechanism is quite general and allows for standardised survival, standardised hazards, and attributable fractions under possibly counterfactual exposures.
 
 \begin{table}[!ht]
   \centering
