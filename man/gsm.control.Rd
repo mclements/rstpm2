@@ -13,7 +13,7 @@ gsm.control(parscale = 1, maxit = 300, optimiser = c("BFGS", "NelderMead"), trac
             suppressWarnings.coxph.frailty = TRUE, robust_initial = FALSE, bhazinit = 0.1,
             eps.init = 1e-5, use.gr = TRUE, penalty = c("logH", "h"), outer_optim = 1,
             reltol.search = 1e-10, reltol.final = 1e-10, reltol.outer = 1e-05,
-            criterion = c("GCV", "BIC"))
+            criterion = c("GCV", "BIC"), old.init=FALSE)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -76,6 +76,10 @@ Relative tolerance. Not currently documented.
 }
   \item{criterion}{
 Not currently documented.
+}
+  \item{old.init}{
+Use the initial values from version 1.6.8 and earlier, which uses the
+Shat_old function.
 }
 }
 %% \details{

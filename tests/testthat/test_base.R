@@ -19,8 +19,12 @@ test_that("offset", {
     skip_on_cran()
     brcancer2 = transform(brcancer, o=1)
     fit <- stpm2(Surv(rectime,censrec==1)~hormon+offset(o),data=brcancer2)
-    expect_eps(coef(fit)[1], -6.6465454, 1e-5)
-    expect_eps(coef(fit)[2], -0.3601438, 1e-5)
+    expect_eps(coef(fit)[1], -8.256669, 1e-5)
+    expect_eps(coef(fit)[2], -0.361403, 1e-5)
+    fit <- stpm2(Surv(rectime,censrec==1)~hormon+offset(o),data=brcancer2,
+                 control=list(optimiser="NelderMead"))
+    expect_eps(coef(fit)[1], -8.2550422, 1e-5)
+    expect_eps(coef(fit)[2], -0.3608321, 1e-5)
 })
 test_that("NelderMead", {
     fit <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer,
@@ -52,12 +56,7 @@ test_that("probit", {
 
 test_that("interval", {
     ## ICPHREG example
-    read.textConnection <- function(text, ...) {
-        conn <-  textConnection(text)
-        on.exit(close(conn))
-        read.table(conn, ...)
-    }
-    hiv <- read.textConnection("0 16 0 0 0 1
+    hiv <- read.table(text="0 16 0 0 0 1
 15 26 0 0 0 1
 12 26 0 0 0 1
 17 26 0 0 0 1

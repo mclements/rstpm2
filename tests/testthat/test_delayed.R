@@ -8,6 +8,12 @@ expect_eps <- function(expr, value, eps=1e-7)
 
 context("Delayed entry - stpm2")
 ##
+test_that("Basic test", {
+    brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime/2,0))
+    fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,
+                 smooth.formula=~nsx(log(rectime),df=3))
+    expect_eps(coef(fit)[2], -1.162380, 1e-5)
+})
 test_that("Comparison with Stata", {
     brcancer2 <- transform(brcancer,startTime=ifelse(hormon==0,rectime/2,0))
     fit <- stpm2(Surv(startTime,rectime,censrec==1)~hormon,data=brcancer2,

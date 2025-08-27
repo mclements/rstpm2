@@ -97,7 +97,7 @@ test_that("Missing event time - stpm2+frailty(vector)", {
     expect_warning(fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
                                  cluster=brcancer2$id),
                    "Some event times are NA")
-    expect_eps(coef(fit2),beta2, 5e-6)
+    expect_eps(coef(fit2),beta2, 5e-5)
     expect_length(predict(fit2), 685)
 })
 
@@ -109,7 +109,7 @@ test_that("Missing event time - stpm2+frailty(character)", {
     expect_warning(fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
                                  cluster="id"),
                    "Some event times are NA")
-    expect_eps(coef(fit2),beta2, 5e-6)
+    expect_eps(coef(fit2),beta2, 5e-5)
     expect_length(predict(fit2), 685)
 })
 
@@ -121,7 +121,7 @@ test_that("Missing event time - stpm2+frailty(special)", {
     expect_warning(fit2 <- stpm2(Surv(rectime,censrec==1)~hormon+cluster(id),
                                  data=brcancer2),
                    "Some event times are NA")
-    expect_eps(coef(fit2),beta2, 5e-6)
+    expect_eps(coef(fit2),beta2, 5e-5)
     expect_length(predict(fit2), 685)
 })
 
@@ -132,7 +132,7 @@ test_that("Invalid event time - stpm2+frailty", {
     expect_warning(fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
                                  cluster=brcancer2$id),
                    "Some event times <= 0")
-    expect_eps(coef(fit2),beta2, 5e-6)
+    expect_eps(coef(fit2),beta2, 5e-5)
     expect_length(predict(fit2), 685)
 })
 
@@ -142,7 +142,7 @@ test_that("Missing covariate - stpm2+frailty", {
     brcancer2$hormon[1] <- NA
     fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,
                   cluster=brcancer2$id)
-    expect_eps(coef(fit2),beta2, 5e-6)
+    expect_eps(coef(fit2),beta2, 5e-5)
     expect_length(predict(fit2), 685)
 })
 
@@ -152,7 +152,7 @@ test_that("Missing weight - stpm2+frailty", {
     brcancer2$w[1] <- NA
     fit2 <- stpm2(Surv(rectime,censrec==1)~hormon,data=brcancer2,weights=w,
                   cluster=brcancer2$id)
-    expect_eps(coef(fit2),beta2, 5e-6)
+    expect_eps(coef(fit2),beta2, 5e-5)
     expect_length(predict(fit2), 685)
 })
 

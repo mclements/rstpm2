@@ -116,7 +116,19 @@ function (object, newx, ...)
         "intercept", "derivs", "centre", "log")])
     do.call("nsx", a)
 }
-Shat <- function(obj)
+Shat <- function(obj,newdata, use_old=FALSE)
+{
+    if (use_old)
+        return(Shat_old(obj))
+    ## predicted survival for individuals (adjusted for covariates)
+      ## Be wary: suppressWarnings() because survfit.coxph does not like interactions
+      newobj = suppressWarnings(survfit(obj,newdata=newdata,se.fit=FALSE))
+      index = match(obj$y[,ncol(obj$y)-1],newobj$time)
+      if (is.matrix(newobj$surv))
+          index = index + (0:(ncol(newobj$surv)-1))*nrow(newobj$surv)
+    newobj$surv[index]
+  }
+Shat_old <- function(obj)
   {
     ## predicted survival for individuals (adjusted for covariates)
     ## Be wary: suppressWarnings() because survfit.coxph does not like interactions
@@ -574,7 +586,8 @@ gsm.control <- function(parscale=1,
                                penalty=c("logH","h"),
                                outer_optim=1,
                                reltol.search=1e-10, reltol.final=1e-10, reltol.outer=1e-5,
-                               criterion=c("GCV","BIC")) {
+                        criterion=c("GCV","BIC"),
+                        old.init=FALSE) {
     stopifnot.logical <- function(arg)
         stopifnot(is.logical(arg) || (is.numeric(arg) && arg>=0))
     stopifnot(parscale>0)
@@ -594,6 +607,7 @@ gsm.control <- function(parscale=1,
     stopifnot(reltol.search>0)
     stopifnot(reltol.final>0)
     stopifnot(reltol.outer>0)
+    stopifnot.logical(old.init)
     criterion <- match.arg(criterion)
     list(mle2.control=list(parscale=parscale, maxit=maxit),
          optimiser=optimiser, trace=trace, nodes=nodes,
@@ -604,7 +618,8 @@ gsm.control <- function(parscale=1,
          kappa.init=kappa.init, penalty=penalty, outer_optim=outer_optim,
          reltol.search=reltol.search, reltol.final=reltol.final,
          reltol.outer=reltol.outer,
-         criterion=criterion)
+         criterion=criterion,
+         old.init=old.init)
 }
 
 gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
@@ -939,9 +954,9 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
         y <- model.extract(model.frame(coxph.obj),"response")
         data$logHhat <- if (is.null(bhazard)) {
                             link$link(pmin(1-control$eps.init,
-                                           pmax(control$eps.init,Shat(coxph.obj))))
+                                           pmax(control$eps.init,Shat(coxph.obj,data,control$old.init))))
                         } else  link$link(pmin(1-control$eps.init,
-                                               pmax(control$eps.init,Shat(coxph.obj)/
+                                               pmax(control$eps.init,Shat(coxph.obj,data,control$old.init)/
                                                                      exp(-control$bhazinit*bhazard*time))))
         if ((frailty || copula) && is.null(logtheta)) { # fudge for copulas
             coxph.data$.cluster <- as.vector(unclass(factor(cluster)))
@@ -1143,7 +1158,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                  maxkappa=control$maxkappa, Z=Z, Z.formula = Z.formula, thetaAO = theta.AO,
                  excess=excess, data=data, copula=copula,
                  robust_initial = control$robust_initial, .include=.include,
-                 offset=as.vector(offset))
+                 offset=as.vector(offset), lm_init=init)
     ## checks on the parameters
     stopifnot(all(dim(args$X) == dim(args$XD)))
     if (!frailty && !copula) {
@@ -1381,7 +1396,7 @@ gsm <- function(formula, data, smooth.formula = NULL, smooth.args = NULL,
                                      gr=gradnegll, ..., eval.only=TRUE)
             else mle2(negll, coef, vecpar=TRUE, control=control$mle2.control, ..., eval.only=TRUE)
     mle2@details$convergence <- if (penalised) 0 else fit$fail # fit$itrmcd
-    if (inherits(vcov <- try(solve(hessian,tol=0)), "try-error")) {
+    if (inherits(vcov <- try(solve(hessian,tol=0),silent=TRUE), "try-error")) {
         if (control$optimiser=="NelderMead") {
             warning("Non-invertible Hessian")
             mle2@vcov <- matrix(NA,length(coef), length(coef))
