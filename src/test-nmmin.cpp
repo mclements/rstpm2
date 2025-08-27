@@ -768,12 +768,12 @@ namespace rstpm2 {
     }
     li_constraint li(vec eta, vec etaD, vec eta0, vec eta1, vec beta) {
       if (interval) {
-	return li_interval(eta+offset, etaD, eta1+offset);
+	return li_interval(eta, etaD, eta1);
       }
       else {
-	li_constraint s = li_right_censored(eta+offset, etaD);
+	li_constraint s = li_right_censored(eta, etaD);
 	if (delayed && !eta0.empty()) {
-	  li_constraint s0 = li_left_truncated(eta0+offset(which0));
+	  li_constraint s0 = li_left_truncated(eta0);
 	  s.constraint += s0.constraint;
 	  // if (bfgs.trace > 0) {
 	  //   Rprint(which0);
@@ -786,20 +786,32 @@ namespace rstpm2 {
     vec getli(vec beta) {
       vec vbeta = beta;
       vbeta.resize(nbeta);
-      li_constraint lic = li(X*vbeta, XD*vbeta, X0*vbeta, X1*vbeta, beta);
+      vec offset1 = (X1.n_rows == 1 and offset.n_rows>1) ? arma::zeros<arma::vec>(1) : offset;
+      vec offset0 = arma::zeros<arma::vec>(X0.n_rows);
+      if (X0.n_rows == which0.n_rows) offset0 = offset(which0);
+      li_constraint lic = li(X*vbeta+offset, XD*vbeta, X0*vbeta+offset0,
+			     X1*vbeta+offset1, beta);
       return lic.li;
     }
     mat getgradli(vec beta) {
       vec vbeta = beta;
       vbeta.resize(nbeta);
-      gradli_constraint gradlic = gradli(X*vbeta, XD*vbeta, X0*vbeta, X1*vbeta, X, XD, X0, X1, beta);
+      vec offset1 = (X1.n_rows == 1 and offset.n_rows>1) ? arma::zeros<arma::vec>(1) : offset;
+      vec offset0 = arma::zeros<arma::vec>(X0.n_rows);
+      if (X0.n_rows == which0.n_rows) offset0 = offset(which0);
+      gradli_constraint gradlic = gradli(X*vbeta+offset, XD*vbeta, X0*vbeta+offset0,
+					 X1*vbeta+offset1, X, XD, X0, X1, beta);
       return gradlic.gradli;
     }
     // negative log-likelihood
     double objective(vec beta) {
       vec vbeta = beta;
       vbeta.resize(nbeta);
-      li_constraint s = li(X * vbeta, XD * vbeta, X0 * vbeta, X1 * vbeta, beta);
+      vec offset1 = (X1.n_rows == 1 and offset.n_rows>1) ? arma::zeros<arma::vec>(1) : offset;
+      vec offset0 = arma::zeros<arma::vec>(X0.n_rows);
+      if (X0.n_rows == which0.n_rows) offset0 = offset(which0);
+      li_constraint s = li(X * vbeta + offset, XD * vbeta, X0 * vbeta + offset0,
+			   X1 * vbeta + offset1, beta);
       return -sum(s.li) + s.constraint;
     }
     // finite-differencing of the gradient for the objective
@@ -940,14 +952,18 @@ namespace rstpm2 {
     }
     // gradient of the negative log-likelihood
     vec gradient(vec beta) {
-      gradli_constraint gc = gradli(X * beta, XD * beta, X0 * beta, X1 * beta,
+      vec offset1 = (X1.n_rows == 1 and offset.n_rows>1) ? arma::zeros<arma::vec>(1) : offset;
+      vec offset0 = arma::zeros<arma::vec>(X0.n_rows);
+      if (X0.n_rows == which0.n_rows) offset0 = offset(which0);
+      gradli_constraint gc = gradli(X * beta + offset, XD * beta, X0 * beta + offset0,
+				    X1 * beta+offset1,
 				    X, XD, X0, X1, beta);
       vec dconstraint = sum(gc.constraint,0).t();
       vec gr = sum(gc.gradli,0).t();
       return -gr+dconstraint;
     }
     bool feasible(vec beta) {
-      vec eta = X * beta;
+      vec eta = X * beta + offset;
       vec etaD = XD * beta;
       vec h = link->h(eta, etaD) + bhazard;
       vec H = link->H(eta);
